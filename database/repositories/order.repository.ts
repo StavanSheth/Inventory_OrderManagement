@@ -39,6 +39,13 @@ export class OrderRepository extends BaseRepository {
       .first<Order>();
   }
 
+  async findByBranch(branchId: string, orderId: string): Promise<Order | null> {
+    return this.db
+      .prepare('SELECT * FROM orders WHERE branch_id = ? AND id = ?')
+      .bind(branchId, orderId)
+      .first<Order>();
+  }
+
   async findByOrderNumber(branchId: string, orderNumber: string): Promise<Order | null> {
     return this.db
       .prepare('SELECT * FROM orders WHERE branch_id = ? AND order_number = ?')

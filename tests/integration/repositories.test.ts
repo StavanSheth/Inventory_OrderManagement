@@ -116,6 +116,15 @@ describe('Repository Layer Read/Write & Scoping', () => {
     // List by branch P2 is empty
     const p2List = await productRepo.listByBranch('br-p2');
     assert.strictEqual(p2List.length, 0);
+
+    // Branch P1 can find product via findByBranch
+    const p1Product = await productRepo.findByBranch('br-p1', 'prod-p1');
+    assert.ok(p1Product);
+    assert.strictEqual(p1Product.name, 'Vanilla Bean');
+
+    // Branch P2 cannot access Branch P1 product via findByBranch (cross-branch rejection)
+    const crossBranchProduct = await productRepo.findByBranch('br-p2', 'prod-p1');
+    assert.strictEqual(crossBranchProduct, null);
   });
 
   it('proves InventoryRepository stock tracking & movements', async () => {
@@ -219,5 +228,14 @@ describe('Repository Layer Read/Write & Scoping', () => {
 
     const custOrders = await orderRepo.listByCustomer(user.id);
     assert.strictEqual(custOrders.length, 1);
+
+    // Branch order lookup via findByBranch
+    const scopedOrder = await orderRepo.findByBranch('br-ord', 'ord-1001');
+    assert.ok(scopedOrder);
+    assert.strictEqual(scopedOrder.id, 'ord-1001');
+
+    // Cross-branch order lookup must return null
+    const crossBranchOrder = await orderRepo.findByBranch('br-other', 'ord-1001');
+    assert.strictEqual(crossBranchOrder, null);
   });
 });

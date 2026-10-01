@@ -28,6 +28,13 @@ export class ProductRepository extends BaseRepository {
       .first<Product>();
   }
 
+  async findByBranch(branchId: string, productId: string): Promise<Product | null> {
+    return this.db
+      .prepare('SELECT * FROM products WHERE branch_id = ? AND id = ?')
+      .bind(branchId, productId)
+      .first<Product>();
+  }
+
   async listByBranch(branchId: string, onlyActive: boolean = true): Promise<Product[]> {
     if (onlyActive) {
       const res = await this.db

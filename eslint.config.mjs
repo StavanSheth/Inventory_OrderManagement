@@ -17,6 +17,7 @@ export default [
       '.data/**',
       '*.config.mjs',
       '*.config.ts',
+      '**/*.d.ts',
     ],
   },
   {

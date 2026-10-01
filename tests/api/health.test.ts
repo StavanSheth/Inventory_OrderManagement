@@ -101,4 +101,42 @@ describe('API Foundation & Health Check', () => {
     assert.strictEqual(json.error.code, ApiErrorCode.INTERNAL_ERROR);
     assert.strictEqual(json.error.details, undefined, 'Internal details must not be exposed');
   });
+
+  it('proves Cloudflare Pages Functions runtime handler functions/api/v1/health.ts executes with env.DB', async () => {
+    const { onRequestGet } = await import('../../functions/api/v1/health');
+    const db = createMemoryD1Database();
+    const request = new Request('https://melt.pages.dev/api/v1/health', {
+      method: 'GET',
+      headers: { 'x-request-id': 'cf-pages-req-1' },
+    });
+
+    const response = await onRequestGet({
+      request,
+      env: { DB: db },
+      params: {},
+      waitUntil: () => {},
+      next: async () => new Response(),
+      data: {},
+    });
+
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(response.headers.get('x-request-id'), 'cf-pages-req-1');
+    const json = (await response.json()) as { success: boolean; data: { status: string; database?: string } };
+    assert.strictEqual(json.success, true);
+    assert.strictEqual(json.data.status, 'ok');
+    assert.strictEqual(json.data.database, 'connected');
+  });
+
+  it('proves Next.js route handler app/api/v1/health/route.ts executes correctly', async () => {
+    const { GET } = await import('../../app/api/v1/health/route');
+    const request = new Request('http://localhost:3000/api/v1/health', {
+      method: 'GET',
+    });
+
+    const response = await GET(request);
+    assert.strictEqual(response.status, 200);
+    const json = (await response.json()) as { success: boolean; data: { status: string } };
+    assert.strictEqual(json.success, true);
+    assert.strictEqual(json.data.status, 'ok');
+  });
 });

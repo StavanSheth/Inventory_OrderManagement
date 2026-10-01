@@ -12,8 +12,8 @@ export class OrdersService implements IOrdersService {
   constructor(private orderRepo: OrderRepository) {}
 
   async getOrderById(branchId: string, orderId: string): Promise<{ order: Order; items: OrderItem[] } | null> {
-    const order = await this.orderRepo.findById(orderId);
-    if (!order || order.branch_id !== branchId) {
+    const order = await this.orderRepo.findByBranch(branchId, orderId);
+    if (!order) {
       return null;
     }
     const items = await this.orderRepo.getOrderItems(orderId);
