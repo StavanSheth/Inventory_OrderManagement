@@ -5,6 +5,7 @@ import { extractRequestContext } from '../middleware/request-context';
 import { handleCorsPreflight, getCorsHeaders } from '../middleware/cors';
 import { config } from '../../config/runtime';
 import { D1DatabaseLike } from '../../database/types';
+import { checkRateLimit } from '../middleware/rate-limiter';
 import { BadRequestError } from '../../backend/errors/app-error';
 
 export async function handleAuthLogin(
@@ -20,6 +21,7 @@ export async function handleAuthLogin(
   const responseHeaders = { ...corsHeaders, 'x-request-id': context.requestId };
 
   try {
+    checkRateLimit(request, { keyPrefix: 'auth:login', maxRequests: 60 });
     const { authMiddleware, authController } = createAuthInfrastructure(env, options);
 
     const userContext = await authMiddleware.authenticateRequest(request);
@@ -44,6 +46,7 @@ export async function handleSetPin(
   const responseHeaders = { ...corsHeaders, 'x-request-id': context.requestId };
 
   try {
+    checkRateLimit(request, { keyPrefix: 'auth:pin', maxRequests: 30 });
     const { authMiddleware, authController } = createAuthInfrastructure(env, options);
 
     const userContext = await authMiddleware.authenticateRequest(request);
@@ -69,6 +72,7 @@ export async function handleVerifyPin(
   const responseHeaders = { ...corsHeaders, 'x-request-id': context.requestId };
 
   try {
+    checkRateLimit(request, { keyPrefix: 'auth:verify-pin', maxRequests: 30 });
     const { authMiddleware, authController } = createAuthInfrastructure(env, options);
 
     const userContext = await authMiddleware.authenticateRequest(request);

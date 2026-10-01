@@ -1,1 +1,2 @@
-export * from './order-expiry.job.interface';
+export { OrderExpiryJob } from './order-expiry.job';
+export type { IOrderExpiryJob } from './order-expiry.job.interface';

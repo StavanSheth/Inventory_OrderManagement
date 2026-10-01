@@ -171,6 +171,14 @@ export class FirebaseProductionVerifier implements IFirebaseVerifier {
       throw new UnauthorizedError('Token authentication time is in the future');
     }
 
+    // 5. Enforce Google authentication server-side
+    const firebaseClaim = payload.firebase as { sign_in_provider?: string } | undefined;
+    if (firebaseClaim && firebaseClaim.sign_in_provider && firebaseClaim.sign_in_provider !== 'google.com') {
+      throw new UnauthorizedError(
+        `Unsupported authentication provider: "${firebaseClaim.sign_in_provider}". Only Google authentication is permitted.`,
+      );
+    }
+
     // Never trust role, branch, permissions from token payload
     return {
       uid: payload.sub,

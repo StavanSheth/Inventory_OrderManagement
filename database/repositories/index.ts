@@ -5,4 +5,7 @@ export * from './product.repository';
 export * from './inventory.repository';
 export * from './order.repository';
 export * from './session.repository';
+export * from './payment.repository';
+export * from './audit.repository';
+
 

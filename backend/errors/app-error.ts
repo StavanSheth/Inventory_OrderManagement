@@ -56,3 +56,9 @@ export class ConflictError extends AppError {
     super(message, ApiErrorCode.CONFLICT, HTTP_STATUS.CONFLICT, details);
   }
 }
+
+export class TooManyRequestsError extends AppError {
+  constructor(message: string = 'Too many requests. Please try again later.', details?: Record<string, unknown>) {
+    super(message, ApiErrorCode.RATE_LIMITED, HTTP_STATUS.TOO_MANY_REQUESTS, details);
+  }
+}

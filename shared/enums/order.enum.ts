@@ -10,6 +10,8 @@ export enum OrderStatus {
 
 export enum PaymentStatus {
   PENDING = 'PENDING',
+  RECORDED = 'RECORDED',
+  VERIFIED = 'VERIFIED',
   COMPLETED = 'COMPLETED',
   FAILED = 'FAILED',
   REFUNDED = 'REFUNDED',
@@ -20,4 +22,5 @@ export enum PaymentMethod {
   UPI = 'UPI',
   CARD = 'CARD',
   ONLINE = 'ONLINE',
+  OTHER = 'OTHER',
 }

@@ -1,5 +1,5 @@
 import { BaseRepository } from './base.repository';
-import { Branch } from '../../shared/types/entities.types';
+import { Branch, BranchSettings } from '../../shared/types/entities.types';
 import { BranchStatus } from '../../shared/enums/branch.enum';
 
 export interface CreateBranchInput {
@@ -71,5 +71,12 @@ export class BranchRepository extends BaseRepository {
       throw new Error(`Failed to retrieve newly created branch ${input.id}`);
     }
     return created;
+  }
+
+  async getBranchSettings(branchId: string): Promise<BranchSettings | null> {
+    return this.db
+      .prepare('SELECT * FROM branch_settings WHERE branch_id = ?')
+      .bind(branchId)
+      .first<BranchSettings>();
   }
 }

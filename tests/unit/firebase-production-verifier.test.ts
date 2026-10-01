@@ -212,4 +212,27 @@ describe('FirebaseProductionVerifier (RS256 Web Crypto Verification)', () => {
       await verifier.verifyIdToken(token);
     }, (err: Error) => err.message.includes('Token authentication time is in the future'));
   });
+
+  it('rejects token with unsupported authentication provider (non-google)', async () => {
+    const verifier = getVerifier();
+    const token = await createToken({}, {
+      firebase: {
+        sign_in_provider: 'password',
+      },
+    });
+    await assert.rejects(async () => {
+      await verifier.verifyIdToken(token);
+    }, (err: Error) => err.message.includes('Only Google authentication is permitted'));
+  });
+
+  it('accepts token with google.com sign_in_provider', async () => {
+    const verifier = getVerifier();
+    const token = await createToken({}, {
+      firebase: {
+        sign_in_provider: 'google.com',
+      },
+    });
+    const payload = await verifier.verifyIdToken(token);
+    assert.strictEqual(payload.uid, 'google_uid_987654');
+  });
 });

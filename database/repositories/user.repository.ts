@@ -75,26 +75,33 @@ export class UserRepository extends BaseRepository {
   }
 
   async recordFailedPinAttempt(userId: string): Promise<{ failedAttempts: number; isLocked: boolean; lockedUntil: string | null }> {
-    const user = await this.findById(userId);
-    if (!user) {
-      return { failedAttempts: 0, isLocked: false, lockedUntil: null };
-    }
-
-    const currentAttempts = (user.failed_pin_attempts ?? 0) + 1;
-    let lockedUntil: string | null = null;
-    if (currentAttempts >= 5) {
-      lockedUntil = new Date(Date.now() + 5 * 60 * 1000).toISOString();
-    }
-
+    const lockDurationMs = 5 * 60 * 1000;
+    const lockUntilTimestamp = new Date(Date.now() + lockDurationMs).toISOString();
     const now = new Date().toISOString();
+
+    // Atomic SQL increment preventing concurrency bypass
     await this.db
-      .prepare('UPDATE users SET failed_pin_attempts = ?, pin_locked_until = ?, updated_at = ? WHERE id = ?')
-      .bind(currentAttempts, lockedUntil, now, userId)
+      .prepare(`
+        UPDATE users
+        SET failed_pin_attempts = COALESCE(failed_pin_attempts, 0) + 1,
+            pin_locked_until = CASE
+              WHEN COALESCE(failed_pin_attempts, 0) + 1 >= 5 THEN ?
+              ELSE pin_locked_until
+            END,
+            updated_at = ?
+        WHERE id = ?
+      `)
+      .bind(lockUntilTimestamp, now, userId)
       .run();
 
+    const updated = await this.findById(userId);
+    const failedAttempts = updated?.failed_pin_attempts ?? 1;
+    const lockedUntil = updated?.pin_locked_until ?? null;
+    const isLocked = Boolean(lockedUntil && lockedUntil > now);
+
     return {
-      failedAttempts: currentAttempts,
-      isLocked: Boolean(lockedUntil),
+      failedAttempts,
+      isLocked,
       lockedUntil,
     };
   }
