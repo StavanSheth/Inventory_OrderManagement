@@ -169,4 +169,47 @@ describe('FirebaseProductionVerifier (RS256 Web Crypto Verification)', () => {
       await verifier.verifyIdToken(token);
     }, (err: Error) => err.message.includes('expired'));
   });
+
+  it('rejects token with missing or invalid iat', async () => {
+    const verifier = getVerifier();
+    const token = await createToken({}, { iat: undefined });
+    await assert.rejects(async () => {
+      await verifier.verifyIdToken(token);
+    }, (err: Error) => err.message.includes('missing or invalid issued-at time (iat)'));
+  });
+
+  it('rejects token with future iat', async () => {
+    const verifier = getVerifier();
+    const now = Math.floor(Date.now() / 1000);
+    const token = await createToken({}, { iat: now + 500 });
+    await assert.rejects(async () => {
+      await verifier.verifyIdToken(token);
+    }, (err: Error) => err.message.includes('Token issued in the future'));
+  });
+
+  it('rejects token with iat after exp', async () => {
+    const verifier = getVerifier();
+    const now = Math.floor(Date.now() / 1000);
+    const token = await createToken({}, { exp: now + 100, iat: now + 200 });
+    await assert.rejects(async () => {
+      await verifier.verifyIdToken(token);
+    }, (err: Error) => err.message.includes('Token issued-at time is after expiration time'));
+  });
+
+  it('rejects token with missing or invalid auth_time', async () => {
+    const verifier = getVerifier();
+    const token = await createToken({}, { auth_time: undefined });
+    await assert.rejects(async () => {
+      await verifier.verifyIdToken(token);
+    }, (err: Error) => err.message.includes('missing or invalid authentication time (auth_time)'));
+  });
+
+  it('rejects token with future auth_time', async () => {
+    const verifier = getVerifier();
+    const now = Math.floor(Date.now() / 1000);
+    const token = await createToken({}, { auth_time: now + 500 });
+    await assert.rejects(async () => {
+      await verifier.verifyIdToken(token);
+    }, (err: Error) => err.message.includes('Token authentication time is in the future'));
+  });
 });

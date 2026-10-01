@@ -60,7 +60,7 @@ export function createAuthInfrastructure(
     userSyncService,
     sessionService,
   });
-  const authController = new AuthController(userSyncService, sessionService, userRepo);
+  const authController = new AuthController(userSyncService, sessionService, userRepo, sessionRepo);
 
   return {
     db,

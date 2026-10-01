@@ -177,12 +177,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     () => ({
       ...state,
       role: state.user?.role ?? null,
+      applicationUser: state.user,
+      activeBranch: state.activeBranchId,
       activeSession: state.session,
       error: null,
       isOwner,
       isOperator,
       isCustomer,
       branchContext,
+      signInWithGoogle: loginWithGoogle,
+      signOut: logout,
+      refreshAuth: async () => {
+        if (state.firebaseUser) {
+          await syncBackendUser(state.firebaseUser);
+        }
+      },
       loginWithGoogle,
       loginWithToken,
       verifyPin,
@@ -203,6 +212,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setPin,
       selectBranch,
       logout,
+      syncBackendUser,
     ],
   );
 

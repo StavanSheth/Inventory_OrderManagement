@@ -28,6 +28,12 @@ export interface AuthContextValue {
     displayName: string;
     role: UserRole;
   } | null;
+  applicationUser: {
+    id: string;
+    email: string;
+    displayName: string;
+    role: UserRole;
+  } | null;
   role: UserRole | null;
   memberships: Array<{
     branchId: string;
@@ -35,6 +41,7 @@ export interface AuthContextValue {
     status: string;
   }>;
   activeBranchId: string | null;
+  activeBranch: string | null;
   branchContext: BranchContext;
   session: VerifyPinResponseData | null;
   activeSession: VerifyPinResponseData | null;
@@ -44,6 +51,9 @@ export interface AuthContextValue {
   error: string | null;
 
   // Actions
+  signInWithGoogle: () => Promise<void>;
+  signOut: () => Promise<void>;
+  refreshAuth: () => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   loginWithToken: (token: string) => Promise<void>;
   verifyPin: (pin: string, branchId?: string, scope?: 'BRANCH' | 'GLOBAL') => Promise<void>;

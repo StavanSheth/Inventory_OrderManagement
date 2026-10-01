@@ -113,6 +113,43 @@ export class AuthClient {
   clearSession(): void {
     this.activeSessionToken = null;
   }
+
+  /**
+   * Revokes an application session.
+   */
+  async revokeSession(sessionId?: string): Promise<void> {
+    const headers = await this.getAuthorizedHeaders();
+
+    const res = await fetch(`${this.baseUrl}${API_V1_PREFIX}/auth/revoke-session`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(sessionId ? { sessionId } : {}),
+    });
+
+    const json = (await res.json()) as ApiResponseContract<{ success: boolean }>;
+    if (!json.success) {
+      throw new Error(json.error.message);
+    }
+    this.clearSession();
+  }
+
+  /**
+   * Revokes all application sessions for current user.
+   */
+  async revokeAllSessions(): Promise<void> {
+    const headers = await this.getAuthorizedHeaders();
+
+    const res = await fetch(`${this.baseUrl}${API_V1_PREFIX}/auth/revoke-all-sessions`, {
+      method: 'POST',
+      headers,
+    });
+
+    const json = (await res.json()) as ApiResponseContract<{ success: boolean }>;
+    if (!json.success) {
+      throw new Error(json.error.message);
+    }
+    this.clearSession();
+  }
 }
 
 export const authClient = new AuthClient();

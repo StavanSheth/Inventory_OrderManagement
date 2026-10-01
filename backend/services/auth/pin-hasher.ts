@@ -1,6 +1,13 @@
 /**
  * Secure cryptographic PIN hasher using Web Crypto API (crypto.subtle PBKDF2).
- * 100% compatible with Cloudflare Workers runtime and Node.js 20+.
+ *
+ * ARCHITECTURAL DECISION & RUNTIME CONSTRAINTS:
+ * Cloudflare Workers and Edge runtimes do not natively support Argon2id without
+ * bundling large third-party C/WASM packages which violate Worker CPU/bundle constraints.
+ * Standard Web Crypto PBKDF2 with 100,000 iterations and SHA-256 is 100% native,
+ * hardware-accelerated, and fully supported across Node.js 20+, Cloudflare Workers,
+ * and browser runtimes.
+ *
  * Never logs or stores plaintext PINs.
  */
 

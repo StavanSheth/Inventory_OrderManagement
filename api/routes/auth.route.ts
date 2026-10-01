@@ -106,14 +106,36 @@ export async function handleRevokeSession(
   const responseHeaders = { ...corsHeaders, 'x-request-id': context.requestId };
 
   try {
-    const { authMiddleware, sessionService } = createAuthInfrastructure(env, options);
+    const { authMiddleware, authController } = createAuthInfrastructure(env, options);
 
-    const userContext = await authMiddleware.authenticateRequest(request, { requireSession: true });
-    if (userContext.session?.id) {
-      await sessionService.revokeSession(userContext.session.id);
-    }
+    const userContext = await authMiddleware.authenticateRequest(request, { requireSession: false });
+    const body = (await request.json().catch(() => ({}))) as { sessionId?: string };
 
-    return successResponse({ revoked: true }, 200, responseHeaders);
+    const data = await authController.revokeSession(userContext, body.sessionId);
+    return successResponse(data, 200, responseHeaders);
+  } catch (error) {
+    return handleApiError(error, responseHeaders);
+  }
+}
+
+export async function handleRevokeAllSessions(
+  request: Request,
+  env?: { DB?: D1DatabaseLike },
+  options: AuthFactoryOptions = {},
+): Promise<Response> {
+  const preflight = handleCorsPreflight(request, config.allowedOrigins);
+  if (preflight) return preflight;
+
+  const corsHeaders = getCorsHeaders(request, config.allowedOrigins);
+  const context = extractRequestContext(request);
+  const responseHeaders = { ...corsHeaders, 'x-request-id': context.requestId };
+
+  try {
+    const { authMiddleware, authController } = createAuthInfrastructure(env, options);
+
+    const userContext = await authMiddleware.authenticateRequest(request, { requireSession: false });
+    const data = await authController.revokeAllSessions(userContext);
+    return successResponse(data, 200, responseHeaders);
   } catch (error) {
     return handleApiError(error, responseHeaders);
   }

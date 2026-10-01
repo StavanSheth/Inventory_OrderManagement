@@ -1,5 +1,6 @@
 import { UserSyncService } from '../../backend/services/auth/user-sync.service';
 import { SessionService } from '../../backend/services/auth/session.service';
+import { SessionRepository } from '../../database/repositories/session.repository';
 import { UserRepository } from '../../database/repositories/user.repository';
 import { hashPin } from '../../backend/services/auth/pin-hasher';
 import { AuthenticatedUserContext } from '../../shared/types/auth.types';
@@ -10,7 +11,7 @@ import {
   SetPinRequest,
   SetPinResponseData,
 } from '../../shared/contracts/auth.contract';
-import { ValidationError, BadRequestError, ForbiddenError } from '../../backend/errors/app-error';
+import { ValidationError, BadRequestError, ForbiddenError, NotFoundError } from '../../backend/errors/app-error';
 import { UserRole } from '../../shared/enums/roles.enum';
 
 export class AuthController {
@@ -18,6 +19,7 @@ export class AuthController {
     private userSyncService: UserSyncService,
     private sessionService: SessionService,
     private userRepo: UserRepository,
+    private sessionRepo?: SessionRepository,
   ) {}
 
   /**
@@ -94,6 +96,53 @@ export class AuthController {
       scope: session.scope,
       branchId: session.branch_id ?? null,
       expiresAt: session.expires_at,
+    };
+  }
+
+  /**
+   * Revokes a specific application session.
+   * Users can only revoke their own session; Owner can revoke any session.
+   */
+  async revokeSession(
+    userContext: AuthenticatedUserContext,
+    sessionId?: string,
+  ): Promise<{ success: boolean; message: string }> {
+    let targetSessionId = sessionId;
+    if (!targetSessionId) {
+      targetSessionId = userContext.session?.id;
+    }
+    if (!targetSessionId) {
+      throw new BadRequestError('sessionId is required when no active session header is provided');
+    }
+
+    if (this.sessionRepo) {
+      const session = await this.sessionRepo.findById(targetSessionId.trim());
+      if (!session) {
+        throw new NotFoundError('Application session not found');
+      }
+
+      if (session.user_id !== userContext.userId && !userContext.isGlobalOwner) {
+        throw new ForbiddenError('You do not have permission to revoke this session');
+      }
+    }
+
+    await this.sessionService.revokeSession(targetSessionId.trim());
+    return {
+      success: true,
+      message: 'Session revoked successfully',
+    };
+  }
+
+  /**
+   * Revokes all active application sessions for the authenticated user.
+   */
+  async revokeAllSessions(
+    userContext: AuthenticatedUserContext,
+  ): Promise<{ success: boolean; message: string }> {
+    await this.sessionService.revokeAllForUser(userContext.userId);
+    return {
+      success: true,
+      message: 'All application sessions revoked successfully',
     };
   }
 }

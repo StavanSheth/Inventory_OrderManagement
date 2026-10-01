@@ -10,7 +10,13 @@ import { BranchRepository } from '../../database/repositories/branch.repository'
 import { OrderRepository } from '../../database/repositories/order.repository';
 import { SessionRepository } from '../../database/repositories/session.repository';
 import { UserRole, MembershipStatus } from '../../shared/enums/roles.enum';
-import { handleAuthLogin, handleSetPin, handleVerifyPin } from '../../api/routes/auth.route';
+import {
+  handleAuthLogin,
+  handleSetPin,
+  handleVerifyPin,
+  handleRevokeSession,
+  handleRevokeAllSessions,
+} from '../../api/routes/auth.route';
 import { handleBranchOrdersRoute } from '../../api/routes/branch-orders.route';
 import { handleCustomerOrdersRoute } from '../../api/routes/customer-orders.route';
 import { hashPin } from '../../backend/services/auth/pin-hasher';
@@ -22,6 +28,10 @@ describe('API Auth, RBAC & Multi-Branch Endpoints', () => {
   let branchRepo: BranchRepository;
   let orderRepo: OrderRepository;
   let _sessionRepo: SessionRepository;
+  let operatorSessionToken: string;
+  let operatorSessionId: string;
+  let ownerSessionToken: string;
+  let ownerSessionId: string;
 
   beforeEach(async () => {
     db = createMemoryD1Database();
@@ -203,47 +213,48 @@ describe('API Auth, RBAC & Multi-Branch Endpoints', () => {
     });
   });
 
-  describe('Protected Branch Authorization Path with Session Enforcement', () => {
-    let operatorSessionToken: string;
-    let ownerSessionToken: string;
-
-    beforeEach(async () => {
-      // Set & verify operator PIN
-      const setPinReq = new Request('http://localhost:3000/api/v1/auth/pin', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: 'Bearer mock-user:fb-op-alpha:operator.alpha@melt.local:Alpha Operator',
-        },
-        body: JSON.stringify({ pin: '7777' }),
-      });
-      await handleSetPin(setPinReq, { DB: db });
-
-      const verifyReq = new Request('http://localhost:3000/api/v1/auth/verify-pin', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: 'Bearer mock-user:fb-op-alpha:operator.alpha@melt.local:Alpha Operator',
-        },
-        body: JSON.stringify({ pin: '7777', branchId: 'branch-alpha' }),
-      });
-      const verifyRes = await handleVerifyPin(verifyReq, { DB: db });
-      const verifyJson = (await verifyRes.json()) as { data: { sessionToken: string } };
-      operatorSessionToken = verifyJson.data.sessionToken;
-
-      // Verify owner PIN with GLOBAL scope
-      const ownerVerifyReq = new Request('http://localhost:3000/api/v1/auth/verify-pin', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: 'Bearer mock-user:fb-owner:owner@melt.local:Owner Boss',
-        },
-        body: JSON.stringify({ pin: '9999', scope: 'GLOBAL' }),
-      });
-      const ownerVerifyRes = await handleVerifyPin(ownerVerifyReq, { DB: db });
-      const ownerJson = (await ownerVerifyRes.json()) as { data: { sessionToken: string } };
-      ownerSessionToken = ownerJson.data.sessionToken;
+  async function setupSessions() {
+    // Set & verify operator PIN
+    const setPinReq = new Request('http://localhost:3000/api/v1/auth/pin', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer mock-user:fb-op-alpha:operator.alpha@melt.local:Alpha Operator',
+      },
+      body: JSON.stringify({ pin: '7777' }),
     });
+    await handleSetPin(setPinReq, { DB: db });
+
+    const verifyReq = new Request('http://localhost:3000/api/v1/auth/verify-pin', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer mock-user:fb-op-alpha:operator.alpha@melt.local:Alpha Operator',
+      },
+      body: JSON.stringify({ pin: '7777', branchId: 'branch-alpha' }),
+    });
+    const verifyRes = await handleVerifyPin(verifyReq, { DB: db });
+    const verifyJson = (await verifyRes.json()) as { data: { sessionId: string; sessionToken: string } };
+    operatorSessionToken = verifyJson.data.sessionToken;
+    operatorSessionId = verifyJson.data.sessionId;
+
+    // Verify owner PIN with GLOBAL scope
+    const ownerVerifyReq = new Request('http://localhost:3000/api/v1/auth/verify-pin', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer mock-user:fb-owner:owner@melt.local:Owner Boss',
+      },
+      body: JSON.stringify({ pin: '9999', scope: 'GLOBAL' }),
+    });
+    const ownerVerifyRes = await handleVerifyPin(ownerVerifyReq, { DB: db });
+    const ownerJson = (await ownerVerifyRes.json()) as { data: { sessionId: string; sessionToken: string } };
+    ownerSessionToken = ownerJson.data.sessionToken;
+    ownerSessionId = ownerJson.data.sessionId;
+  }
+
+  describe('Protected Branch Authorization Path with Session Enforcement', () => {
+    beforeEach(setupSessions);
 
     it('rejects operational branch route when x-session-token is missing', async () => {
       const request = new Request('http://localhost:3000/api/v1/branches/branch-alpha/orders', {
@@ -361,6 +372,128 @@ describe('API Auth, RBAC & Multi-Branch Endpoints', () => {
       const json = (await response.json()) as { success: boolean; data: any[] };
       assert.strictEqual(json.success, true);
       assert.strictEqual(json.data.length, 1);
+    });
+  });
+
+  describe('Session Revocation Endpoints', () => {
+    beforeEach(setupSessions);
+    it('revokes an existing application session by owner or owner-user', async () => {
+      const request = new Request('http://localhost:3000/api/v1/auth/revoke-session', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer mock-user:fb-op-alpha:operator.alpha@melt.local:Alpha Operator',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ sessionId: operatorSessionId }),
+      });
+      const response = await handleRevokeSession(request, { DB: db });
+      assert.strictEqual(response.status, 200);
+
+      // Verify the revoked session can no longer be used
+      const opReq = new Request('http://localhost:3000/api/v1/branches/branch-alpha/orders', {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer mock-user:fb-op-alpha:operator.alpha@melt.local:Alpha Operator',
+          'x-session-token': operatorSessionToken,
+        },
+      });
+      const opRes = await handleBranchOrdersRoute(opReq, 'branch-alpha', { DB: db });
+      assert.strictEqual(opRes.status, 401, 'Revoked session must be rejected with 401');
+    });
+
+    it('forbids a user from revoking another user session', async () => {
+      const request = new Request('http://localhost:3000/api/v1/auth/revoke-session', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer mock-user:fb-customer-1:customer1@melt.local:Customer 1',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ sessionId: ownerSessionId }),
+      });
+      const response = await handleRevokeSession(request, { DB: db });
+      assert.strictEqual(response.status, 403, 'Revoking another user session must return 403 Forbidden');
+    });
+
+    it('returns 404 when revoking non-existent session ID', async () => {
+      const request = new Request('http://localhost:3000/api/v1/auth/revoke-session', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer mock-user:fb-owner:owner@melt.local:Owner Boss',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ sessionId: 'sess-non-existent-xyz' }),
+      });
+      const response = await handleRevokeSession(request, { DB: db });
+      assert.strictEqual(response.status, 404, 'Non-existent session must return 404');
+    });
+
+    it('revokes all sessions for current user via revoke-all-sessions', async () => {
+      const request = new Request('http://localhost:3000/api/v1/auth/revoke-all-sessions', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer mock-user:fb-owner:owner@melt.local:Owner Boss',
+        },
+      });
+      const response = await handleRevokeAllSessions(request, { DB: db });
+      assert.strictEqual(response.status, 200);
+
+      // Verify owner session is now rejected
+      const ownerReq = new Request('http://localhost:3000/api/v1/branches/branch-alpha/orders', {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer mock-user:fb-owner:owner@melt.local:Owner Boss',
+          'x-session-token': ownerSessionToken,
+        },
+      });
+      const ownerRes = await handleBranchOrdersRoute(ownerReq, 'branch-alpha', { DB: db });
+      assert.strictEqual(ownerRes.status, 401, 'Revoked sessions must be rejected');
+    });
+  });
+
+  describe('Role and Session Spoofing Defenses', () => {
+    beforeEach(setupSessions);
+    it('ignores client attempts to spoof role in request body during login', async () => {
+      const request = new Request('http://localhost:3000/api/v1/auth/login', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer mock-user:fb-spoof-new:spoof@melt.local:Spoofer',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          role: 'OWNER',
+          isOwner: true,
+          userId: 'usr-fake-owner',
+        }),
+      });
+      const response = await handleAuthLogin(request, { DB: db });
+      assert.strictEqual(response.status, 200);
+      const json = (await response.json()) as any;
+      assert.strictEqual(json.data.user.role, UserRole.CUSTOMER, 'New user must remain CUSTOMER despite spoofed body');
+    });
+
+    it('rejects operator session attempting to access another branch URL', async () => {
+      const request = new Request('http://localhost:3000/api/v1/branches/branch-beta/orders?branchId=branch-alpha', {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer mock-user:fb-op-alpha:operator.alpha@melt.local:Alpha Operator',
+          'x-session-token': operatorSessionToken,
+        },
+      });
+      const response = await handleBranchOrdersRoute(request, 'branch-beta', { DB: db });
+      assert.strictEqual(response.status, 403, 'Cross-branch access must return 403 regardless of query params');
+    });
+
+    it('rejects request with valid Firebase identity but different user session token', async () => {
+      const request = new Request('http://localhost:3000/api/v1/branches/branch-alpha/orders', {
+        method: 'GET',
+        headers: {
+          // Authenticated as Customer 1, but providing Owner session token
+          Authorization: 'Bearer mock-user:fb-customer-1:customer1@melt.local:Customer 1',
+          'x-session-token': ownerSessionToken,
+        },
+      });
+      const response = await handleBranchOrdersRoute(request, 'branch-alpha', { DB: db });
+      assert.strictEqual(response.status, 403, 'Session belonging to different user must be rejected with 403');
     });
   });
 });

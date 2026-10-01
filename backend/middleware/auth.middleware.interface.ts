@@ -1,13 +1,6 @@
-import { UserRole } from '../../shared/enums/roles.enum';
+import { AuthenticatedUserContext } from '../../shared/types/auth.types';
 
-export interface AuthenticatedUserContext {
-  userId: string;
-  firebaseUid: string;
-  email: string;
-  role: UserRole;
-  branchId?: string;
-  isGlobalOwner: boolean;
-}
+export type { AuthenticatedUserContext };
 
 export interface IAuthMiddleware {
   authenticate(token: string): Promise<AuthenticatedUserContext>;

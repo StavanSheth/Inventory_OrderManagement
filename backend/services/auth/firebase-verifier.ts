@@ -152,13 +152,22 @@ export class FirebaseProductionVerifier implements IFirebaseVerifier {
       throw new UnauthorizedError('Authentication token has expired');
     }
 
-    // Issued At
-    if (typeof payload.iat === 'number' && payload.iat > (nowSeconds + CLOCK_TOLERANCE_SECONDS)) {
+    // Issued At (strictly required)
+    if (typeof payload.iat !== 'number' || payload.iat <= 0) {
+      throw new UnauthorizedError('Token missing or invalid issued-at time (iat)');
+    }
+    if (payload.iat > (nowSeconds + CLOCK_TOLERANCE_SECONDS)) {
       throw new UnauthorizedError('Token issued in the future');
     }
+    if (payload.iat > payload.exp) {
+      throw new UnauthorizedError('Token issued-at time is after expiration time');
+    }
 
-    // Auth Time
-    if (typeof payload.auth_time === 'number' && payload.auth_time > (nowSeconds + CLOCK_TOLERANCE_SECONDS)) {
+    // Auth Time (strictly required)
+    if (typeof payload.auth_time !== 'number' || payload.auth_time <= 0) {
+      throw new UnauthorizedError('Token missing or invalid authentication time (auth_time)');
+    }
+    if (payload.auth_time > (nowSeconds + CLOCK_TOLERANCE_SECONDS)) {
       throw new UnauthorizedError('Token authentication time is in the future');
     }
 
