@@ -1,18 +1,72 @@
+import { IFirebaseVerifier } from './firebase-verifier.interface';
 import { FirebaseTokenPayload } from '../../../shared/types/auth.types';
 import { UnauthorizedError } from '../../errors/app-error';
 
-export interface IFirebaseVerifier {
-  verifyIdToken(idToken: string): Promise<FirebaseTokenPayload>;
+const GOOGLE_JWKS_URL = 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com';
+const CLOCK_TOLERANCE_SECONDS = 300; // 5 minutes leeway for clock skew
+
+interface GoogleJwk {
+  kty: string;
+  alg: string;
+  use: string;
+  kid: string;
+  n: string;
+  e: string;
 }
 
-export class FirebaseVerifier implements IFirebaseVerifier {
-  constructor(private projectId?: string) {}
+interface JwksResponse {
+  keys: GoogleJwk[];
+}
 
-  /**
-   * Verifies a Firebase ID token.
-   * Supports standard Firebase JWT structure and safe deterministic test tokens.
-   * Never logs raw tokens.
-   */
+export interface FirebaseProductionVerifierOptions {
+  projectId: string;
+  jwksUrl?: string;
+  customJwks?: GoogleJwk[];
+  cacheTtlMs?: number;
+}
+
+function base64UrlToUint8Array(base64Url: string): Uint8Array {
+  const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+  const padLen = (4 - (base64.length % 4)) % 4;
+  const padded = base64 + '='.repeat(padLen);
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+/**
+ * Production Firebase ID Token Verifier using native Web Crypto API (RS256).
+ * Compatible with Cloudflare Workers runtime and Node.js.
+ * Fully verifies cryptographic signature, issuer, audience, and expiration.
+ * Contains ZERO mock or test token bypasses.
+ */
+export class FirebaseProductionVerifier implements IFirebaseVerifier {
+  private projectId: string;
+  private jwksUrl: string;
+  private customJwks?: GoogleJwk[];
+  private cacheTtlMs: number;
+  private cachedKeys: Map<string, { key: CryptoKey; expiresAt: number }> = new Map();
+
+  constructor(options: FirebaseProductionVerifierOptions | string) {
+    if (typeof options === 'string') {
+      this.projectId = options;
+      this.jwksUrl = GOOGLE_JWKS_URL;
+      this.cacheTtlMs = 3600 * 1000;
+    } else {
+      this.projectId = options.projectId;
+      this.jwksUrl = options.jwksUrl ?? GOOGLE_JWKS_URL;
+      this.customJwks = options.customJwks;
+      this.cacheTtlMs = options.cacheTtlMs ?? 3600 * 1000;
+    }
+
+    if (!this.projectId || this.projectId.trim().length === 0) {
+      throw new Error('FirebaseProductionVerifier requires a non-empty projectId');
+    }
+  }
+
   async verifyIdToken(idToken: string): Promise<FirebaseTokenPayload> {
     if (!idToken || typeof idToken !== 'string' || idToken.trim().length === 0) {
       throw new UnauthorizedError('Authentication token is missing');
@@ -20,53 +74,158 @@ export class FirebaseVerifier implements IFirebaseVerifier {
 
     const trimmed = idToken.trim();
 
-    // 1. Handle deterministic test/mock tokens: 'mock-user:<uid>:<email>:<name>' or 'test-token:<uid>'
+    // Explicit rejection of mock/test prefix attempts in production verifier
     if (trimmed.startsWith('mock-') || trimmed.startsWith('test-')) {
-      const parts = trimmed.split(':');
-      const uid = parts[1] ?? 'test-uid';
-      const email = parts[2] ?? `${uid}@melt.local`;
-      const name = parts[3] ?? 'Test User';
-      return {
-        uid,
-        email,
-        name,
-        auth_time: Math.floor(Date.now() / 1000),
-      };
-    }
-
-    // 2. Parse standard JWT token parts (header.payload.signature)
-    const segments = trimmed.split('.');
-    if (segments.length !== 3) {
       throw new UnauthorizedError('Invalid authentication token format');
     }
 
+    const segments = trimmed.split('.');
+    if (segments.length !== 3) {
+      throw new UnauthorizedError('Invalid authentication token structure');
+    }
+
+    const [headerB64, payloadB64, signatureB64] = segments;
+
+    // 1. Decode Header
+    let header: { alg?: string; kid?: string };
     try {
-      const payloadBase64 = segments[1].replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = Buffer.from(payloadBase64, 'base64').toString('utf-8');
-      const payload = JSON.parse(jsonPayload) as Record<string, unknown>;
+      const headerJson = atob(headerB64.replace(/-/g, '+').replace(/_/g, '/'));
+      header = JSON.parse(headerJson);
+    } catch {
+      throw new UnauthorizedError('Invalid authentication token header');
+    }
 
-      if (!payload.sub || typeof payload.sub !== 'string') {
-        throw new UnauthorizedError('Token missing valid subject identifier');
-      }
+    if (header.alg !== 'RS256') {
+      throw new UnauthorizedError(`Unsupported algorithm: ${header.alg ?? 'unknown'}. Expected RS256`);
+    }
 
-      // Check expiration if present
-      const nowSeconds = Math.floor(Date.now() / 1000);
-      if (typeof payload.exp === 'number' && payload.exp < nowSeconds) {
-        throw new UnauthorizedError('Authentication token has expired');
-      }
+    if (!header.kid || typeof header.kid !== 'string') {
+      throw new UnauthorizedError('Token header missing key identifier (kid)');
+    }
 
-      return {
-        uid: payload.sub,
-        email: typeof payload.email === 'string' ? payload.email : undefined,
-        name: typeof payload.name === 'string' ? payload.name : undefined,
-        phone_number: typeof payload.phone_number === 'string' ? payload.phone_number : undefined,
-        ...payload,
-      };
-    } catch (err: unknown) {
-      if (err instanceof UnauthorizedError) {
-        throw err;
+    // 2. Decode Payload
+    let payload: Record<string, unknown>;
+    try {
+      const payloadJson = atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/'));
+      payload = JSON.parse(payloadJson);
+    } catch {
+      throw new UnauthorizedError('Invalid authentication token payload');
+    }
+
+    // 3. Verify Signature via Web Crypto
+    const signedData = new TextEncoder().encode(`${headerB64}.${payloadB64}`);
+    const signature = base64UrlToUint8Array(signatureB64);
+    const cryptoKey = await this.getSigningKey(header.kid);
+
+    const isSignatureValid = await crypto.subtle.verify(
+      { name: 'RSASSA-PKCS1-v1_5' },
+      cryptoKey,
+      signature as unknown as BufferSource,
+      signedData as unknown as BufferSource,
+    );
+
+    if (!isSignatureValid) {
+      throw new UnauthorizedError('Token signature verification failed');
+    }
+
+    // 4. Validate Claims
+    const nowSeconds = Math.floor(Date.now() / 1000);
+
+    // Subject
+    if (!payload.sub || typeof payload.sub !== 'string' || payload.sub.length === 0 || payload.sub.length > 128) {
+      throw new UnauthorizedError('Token missing or invalid subject identifier (sub)');
+    }
+
+    // Issuer: must be https://securetoken.google.com/<projectId>
+    const expectedIssuer = `https://securetoken.google.com/${this.projectId}`;
+    if (payload.iss !== expectedIssuer) {
+      throw new UnauthorizedError(`Invalid token issuer: ${payload.iss ?? 'none'}. Expected ${expectedIssuer}`);
+    }
+
+    // Audience: must be <projectId>
+    if (payload.aud !== this.projectId) {
+      throw new UnauthorizedError(`Invalid token audience: ${payload.aud ?? 'none'}. Expected ${this.projectId}`);
+    }
+
+    // Expiration
+    if (typeof payload.exp !== 'number' || payload.exp <= (nowSeconds - CLOCK_TOLERANCE_SECONDS)) {
+      throw new UnauthorizedError('Authentication token has expired');
+    }
+
+    // Issued At
+    if (typeof payload.iat === 'number' && payload.iat > (nowSeconds + CLOCK_TOLERANCE_SECONDS)) {
+      throw new UnauthorizedError('Token issued in the future');
+    }
+
+    // Auth Time
+    if (typeof payload.auth_time === 'number' && payload.auth_time > (nowSeconds + CLOCK_TOLERANCE_SECONDS)) {
+      throw new UnauthorizedError('Token authentication time is in the future');
+    }
+
+    // Never trust role, branch, permissions from token payload
+    return {
+      uid: payload.sub,
+      email: typeof payload.email === 'string' ? payload.email : undefined,
+      name: typeof payload.name === 'string' ? payload.name : undefined,
+      phone_number: typeof payload.phone_number === 'string' ? payload.phone_number : undefined,
+      auth_time: typeof payload.auth_time === 'number' ? payload.auth_time : nowSeconds,
+      email_verified: typeof payload.email_verified === 'boolean' ? payload.email_verified : undefined,
+    };
+  }
+
+  private async getSigningKey(kid: string): Promise<CryptoKey> {
+    const cached = this.cachedKeys.get(kid);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.key;
+    }
+
+    const jwks = await this.fetchJwks();
+    const matchingJwk = jwks.find((k) => k.kid === kid);
+
+    if (!matchingJwk) {
+      throw new UnauthorizedError(`Public key with kid "${kid}" not found in JWKS`);
+    }
+
+    try {
+      const cryptoKey = await crypto.subtle.importKey(
+        'jwk',
+        matchingJwk,
+        {
+          name: 'RSASSA-PKCS1-v1_5',
+          hash: 'SHA-256',
+        },
+        false,
+        ['verify'],
+      );
+
+      this.cachedKeys.set(kid, {
+        key: cryptoKey,
+        expiresAt: Date.now() + this.cacheTtlMs,
+      });
+
+      return cryptoKey;
+    } catch {
+      throw new UnauthorizedError(`Failed to import public key for kid "${kid}"`);
+    }
+  }
+
+  private async fetchJwks(): Promise<GoogleJwk[]> {
+    if (this.customJwks && this.customJwks.length > 0) {
+      return this.customJwks;
+    }
+
+    try {
+      const res = await fetch(this.jwksUrl);
+      if (!res.ok) {
+        throw new Error(`JWKS fetch responded with HTTP ${res.status}`);
       }
-      throw new UnauthorizedError('Failed to verify authentication token');
+      const data = (await res.json()) as JwksResponse;
+      return data.keys ?? [];
+    } catch (err) {
+      throw new UnauthorizedError(`Failed to retrieve Firebase signing keys: ${err instanceof Error ? err.message : 'network error'}`);
     }
   }
 }
+
+// Keep FirebaseVerifier as alias for FirebaseProductionVerifier
+export const FirebaseVerifier = FirebaseProductionVerifier;

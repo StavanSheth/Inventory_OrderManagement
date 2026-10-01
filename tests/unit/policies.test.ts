@@ -7,6 +7,7 @@ import {
   requireBranchAccess,
   canAccessCustomerData,
   requireCustomerData,
+  requireApplicationSession,
 } from '../../backend/policies/branch-access.policy';
 import { UserRole, MembershipStatus } from '../../shared/enums/roles.enum';
 import { AuthenticatedUserContext } from '../../shared/types/auth.types';
@@ -121,6 +122,73 @@ describe('Authorization Policies Unit Tests', () => {
     it('owner can access any customer data', () => {
       assert.strictEqual(canAccessCustomerData(ownerContext, 'usr-cust-1'), true);
       assert.doesNotThrow(() => requireCustomerData(ownerContext, 'usr-cust-1'));
+    });
+
+    describe('requireApplicationSession', () => {
+
+      it('rejects missing or null application session', () => {
+        assert.throws(() => {
+          requireApplicationSession(null, operatorContext, 'branch-alpha');
+        }, UnauthorizedError);
+      });
+
+      it('rejects session belonging to a different user', () => {
+        const session = {
+          user_id: 'different-user',
+          scope: 'BRANCH' as const,
+          branch_id: 'branch-alpha',
+        };
+        assert.throws(() => {
+          requireApplicationSession(session, operatorContext, 'branch-alpha');
+        }, ForbiddenError);
+      });
+
+      it('allows operator session matching target branch', () => {
+        const session = {
+          user_id: operatorContext.userId,
+          scope: 'BRANCH' as const,
+          branch_id: 'branch-alpha',
+        };
+        assert.doesNotThrow(() => {
+          requireApplicationSession(session, operatorContext, 'branch-alpha');
+        });
+      });
+
+      it('rejects operator session attempting to access different branch', () => {
+        const session = {
+          user_id: operatorContext.userId,
+          scope: 'BRANCH' as const,
+          branch_id: 'branch-alpha',
+        };
+        assert.throws(() => {
+          requireApplicationSession(session, operatorContext, 'branch-beta');
+        }, ForbiddenError);
+      });
+
+      it('rejects operator with GLOBAL session scope', () => {
+        const session = {
+          user_id: operatorContext.userId,
+          scope: 'GLOBAL' as const,
+          branch_id: null,
+        };
+        assert.throws(() => {
+          requireApplicationSession(session, operatorContext, 'branch-alpha');
+        }, ForbiddenError);
+      });
+
+      it('allows owner with GLOBAL session scope across any branch', () => {
+        const session = {
+          user_id: ownerContext.userId,
+          scope: 'GLOBAL' as const,
+          branch_id: null,
+        };
+        assert.doesNotThrow(() => {
+          requireApplicationSession(session, ownerContext, 'branch-alpha');
+        });
+        assert.doesNotThrow(() => {
+          requireApplicationSession(session, ownerContext, 'branch-beta');
+        });
+      });
     });
   });
 });

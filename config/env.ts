@@ -12,12 +12,13 @@ export const configSchema = z
     // Cloudflare D1 Binding
     d1BindingName: z.string().min(1, 'd1BindingName must not be empty').default('DB'),
 
-    // Firebase Auth Placeholders (Future phase)
+    // Firebase Auth Configuration
     firebase: z
       .object({
         projectId: z.string().optional(),
         clientEmail: z.string().optional(),
         publicApiKey: z.string().optional(),
+        authDomain: z.string().optional(),
       })
       .default({}),
 
@@ -63,6 +64,15 @@ export const configSchema = z
           code: z.ZodIssueCode.custom,
           path: ['allowedOrigins'],
           message: 'Production/staging must define at least one allowed origin',
+        });
+      }
+
+      // Production requires Firebase project ID
+      if (!data.firebase.projectId || data.firebase.projectId.trim().length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['firebase', 'projectId'],
+          message: 'Production and staging environments require a non-empty Firebase projectId',
         });
       }
     }

@@ -1,3 +1,5 @@
+(process.env as Record<string, string | undefined>).NODE_ENV = 'test';
+
 import { run } from 'node:test';
 import { spec } from 'node:test/reporters';
 import path from 'node:path';
@@ -6,6 +8,8 @@ const testFiles = [
   'tests/unit/config.test.ts',
   'tests/unit/cors.test.ts',
   'tests/unit/auth-pin.test.ts',
+  'tests/unit/firebase-production-verifier.test.ts',
+  'tests/unit/environment-auth.test.ts',
   'tests/unit/policies.test.ts',
   'tests/integration/schema-migrations.test.ts',
   'tests/integration/seed-data.test.ts',

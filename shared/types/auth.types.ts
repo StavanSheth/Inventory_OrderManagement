@@ -41,6 +41,7 @@ export interface AuthenticatedUserContext {
   activeBranchId?: string;
   session?: {
     id: string;
+    user_id?: string;
     scope: 'BRANCH' | 'GLOBAL';
     branchId?: string | null;
     pinVerified: boolean;

@@ -197,4 +197,103 @@ describe('Auth, RBAC & Multi-Branch Integration', () => {
     assert.strictEqual(validated.scope, 'GLOBAL');
     assert.strictEqual(validated.branch_id, null);
   });
+
+  it('rejects CUSTOMER role from creating PIN sessions', async () => {
+    const customer = await userRepo.create({
+      id: 'usr-customer-pin-test',
+      firebase_uid: 'fb-customer-pin-test',
+      email: 'customer.pin@melt.local',
+      display_name: 'Customer Pin Attempt',
+      role: UserRole.CUSTOMER,
+    });
+
+    const hashed = await hashPin('1122');
+    await userRepo.setPinHash(customer.id, hashed);
+
+    await assert.rejects(
+      async () => {
+        await sessionService.verifyPinAndCreateSession({
+          userId: customer.id,
+          pin: '1122',
+        });
+      },
+      (err: Error) => err instanceof ForbiddenError && err.message.includes('Customers cannot create application sessions'),
+    );
+  });
+
+  it('enforces brute-force lockout after 5 consecutive incorrect PIN attempts', async () => {
+    const operator = await userRepo.create({
+      id: 'usr-lockout-test',
+      firebase_uid: 'fb-lockout-test',
+      email: 'lockout.op@melt.local',
+      display_name: 'Lockout Operator',
+      role: UserRole.CUSTOMER,
+    });
+
+    await userRepo.addMembership('mem-lockout', operator.id, 'branch-alpha', UserRole.BRANCH_OPERATOR, MembershipStatus.ACTIVE);
+    const correctPin = '5555';
+    await userRepo.setPinHash(operator.id, await hashPin(correctPin));
+
+    // Fail 4 times: should remain unlocked
+    for (let i = 0; i < 4; i++) {
+      await assert.rejects(
+        async () => {
+          await sessionService.verifyPinAndCreateSession({
+            userId: operator.id,
+            pin: '0000',
+            branchId: 'branch-alpha',
+          });
+        },
+        (err: Error) => err.message.includes('Invalid PIN'),
+      );
+    }
+
+    // 5th failure: triggers lockout
+    await assert.rejects(
+      async () => {
+        await sessionService.verifyPinAndCreateSession({
+          userId: operator.id,
+          pin: '0000',
+          branchId: 'branch-alpha',
+        });
+      },
+      (err: Error) => err.message.includes('temporarily locked for 5 minutes'),
+    );
+
+    // 6th attempt (even with correct PIN): should be rejected immediately due to active lock
+    await assert.rejects(
+      async () => {
+        await sessionService.verifyPinAndCreateSession({
+          userId: operator.id,
+          pin: correctPin,
+          branchId: 'branch-alpha',
+        });
+      },
+      (err: Error) => err.message.includes('Account PIN is temporarily locked'),
+    );
+  });
+
+  it('revokes all sessions for a user using revokeAllForUser', async () => {
+    const owner = await userRepo.create({
+      id: 'usr-owner-multi-session',
+      firebase_uid: 'fb-owner-multi-session',
+      email: 'owner.multi@melt.local',
+      display_name: 'Multi Session Owner',
+      role: UserRole.OWNER,
+    });
+
+    await userRepo.setPinHash(owner.id, await hashPin('9999'));
+
+    const s1 = await sessionService.verifyPinAndCreateSession({ userId: owner.id, pin: '9999', scope: 'GLOBAL' });
+    const s2 = await sessionService.verifyPinAndCreateSession({ userId: owner.id, pin: '9999', scope: 'GLOBAL' });
+
+    assert.ok(await sessionService.validateSession(s1.sessionToken));
+    assert.ok(await sessionService.validateSession(s2.sessionToken));
+
+    // Revoke all
+    await sessionService.revokeAllForUser(owner.id);
+
+    await assert.rejects(async () => sessionService.validateSession(s1.sessionToken), UnauthorizedError);
+    await assert.rejects(async () => sessionService.validateSession(s2.sessionToken), UnauthorizedError);
+  });
 });

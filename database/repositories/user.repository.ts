@@ -69,8 +69,41 @@ export class UserRepository extends BaseRepository {
   async setPinHash(userId: string, pinHash: string): Promise<void> {
     const now = new Date().toISOString();
     await this.db
-      .prepare('UPDATE users SET pin_hash = ?, updated_at = ? WHERE id = ?')
+      .prepare('UPDATE users SET pin_hash = ?, failed_pin_attempts = 0, pin_locked_until = NULL, updated_at = ? WHERE id = ?')
       .bind(pinHash, now, userId)
+      .run();
+  }
+
+  async recordFailedPinAttempt(userId: string): Promise<{ failedAttempts: number; isLocked: boolean; lockedUntil: string | null }> {
+    const user = await this.findById(userId);
+    if (!user) {
+      return { failedAttempts: 0, isLocked: false, lockedUntil: null };
+    }
+
+    const currentAttempts = (user.failed_pin_attempts ?? 0) + 1;
+    let lockedUntil: string | null = null;
+    if (currentAttempts >= 5) {
+      lockedUntil = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+    }
+
+    const now = new Date().toISOString();
+    await this.db
+      .prepare('UPDATE users SET failed_pin_attempts = ?, pin_locked_until = ?, updated_at = ? WHERE id = ?')
+      .bind(currentAttempts, lockedUntil, now, userId)
+      .run();
+
+    return {
+      failedAttempts: currentAttempts,
+      isLocked: Boolean(lockedUntil),
+      lockedUntil,
+    };
+  }
+
+  async resetPinLockout(userId: string): Promise<void> {
+    const now = new Date().toISOString();
+    await this.db
+      .prepare('UPDATE users SET failed_pin_attempts = 0, pin_locked_until = NULL, updated_at = ? WHERE id = ?')
+      .bind(now, userId)
       .run();
   }
 

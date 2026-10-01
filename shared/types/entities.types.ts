@@ -26,6 +26,8 @@ export interface User {
   phone?: string | null;
   role: UserRole;
   pin_hash?: string | null;
+  failed_pin_attempts?: number;
+  pin_locked_until?: IsoDateTimeUtc | null;
   status: string;
   created_at: IsoDateTimeUtc;
   updated_at: IsoDateTimeUtc;

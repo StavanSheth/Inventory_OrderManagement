@@ -1,14 +1,17 @@
 'use client';
 
-import React, { createContext, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useState, useCallback, useMemo, useEffect } from 'react';
 import { UserRole } from '../../../shared/enums/roles.enum';
 import { BranchContext } from '../../../shared/types/auth.types';
 import { authClient } from './auth-client';
 import { VerifyPinResponseData } from '../../../shared/contracts/auth.contract';
+import { getFirebaseAuth, GoogleAuthProvider, signInWithPopup } from './google-auth';
+import { FirebaseUser, AuthContextValue } from './types';
 
 export interface AuthState {
   isLoading: boolean;
   isAuthenticated: boolean;
+  firebaseUser: FirebaseUser | null;
   user: {
     id: string;
     email: string;
@@ -28,26 +31,20 @@ export interface AuthState {
   isCustomer: boolean;
 }
 
-export interface AuthContextValue extends AuthState {
-  loginWithToken: (idToken: string) => Promise<void>;
-  verifyPin: (pin: string, branchId?: string, scope?: 'BRANCH' | 'GLOBAL') => Promise<void>;
-  selectBranch: (branchId: string | null) => void;
-  logout: () => void;
-}
+export type { AuthContextValue } from './types';
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<Omit<AuthState, 'isOwner' | 'isOperator' | 'isCustomer' | 'branchContext'>>({
-    isLoading: false,
+    isLoading: true,
     isAuthenticated: false,
+    firebaseUser: null,
     user: null,
     memberships: [],
     activeBranchId: null,
     session: null,
   });
-
-  const [idToken, setIdToken] = useState<string | null>(null);
 
   const isOwner = state.user?.role === UserRole.OWNER;
   const isOperator = state.user?.role === UserRole.BRANCH_OPERATOR;
@@ -66,19 +63,79 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { scope: 'GLOBAL' };
   }, [isOwner, state.activeBranchId, state.memberships]);
 
-  const loginWithToken = useCallback(async (token: string) => {
+  // Synchronizes backend user session whenever a Firebase user is established or refreshed
+  const syncBackendUser = useCallback(async (fbUser: FirebaseUser) => {
+    try {
+      const data = await authClient.login();
+      setState((prev) => ({
+        ...prev,
+        isLoading: false,
+        isAuthenticated: true,
+        firebaseUser: fbUser,
+        user: data.user,
+        memberships: data.memberships,
+        activeBranchId: prev.activeBranchId ?? data.memberships[0]?.branchId ?? null,
+      }));
+    } catch {
+      setState((prev) => ({
+        ...prev,
+        isLoading: false,
+        isAuthenticated: false,
+        user: null,
+        session: null,
+      }));
+    }
+  }, []);
+
+  // Subscribe to Firebase token & auth state changes
+  useEffect(() => {
+    const auth = getFirebaseAuth();
+    const unsubscribe = auth.onIdTokenChanged(async (fbUser) => {
+      if (fbUser) {
+        await syncBackendUser(fbUser);
+      } else {
+        authClient.clearSession();
+        setState({
+          isLoading: false,
+          isAuthenticated: false,
+          firebaseUser: null,
+          user: null,
+          memberships: [],
+          activeBranchId: null,
+          session: null,
+        });
+      }
+    });
+
+    return () => unsubscribe();
+  }, [syncBackendUser]);
+
+  const loginWithGoogle = useCallback(async () => {
     setState((prev) => ({ ...prev, isLoading: true }));
     try {
-      const data = await authClient.loginWithIdToken(token);
-      setIdToken(token);
-      setState({
+      const auth = getFirebaseAuth();
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      await syncBackendUser(result.user);
+    } catch (err) {
+      setState((prev) => ({ ...prev, isLoading: false }));
+      throw err;
+    }
+  }, [syncBackendUser]);
+
+  const loginWithToken = useCallback(async (_token: string) => {
+    setState((prev) => ({ ...prev, isLoading: true }));
+    try {
+      const data = await authClient.login();
+      setState((prev) => ({
+        ...prev,
         isLoading: false,
         isAuthenticated: true,
         user: data.user,
         memberships: data.memberships,
         activeBranchId: data.memberships[0]?.branchId ?? null,
         session: null,
-      });
+      }));
     } catch (err) {
       setState((prev) => ({ ...prev, isLoading: false }));
       throw err;
@@ -86,24 +143,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const verifyPin = useCallback(async (pin: string, branchId?: string, scope?: 'BRANCH' | 'GLOBAL') => {
-    if (!idToken) throw new Error('Not authenticated with Firebase');
-    const session = await authClient.verifyPin(idToken, { pin, branchId, scope });
+    const session = await authClient.verifyPin({ pin, branchId, scope });
     setState((prev) => ({
       ...prev,
       session,
       activeBranchId: session.branchId ?? prev.activeBranchId,
     }));
-  }, [idToken]);
+  }, []);
+
+  const setPin = useCallback(async (pin: string) => {
+    await authClient.setPin(pin);
+  }, []);
 
   const selectBranch = useCallback((branchId: string | null) => {
     setState((prev) => ({ ...prev, activeBranchId: branchId }));
   }, []);
 
-  const logout = useCallback(() => {
-    setIdToken(null);
+  const logout = useCallback(async () => {
+    authClient.clearSession();
+    await getFirebaseAuth().signOut();
     setState({
       isLoading: false,
       isAuthenticated: false,
+      firebaseUser: null,
       user: null,
       memberships: [],
       activeBranchId: null,
@@ -114,16 +176,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo(
     () => ({
       ...state,
+      role: state.user?.role ?? null,
+      activeSession: state.session,
+      error: null,
       isOwner,
       isOperator,
       isCustomer,
       branchContext,
+      loginWithGoogle,
       loginWithToken,
       verifyPin,
+      setPin,
       selectBranch,
       logout,
+      getFreshAuthHeaders: (opts?: { requireSession?: boolean }) => authClient.getAuthorizedHeaders(opts),
     }),
-    [state, isOwner, isOperator, isCustomer, branchContext, loginWithToken, verifyPin, selectBranch, logout],
+    [
+      state,
+      isOwner,
+      isOperator,
+      isCustomer,
+      branchContext,
+      loginWithGoogle,
+      loginWithToken,
+      verifyPin,
+      setPin,
+      selectBranch,
+      logout,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

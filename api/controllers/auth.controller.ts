@@ -10,7 +10,8 @@ import {
   SetPinRequest,
   SetPinResponseData,
 } from '../../shared/contracts/auth.contract';
-import { ValidationError, BadRequestError } from '../../backend/errors/app-error';
+import { ValidationError, BadRequestError, ForbiddenError } from '../../backend/errors/app-error';
+import { UserRole } from '../../shared/enums/roles.enum';
 
 export class AuthController {
   constructor(
@@ -41,10 +42,18 @@ export class AuthController {
 
   /**
    * Sets or updates user PIN for application sessions.
+   * Only applicable to OWNER and BRANCH_OPERATOR.
    */
   async setPin(userContext: AuthenticatedUserContext, body: SetPinRequest): Promise<SetPinResponseData> {
-    if (!body.pin || typeof body.pin !== 'string' || body.pin.trim().length < 4) {
-      throw new ValidationError('PIN must be at least 4 digits', [{ path: 'pin', message: 'Minimum 4 digits' }]);
+    const hasOperatorMembership = userContext.branchMemberships.some(
+      (m) => m.role === UserRole.BRANCH_OPERATOR && m.status === 'ACTIVE',
+    );
+    if (!userContext.isGlobalOwner && !hasOperatorMembership) {
+      throw new ForbiddenError('Customers cannot configure an application PIN');
+    }
+
+    if (!body.pin || typeof body.pin !== 'string' || !/^\d{4,8}$/.test(body.pin.trim())) {
+      throw new ValidationError('PIN must be 4 to 8 numeric digits', [{ path: 'pin', message: '4 to 8 numeric digits required' }]);
     }
 
     const hashed = await hashPin(body.pin.trim());
@@ -58,10 +67,18 @@ export class AuthController {
 
   /**
    * Verifies PIN and creates a time-bounded application session.
+   * Only applicable to OWNER and BRANCH_OPERATOR.
    */
   async verifyPin(userContext: AuthenticatedUserContext, body: VerifyPinRequest): Promise<VerifyPinResponseData> {
-    if (!body.pin || typeof body.pin !== 'string') {
-      throw new BadRequestError('PIN is required');
+    const hasOperatorMembership = userContext.branchMemberships.some(
+      (m) => m.role === UserRole.BRANCH_OPERATOR && m.status === 'ACTIVE',
+    );
+    if (!userContext.isGlobalOwner && !hasOperatorMembership) {
+      throw new ForbiddenError('Customers cannot create application sessions');
+    }
+
+    if (!body.pin || typeof body.pin !== 'string' || !/^\d{4,8}$/.test(body.pin.trim())) {
+      throw new BadRequestError('PIN must be 4 to 8 numeric digits');
     }
 
     const { session, sessionToken } = await this.sessionService.verifyPinAndCreateSession({

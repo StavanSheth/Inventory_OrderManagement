@@ -43,7 +43,30 @@ describe('PIN Hashing & Cryptographic Verification', () => {
   it('rejects short PINs below 4 digits', async () => {
     await assert.rejects(async () => {
       await hashPin('12');
-    }, /PIN must be at least 4 digits/);
+    }, /PIN must be 4 to 8 numeric digits/);
+  });
+
+  it('rejects non-numeric characters in PIN', async () => {
+    await assert.rejects(async () => {
+      await hashPin('abcd');
+    }, /PIN must be 4 to 8 numeric digits/);
+
+    await assert.rejects(async () => {
+      await hashPin('12ab');
+    }, /PIN must be 4 to 8 numeric digits/);
+  });
+
+  it('rejects PINs longer than 8 digits', async () => {
+    await assert.rejects(async () => {
+      await hashPin('123456789');
+    }, /PIN must be 4 to 8 numeric digits/);
+  });
+
+  it('accepts valid 4 to 8 digit numeric PINs', async () => {
+    const hash4 = await hashPin('1234');
+    const hash8 = await hashPin('12345678');
+    assert.strictEqual(await verifyPin('1234', hash4), true);
+    assert.strictEqual(await verifyPin('12345678', hash8), true);
   });
 
   it('handles invalid or empty hash strings gracefully', async () => {

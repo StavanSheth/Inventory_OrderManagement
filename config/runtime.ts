@@ -24,9 +24,10 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     allowedOrigins: rawOrigins,
     d1BindingName: env.D1_BINDING_NAME ?? 'DB',
     firebase: {
-      projectId: env.FIREBASE_PROJECT_ID,
+      projectId: env.FIREBASE_PROJECT_ID ?? env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? (isBuildPhase ? 'build-phase-placeholder' : undefined),
       clientEmail: env.FIREBASE_CLIENT_EMAIL,
       publicApiKey: env.NEXT_PUBLIC_FIREBASE_API_KEY ?? env.FIREBASE_PUBLIC_API_KEY,
+      authDomain: env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ?? env.FIREBASE_AUTH_DOMAIN,
     },
     featureFlags: {
       enableRealtime: env.ENABLE_REALTIME === 'true',

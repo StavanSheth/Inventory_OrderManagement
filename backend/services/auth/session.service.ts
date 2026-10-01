@@ -1,7 +1,7 @@
 import { SessionRepository } from '../../../database/repositories/session.repository';
 import { UserRepository } from '../../../database/repositories/user.repository';
 import { ApplicationSession, BranchSettings } from '../../../shared/types/entities.types';
-import { UserRole } from '../../../shared/enums/roles.enum';
+import { UserRole, MembershipStatus } from '../../../shared/enums/roles.enum';
 import { VerifyPinInput } from '../../../shared/types/auth.types';
 import { verifyPin } from './pin-hasher';
 import { UnauthorizedError, ForbiddenError, NotFoundError } from '../../errors/app-error';
@@ -69,18 +69,45 @@ export class SessionService {
       throw new NotFoundError('User not found');
     }
 
-    // 1. Check user has configured a PIN
+    const isOwner = user.role === UserRole.OWNER;
+    const memberships = await this.userRepo.getMemberships(user.id);
+    const hasOperatorMembership = memberships.some(
+      (m) => m.role === UserRole.BRANCH_OPERATOR && m.status === MembershipStatus.ACTIVE,
+    );
+
+    // 1. Role validation: PIN is strictly for OWNER and users with active BRANCH_OPERATOR memberships
+    if (!isOwner && !hasOperatorMembership) {
+      throw new ForbiddenError('Customers cannot create application sessions');
+    }
+
+    // 2. Status validation: account must be ACTIVE
+    if (user.status !== 'ACTIVE') {
+      throw new ForbiddenError('User account is inactive or suspended');
+    }
+
+    // 3. Brute-force lockout check
+    if (user.pin_locked_until && new Date(user.pin_locked_until) > new Date()) {
+      throw new UnauthorizedError('Account PIN is temporarily locked due to repeated failed attempts. Please retry later.');
+    }
+
+    // 4. Check user has configured a PIN
     if (!user.pin_hash) {
       throw new UnauthorizedError('User has no PIN configured');
     }
 
-    // 2. Verify PIN cryptographically
+    // 5. Verify PIN cryptographically
     const isPinValid = await verifyPin(input.pin, user.pin_hash);
     if (!isPinValid) {
+      const lockStatus = await this.userRepo.recordFailedPinAttempt(user.id);
+      if (lockStatus.isLocked) {
+        throw new UnauthorizedError('Account PIN is now temporarily locked for 5 minutes due to 5 consecutive failed attempts.');
+      }
       throw new UnauthorizedError('Invalid PIN');
     }
 
-    const isOwner = user.role === UserRole.OWNER;
+    // Reset lockout on successful PIN verification
+    await this.userRepo.resetPinLockout(user.id);
+
     const scope = input.scope ?? (isOwner && !input.branchId ? 'GLOBAL' : 'BRANCH');
 
     // 3. For BRANCH scope, verify operator membership or owner access
@@ -143,28 +170,33 @@ export class SessionService {
     }
 
     const tokenHash = await this.hashToken(sessionToken.trim());
-    const session = await this.sessionRepo.findByTokenHash(tokenHash);
+    const session = await this.sessionRepo.findActiveByTokenHash(tokenHash);
 
     if (!session) {
+      const existing = await this.sessionRepo.findByTokenHash(tokenHash);
+      if (existing?.revoked_at) {
+        throw new UnauthorizedError('Application session has been revoked');
+      }
+      if (existing && existing.expires_at <= new Date().toISOString()) {
+        throw new UnauthorizedError('Application session has expired');
+      }
       throw new UnauthorizedError('Invalid application session');
-    }
-
-    if (session.revoked_at) {
-      throw new UnauthorizedError('Application session has been revoked');
-    }
-
-    const now = new Date().toISOString();
-    if (session.expires_at <= now) {
-      throw new UnauthorizedError('Application session has expired');
     }
 
     return session;
   }
 
   /**
-   * Revokes an application session.
+   * Revokes an application session by id.
    */
   async revokeSession(sessionId: string): Promise<void> {
     await this.sessionRepo.revoke(sessionId);
+  }
+
+  /**
+   * Revokes all active application sessions for a user.
+   */
+  async revokeAllForUser(userId: string): Promise<void> {
+    await this.sessionRepo.revokeAllForUser(userId);
   }
 }

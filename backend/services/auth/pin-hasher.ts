@@ -22,12 +22,22 @@ function fromHex(hex: string): Uint8Array {
 }
 
 /**
+ * Validates that PIN is numeric only and between 4 and 8 digits.
+ */
+export function validatePinFormat(pin: string): void {
+  if (!pin || typeof pin !== 'string') {
+    throw new Error('PIN must be 4 to 8 numeric digits');
+  }
+  if (!/^\d{4,8}$/.test(pin.trim())) {
+    throw new Error('PIN must be 4 to 8 numeric digits');
+  }
+}
+
+/**
  * Hash a plaintext PIN with a secure cryptographic random salt.
  */
 export async function hashPin(pin: string): Promise<string> {
-  if (!pin || pin.length < 4) {
-    throw new Error('PIN must be at least 4 digits');
-  }
+  validatePinFormat(pin);
 
   const salt = new Uint8Array(16);
   crypto.getRandomValues(salt);
