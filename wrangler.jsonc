@@ -1,14 +1,42 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "inventory-order-management",
+  "name": "inventory-ordermanagement",
   "compatibility_date": "2024-09-23",
   "compatibility_flags": ["nodejs_compat"],
+
+  // Authoritative D1 database binding for Cloudflare Workers / Next.js runtime.
+  // In production, the Worker runtime accesses the database via `env.DB`.
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "inventory_ordermanagement_db",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      // DEPLOYMENT STRATEGY:
+      // Replace with the production D1 UUID generated via:
+      // `npx wrangler d1 create inventory_ordermanagement_db`
+      "database_id": "REPLACE_WITH_PRODUCTION_D1_DATABASE_ID",
       "migrations_dir": "database/migrations"
     }
-  ]
+  ],
+
+  // Environment-specific configurations
+  "env": {
+    "staging": {
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "inventory_ordermanagement_staging_db",
+          "database_id": "REPLACE_WITH_STAGING_D1_DATABASE_ID",
+          "migrations_dir": "database/migrations"
+        }
+      ]
+    },
+    "development": {
+      // Local development runs via persistent SQLite adapter (.data/local.sqlite)
+      // or `wrangler dev --local`
+      "vars": {
+        "NODE_ENV": "development",
+        "API_BASE_URL": "http://localhost:3000"
+      }
+    }
+  }
 }

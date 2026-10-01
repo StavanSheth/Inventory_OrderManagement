@@ -1,8 +1,8 @@
-import { ApiSuccessEnvelope, ApiErrorEnvelope } from '../../shared/types/common.types';
+import { ApiSuccessResponse, ApiErrorResponse } from '../../shared/contracts/api-response';
 import { ApiErrorCode } from '../../shared/enums/errors.enum';
 import { HTTP_STATUS } from '../../shared/constants/api.constants';
 
-export function buildSuccessEnvelope<T>(data: T): ApiSuccessEnvelope<T> {
+export function buildSuccessEnvelope<T>(data: T): ApiSuccessResponse<T> {
   return {
     success: true,
     data,
@@ -13,7 +13,7 @@ export function buildErrorEnvelope(
   code: ApiErrorCode | string,
   message: string,
   details?: Record<string, unknown> | unknown[],
-): ApiErrorEnvelope {
+): ApiErrorResponse {
   return {
     success: false,
     error: {

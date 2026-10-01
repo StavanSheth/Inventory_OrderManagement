@@ -164,7 +164,7 @@ export default function ScoopStacker() {
                 <span>{builder.coneLine.name}</span>
                 <span className="text-muted">{builder.coneLine.price}</span>
               </li>
-              {selectedScoops.map((f, k) => (
+              {selectedScoops.map((f) => (
                 <li key={f.uid} className="receipt-line flex items-center justify-between font-semibold">
                   <span className="flex items-center gap-2">
                     <span className="h-3 w-3 rounded-full" style={{ background: f.fill }} />

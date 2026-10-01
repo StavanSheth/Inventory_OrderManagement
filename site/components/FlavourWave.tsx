@@ -13,12 +13,12 @@ const wavePath = (y: number, amp: number, phase: number) => {
 };
 const TOP = wavePath(128, 56, 0);
 const BOTTOM = wavePath(236, 36, -120);
+const REPS = { top: 4, bottom: 8 } as const;
 
 /** Marquee → flavour names running along a wave (SVG text path), a small second row going the other way. Scroll speeds it up. */
 export default function FlavourWave() {
   const topText = useRef<SVGTextPathElement>(null);
   const bottomText = useRef<SVGTextPathElement>(null);
-  const REPS = { top: 4, bottom: 8 };
 
   useEffect(() => {
     if (prefersReducedMotion()) return;

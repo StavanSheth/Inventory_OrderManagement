@@ -1,25 +1,17 @@
-import { ApiErrorCode } from '../enums/errors.enum';
+import {
+  ApiSuccessResponse,
+  ApiErrorDetail,
+  ApiErrorResponse,
+  ApiResponseContract,
+} from '../contracts/api-response';
 
 export type Id = string;
 export type IsoDateTimeUtc = string;
 
-export interface ApiSuccessEnvelope<T> {
-  success: true;
-  data: T;
-}
-
-export interface ApiErrorDetails {
-  code: ApiErrorCode | string;
-  message: string;
-  details?: Record<string, unknown> | unknown[];
-}
-
-export interface ApiErrorEnvelope {
-  success: false;
-  error: ApiErrorDetails;
-}
-
-export type ApiResponse<T> = ApiSuccessEnvelope<T> | ApiErrorEnvelope;
+export type ApiSuccessEnvelope<T> = ApiSuccessResponse<T>;
+export type ApiErrorDetails = ApiErrorDetail;
+export type ApiErrorEnvelope = ApiErrorResponse;
+export type ApiResponse<T> = ApiResponseContract<T>;
 
 export interface PaginationParams {
   page?: number;
