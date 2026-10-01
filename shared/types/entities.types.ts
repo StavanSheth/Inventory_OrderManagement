@@ -24,6 +24,8 @@ export interface User {
   email: string;
   display_name: string;
   phone?: string | null;
+  role: UserRole;
+  pin_hash?: string | null;
   status: string;
   created_at: IsoDateTimeUtc;
   updated_at: IsoDateTimeUtc;
@@ -223,8 +225,10 @@ export interface BranchSettings {
 
 export interface ApplicationSession {
   id: Id;
+  session_token_hash: string;
   user_id: Id;
-  branch_id: Id;
+  branch_id?: Id | null;
+  scope: 'BRANCH' | 'GLOBAL';
   authenticated_at: IsoDateTimeUtc;
   pin_verified_at?: IsoDateTimeUtc | null;
   expires_at: IsoDateTimeUtc;

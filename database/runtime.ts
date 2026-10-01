@@ -22,9 +22,13 @@ export function resetDatabaseProvider(): void {
  * In Cloudflare production, extracts env.DB from the request/execution context.
  * In testing/local development, uses the registered provider or throws.
  */
-export function getDatabase(context?: { env?: CloudflareEnv }): D1DatabaseLike {
-  if (context?.env?.DB) {
-    return createProductionDatabase(context.env.DB);
+export function getDatabase(context?: { env?: CloudflareEnv } | CloudflareEnv): D1DatabaseLike {
+  const directDb = (context as CloudflareEnv)?.DB;
+  const nestedDb = (context as { env?: CloudflareEnv })?.env?.DB;
+  const rawDb = directDb ?? nestedDb;
+
+  if (rawDb) {
+    return createProductionDatabase(rawDb);
   }
 
   // Global / process binding if injected by Cloudflare Workers runtime

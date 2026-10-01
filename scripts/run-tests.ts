@@ -5,13 +5,17 @@ import path from 'node:path';
 const testFiles = [
   'tests/unit/config.test.ts',
   'tests/unit/cors.test.ts',
+  'tests/unit/auth-pin.test.ts',
+  'tests/unit/policies.test.ts',
   'tests/integration/schema-migrations.test.ts',
   'tests/integration/seed-data.test.ts',
   'tests/integration/repositories.test.ts',
   'tests/integration/backend-services.test.ts',
   'tests/integration/d1-abstraction.test.ts',
   'tests/integration/persistent-db.test.ts',
+  'tests/integration/auth-rbac.test.ts',
   'tests/api/health.test.ts',
+  'tests/api/auth-endpoints.test.ts',
   'tests/e2e/e2e-stub.test.ts',
 ].map((rel) => path.resolve(process.cwd(), rel));
 

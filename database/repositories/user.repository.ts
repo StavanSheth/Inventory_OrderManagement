@@ -8,6 +8,8 @@ export interface CreateUserInput {
   email: string;
   display_name: string;
   phone?: string | null;
+  role?: UserRole;
+  pin_hash?: string | null;
   status?: string;
 }
 
@@ -36,11 +38,12 @@ export class UserRepository extends BaseRepository {
   async create(input: CreateUserInput): Promise<User> {
     const now = new Date().toISOString();
     const status = input.status ?? 'ACTIVE';
+    const role = input.role ?? UserRole.CUSTOMER;
 
     await this.db
       .prepare(`
-        INSERT INTO users (id, firebase_uid, email, display_name, phone, status, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO users (id, firebase_uid, email, display_name, phone, role, pin_hash, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       .bind(
         input.id,
@@ -48,6 +51,8 @@ export class UserRepository extends BaseRepository {
         input.email,
         input.display_name,
         input.phone ?? null,
+        role,
+        input.pin_hash ?? null,
         status,
         now,
         now,
@@ -61,12 +66,42 @@ export class UserRepository extends BaseRepository {
     return created;
   }
 
+  async setPinHash(userId: string, pinHash: string): Promise<void> {
+    const now = new Date().toISOString();
+    await this.db
+      .prepare('UPDATE users SET pin_hash = ?, updated_at = ? WHERE id = ?')
+      .bind(pinHash, now, userId)
+      .run();
+  }
+
+  async updateRole(userId: string, role: UserRole): Promise<void> {
+    const now = new Date().toISOString();
+    await this.db
+      .prepare('UPDATE users SET role = ?, updated_at = ? WHERE id = ?')
+      .bind(role, now, userId)
+      .run();
+  }
+
   async getMemberships(userId: string): Promise<BranchMembership[]> {
     const res = await this.db
       .prepare('SELECT * FROM branch_memberships WHERE user_id = ?')
       .bind(userId)
       .all<BranchMembership>();
     return res.results;
+  }
+
+  async getActiveMembership(userId: string, branchId: string): Promise<BranchMembership | null> {
+    return this.db
+      .prepare('SELECT * FROM branch_memberships WHERE user_id = ? AND branch_id = ? AND status = ?')
+      .bind(userId, branchId, MembershipStatus.ACTIVE)
+      .first<BranchMembership>();
+  }
+
+  async getMembership(userId: string, branchId: string): Promise<BranchMembership | null> {
+    return this.db
+      .prepare('SELECT * FROM branch_memberships WHERE user_id = ? AND branch_id = ?')
+      .bind(userId, branchId)
+      .first<BranchMembership>();
   }
 
   async addMembership(

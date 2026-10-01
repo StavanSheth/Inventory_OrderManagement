@@ -1,8 +1,6 @@
-import { User, BranchMembership } from '../../../shared/types/entities.types';
-
-export interface IAuthService {
-  verifyIdToken(idToken: string): Promise<{ uid: string; email: string; name?: string }>;
-  resolveUserAndMemberships(firebaseUid: string): Promise<{ user: User; memberships: BranchMembership[] }>;
-}
+export * from './firebase-verifier';
+export * from './user-sync.service';
+export * from './session.service';
+export * from './pin-hasher';
 
 export const AUTH_SERVICE_TOKEN = 'IAuthService';

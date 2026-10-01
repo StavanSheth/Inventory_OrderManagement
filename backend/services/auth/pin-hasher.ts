@@ -1,0 +1,111 @@
+/**
+ * Secure cryptographic PIN hasher using Web Crypto API (crypto.subtle PBKDF2).
+ * 100% compatible with Cloudflare Workers runtime and Node.js 20+.
+ * Never logs or stores plaintext PINs.
+ */
+
+const ITERATIONS = 100000;
+const HASH_ALGO = 'SHA-256';
+
+function toHex(bytes: Uint8Array): string {
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+function fromHex(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+  }
+  return bytes;
+}
+
+/**
+ * Hash a plaintext PIN with a secure cryptographic random salt.
+ */
+export async function hashPin(pin: string): Promise<string> {
+  if (!pin || pin.length < 4) {
+    throw new Error('PIN must be at least 4 digits');
+  }
+
+  const salt = new Uint8Array(16);
+  crypto.getRandomValues(salt);
+
+  const encoder = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(pin),
+    'PBKDF2',
+    false,
+    ['deriveBits'],
+  );
+
+  const derivedBits = await crypto.subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      salt,
+      iterations: ITERATIONS,
+      hash: HASH_ALGO,
+    },
+    keyMaterial,
+    256,
+  );
+
+  const saltHex = toHex(salt);
+  const hashHex = toHex(new Uint8Array(derivedBits));
+
+  return `pbkdf2:sha256:${ITERATIONS}:${saltHex}:${hashHex}`;
+}
+
+/**
+ * Verify a plaintext PIN against a stored pin_hash using constant-time comparison.
+ */
+export async function verifyPin(pin: string, storedHash: string): Promise<boolean> {
+  if (!pin || !storedHash) {
+    return false;
+  }
+
+  const parts = storedHash.split(':');
+  if (parts.length !== 5 || parts[0] !== 'pbkdf2') {
+    return false;
+  }
+
+  const [, , iterationsStr, saltHex, expectedHashHex] = parts;
+  const iterations = parseInt(iterationsStr, 10);
+  const salt = fromHex(saltHex);
+
+  const encoder = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(pin),
+    'PBKDF2',
+    false,
+    ['deriveBits'],
+  );
+
+  const derivedBits = await crypto.subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      salt: salt as unknown as BufferSource,
+      iterations,
+      hash: HASH_ALGO,
+    },
+    keyMaterial,
+    256,
+  );
+
+  const computedHashHex = toHex(new Uint8Array(derivedBits));
+
+  // Constant-time string comparison
+  if (computedHashHex.length !== expectedHashHex.length) {
+    return false;
+  }
+
+  let mismatch = 0;
+  for (let i = 0; i < computedHashHex.length; i++) {
+    mismatch |= computedHashHex.charCodeAt(i) ^ expectedHashHex.charCodeAt(i);
+  }
+
+  return mismatch === 0;
+}

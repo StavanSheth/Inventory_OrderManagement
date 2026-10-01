@@ -1,6 +1,4 @@
-// Auth feature module boundary (Phase 1 foundation)
-export interface AuthModuleState {
-  isAuthenticated: boolean;
-  userId?: string;
-  email?: string;
-}
+export * from './firebase';
+export * from './auth-client';
+export * from './auth-context';
+export * from './auth-hooks';

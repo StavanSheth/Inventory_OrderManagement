@@ -21,6 +21,12 @@ export class AppError extends Error {
   }
 }
 
+export class BadRequestError extends AppError {
+  constructor(message: string = 'Bad request', details?: Record<string, unknown>) {
+    super(message, ApiErrorCode.BAD_REQUEST, HTTP_STATUS.BAD_REQUEST, details);
+  }
+}
+
 export class NotFoundError extends AppError {
   constructor(message: string = 'Resource not found', details?: Record<string, unknown>) {
     super(message, ApiErrorCode.NOT_FOUND, HTTP_STATUS.NOT_FOUND, details);
