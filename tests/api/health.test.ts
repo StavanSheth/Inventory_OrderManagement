@@ -1,27 +1,57 @@
-import test, { describe, it } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { handleHealthRoute } from '../../api/routes/health.route';
 import { handleApiError } from '../../api/middleware/error-handler';
-import { NotFoundError, ValidationError, AppError } from '../../backend/errors/app-error';
+import { NotFoundError, ValidationError } from '../../backend/errors/app-error';
 import { ApiErrorCode } from '../../shared/enums/errors.enum';
 import { HTTP_STATUS } from '../../shared/constants/api.constants';
+import { createMemoryD1Database } from '../../database/adapter.sqlite';
 
 describe('API Foundation & Health Check', () => {
-  it('GET /api/v1/health returns standard success envelope', async () => {
+  it('GET /api/v1/health returns standard success envelope and x-request-id header', async () => {
     const request = new Request('http://localhost:3000/api/v1/health', {
       method: 'GET',
       headers: {
-        'x-request-id': 'test-req-123',
+        'x-request-id': 'custom-req-abc-123',
       },
     });
 
     const response = await handleHealthRoute(request);
     assert.strictEqual(response.status, 200);
     assert.strictEqual(response.headers.get('content-type'), 'application/json');
+    assert.strictEqual(response.headers.get('x-request-id'), 'custom-req-abc-123');
 
-    const json = (await response.json()) as { success: boolean; data: { status: string } };
+    const json = (await response.json()) as { success: boolean; data: { status: string; version?: string } };
     assert.strictEqual(json.success, true);
     assert.strictEqual(json.data.status, 'ok');
+    assert.strictEqual(json.data.version, '1.0.0');
+  });
+
+  it('GET /api/v1/health indicates database connection when DB binding is present', async () => {
+    const db = createMemoryD1Database();
+    const request = new Request('http://localhost:3000/api/v1/health', {
+      method: 'GET',
+    });
+
+    const response = await handleHealthRoute(request, { DB: db });
+    assert.strictEqual(response.status, 200);
+
+    const json = (await response.json()) as { success: boolean; data: { status: string; database?: string } };
+    assert.strictEqual(json.success, true);
+    assert.strictEqual(json.data.database, 'connected');
+  });
+
+  it('OPTIONS /api/v1/health returns 204 preflight with CORS headers', async () => {
+    const request = new Request('http://localhost:3000/api/v1/health', {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'http://localhost:3000',
+      },
+    });
+
+    const response = await handleHealthRoute(request);
+    assert.strictEqual(response.status, 204);
+    assert.ok(response.headers.get('Access-Control-Allow-Methods'));
   });
 
   it('serializes NotFoundError into standard error envelope', async () => {
@@ -57,18 +87,18 @@ describe('API Foundation & Health Check', () => {
     assert.strictEqual(json.error.message, 'Invalid request payload');
   });
 
-  it('handles unexpected errors gracefully as internal error envelope', async () => {
-    const error = new Error('Database connection timed out');
+  it('handles unexpected errors gracefully without leaking stack traces or internal secrets', async () => {
+    const error = new Error('Database password /root/secret failed');
     const response = handleApiError(error);
 
     assert.strictEqual(response.status, HTTP_STATUS.INTERNAL_SERVER_ERROR);
     const json = (await response.json()) as {
       success: boolean;
-      error: { code: string; message: string };
+      error: { code: string; message: string; details?: unknown };
     };
 
     assert.strictEqual(json.success, false);
     assert.strictEqual(json.error.code, ApiErrorCode.INTERNAL_ERROR);
-    assert.strictEqual(json.error.message, 'Database connection timed out');
+    assert.strictEqual(json.error.details, undefined, 'Internal details must not be exposed');
   });
 });

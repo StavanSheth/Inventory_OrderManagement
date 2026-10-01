@@ -1,7 +1,7 @@
-import test, { describe, it } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { createMemoryD1Database, NodeSqliteD1Adapter } from '../../database/adapter';
+import { createMemoryD1Database, NodeSqliteD1Adapter } from '../../database/adapter.sqlite';
 import { runMigrations } from '../../database/migrations/runner';
 
 const EXPECTED_TABLES = [

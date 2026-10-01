@@ -92,8 +92,8 @@ export function drawFit(
 ) {
   const ir = img.naturalWidth / img.naturalHeight;
   const cr = w / h;
-  let dw = w;
-  let dh = h;
+  let dw: number;
+  let dh: number;
   if (fit === "cover" ? cr > ir : cr < ir) {
     dw = w;
     dh = w / ir;

@@ -1,7 +1,7 @@
-import test, { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { createMemoryD1Database } from '../../database/adapter';
+import { createMemoryD1Database } from '../../database/adapter.sqlite';
 import { runMigrations } from '../../database/migrations/runner';
 import { BranchRepository } from '../../database/repositories/branch.repository';
 import { UserRepository } from '../../database/repositories/user.repository';

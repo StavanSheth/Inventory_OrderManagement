@@ -3,24 +3,23 @@ import { errorResponse } from '../serializers/response';
 import { ApiErrorCode } from '../../shared/enums/errors.enum';
 import { HTTP_STATUS } from '../../shared/constants/api.constants';
 
-export function handleApiError(error: unknown): Response {
+export function handleApiError(error: unknown, additionalHeaders?: Record<string, string>): Response {
   if (error instanceof AppError) {
-    return errorResponse(error.code, error.message, error.details, error.statusCode);
+    return errorResponse(error.code, error.message, error.details, error.statusCode, additionalHeaders);
   }
 
-  if (error instanceof Error) {
-    return errorResponse(
-      ApiErrorCode.INTERNAL_ERROR,
-      error.message || 'An unexpected error occurred',
-      undefined,
-      HTTP_STATUS.INTERNAL_SERVER_ERROR,
-    );
-  }
+  const isProduction = process.env.NODE_ENV === 'production';
+  const sanitizedMessage = isProduction
+    ? 'An internal server error occurred'
+    : error instanceof Error
+      ? error.message
+      : 'Unknown server error';
 
   return errorResponse(
     ApiErrorCode.INTERNAL_ERROR,
-    'Unknown server error',
+    sanitizedMessage,
     undefined,
     HTTP_STATUS.INTERNAL_SERVER_ERROR,
+    additionalHeaders,
   );
 }

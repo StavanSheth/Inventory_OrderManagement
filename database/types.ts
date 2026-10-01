@@ -28,3 +28,8 @@ export interface D1DatabaseLike {
   batch<T = unknown>(statements: D1PreparedStatementLike[]): Promise<D1ResultLike<T>[]>;
   exec(query: string): Promise<void> | void;
 }
+
+export interface CloudflareEnv {
+  DB?: D1DatabaseLike;
+  [key: string]: unknown;
+}

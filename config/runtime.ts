@@ -1,14 +1,26 @@
 import { configSchema, AppConfig } from './env';
 
 export function loadConfig(env: Record<string, string | undefined> = process.env): AppConfig {
+  const isProductionLike = env.NODE_ENV === 'production' || env.NODE_ENV === 'staging';
+  const isBuildPhase =
+    Boolean(env.NEXT_PHASE === 'phase-production-build' ||
+    process.env.NEXT_PHASE === 'phase-production-build' ||
+    process.env.npm_lifecycle_event === 'build');
+
   const rawOrigins = env.ALLOWED_ORIGINS
     ? env.ALLOWED_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean)
-    : ['http://localhost:3000'];
+    : isProductionLike
+      ? (isBuildPhase ? ['https://build-phase.placeholder'] : [])
+      : ['http://localhost:3000'];
+
+  const defaultApiBaseUrl = isProductionLike
+    ? (env.API_BASE_URL ?? (isBuildPhase ? 'https://build-phase.placeholder' : ''))
+    : (env.API_BASE_URL ?? (env.PORT ? `http://localhost:${env.PORT}` : 'http://localhost:3000'));
 
   const rawConfig = {
     environment: env.NODE_ENV ?? 'development',
     port: env.PORT ?? 3000,
-    apiBaseUrl: env.API_BASE_URL ?? (env.PORT ? `http://localhost:${env.PORT}` : 'http://localhost:3000'),
+    apiBaseUrl: defaultApiBaseUrl,
     allowedOrigins: rawOrigins,
     d1BindingName: env.D1_BINDING_NAME ?? 'DB',
     firebase: {

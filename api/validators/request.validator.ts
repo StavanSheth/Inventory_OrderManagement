@@ -1,4 +1,4 @@
-import { z, ZodError, ZodSchema } from 'zod';
+import { ZodError, ZodSchema } from 'zod';
 import { ValidationError } from '../../backend/errors/app-error';
 
 export function validateRequest<T>(schema: ZodSchema<T>, data: unknown): T {

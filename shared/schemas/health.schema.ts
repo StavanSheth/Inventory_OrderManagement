@@ -5,6 +5,7 @@ export const healthDataSchema = z.object({
   version: z.string().optional(),
   timestamp: z.string().optional(),
   uptime: z.number().optional(),
+  database: z.string().optional(),
 });
 
 export const healthResponseSchema = z.object({

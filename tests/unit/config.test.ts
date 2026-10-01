@@ -1,4 +1,4 @@
-import test, { describe, it } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadConfig } from '../../config/runtime';
 
@@ -15,7 +15,7 @@ describe('Configuration & Environment Validation', () => {
     assert.strictEqual(conf.featureFlags.enableRealtime, false);
   });
 
-  it('correctly parses custom environment variables', () => {
+  it('correctly parses custom production environment variables', () => {
     const conf = loadConfig({
       NODE_ENV: 'production',
       PORT: '8080',
@@ -44,6 +44,44 @@ describe('Configuration & Environment Validation', () => {
         loadConfig({ NODE_ENV: 'invalid-environment' });
       },
       /invalid_value|invalid_enum_value/i,
+    );
+  });
+
+  it('rejects production configuration with localhost apiBaseUrl', () => {
+    assert.throws(
+      () => {
+        loadConfig({
+          NODE_ENV: 'production',
+          API_BASE_URL: 'http://localhost:3000',
+          ALLOWED_ORIGINS: 'https://melt.example.com',
+        });
+      },
+      /Production\/staging cannot use localhost apiBaseUrl/i,
+    );
+  });
+
+  it('rejects production configuration with localhost allowedOrigins', () => {
+    assert.throws(
+      () => {
+        loadConfig({
+          NODE_ENV: 'production',
+          API_BASE_URL: 'https://api.melt.example.com',
+          ALLOWED_ORIGINS: 'https://melt.example.com, http://localhost:3000',
+        });
+      },
+      /Production\/staging allowedOrigins cannot contain localhost/i,
+    );
+  });
+
+  it('rejects production configuration without allowedOrigins defined', () => {
+    assert.throws(
+      () => {
+        loadConfig({
+          NODE_ENV: 'production',
+          API_BASE_URL: 'https://api.melt.example.com',
+        });
+      },
+      /Production\/staging must define at least one allowed origin/i,
     );
   });
 });

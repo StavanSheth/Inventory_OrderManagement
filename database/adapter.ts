@@ -1,81 +1,12 @@
-import { DatabaseSync } from 'node:sqlite';
-import { D1DatabaseLike, D1PreparedStatementLike, D1ResultLike } from './types';
+import { D1DatabaseLike } from './types';
 
-class SqlitePreparedStatement implements D1PreparedStatementLike {
-  private boundValues: unknown[] = [];
-
-  constructor(
-    private db: DatabaseSync,
-    private sql: string,
-  ) {}
-
-  bind(...values: unknown[]): D1PreparedStatementLike {
-    const next = new SqlitePreparedStatement(this.db, this.sql);
-    // Flatten any single array argument or bind multiple
-    next.boundValues = values.length === 1 && Array.isArray(values[0]) ? values[0] : values;
-    return next;
+/**
+ * Creates a verified production database interface from Cloudflare D1 binding.
+ * Completely free of Node.js-specific modules (fs, path, node:sqlite).
+ */
+export function createProductionDatabase(d1?: D1DatabaseLike): D1DatabaseLike {
+  if (!d1 || typeof d1.prepare !== 'function') {
+    throw new Error('D1 database binding "DB" is not available in runtime environment.');
   }
-
-  async first<T = unknown>(colName?: string): Promise<T | null> {
-    const stmt = this.db.prepare(this.sql);
-    const row = stmt.get(...(this.boundValues as any[])) as Record<string, unknown> | undefined;
-    if (!row) return null;
-    if (colName) return (row[colName] as T) ?? null;
-    return row as T;
-  }
-
-  async all<T = unknown>(): Promise<D1ResultLike<T>> {
-    const stmt = this.db.prepare(this.sql);
-    const rows = stmt.all(...(this.boundValues as any[])) as T[];
-    return {
-      results: rows,
-      success: true,
-      meta: { changes: 0 },
-    };
-  }
-
-  async run<T = unknown>(): Promise<D1ResultLike<T>> {
-    const stmt = this.db.prepare(this.sql);
-    const res = stmt.run(...(this.boundValues as any[]));
-    return {
-      results: [],
-      success: true,
-      meta: {
-        changes: Number(res.changes),
-        last_row_id: Number(res.lastInsertRowid),
-      },
-    };
-  }
-}
-
-export class NodeSqliteD1Adapter implements D1DatabaseLike {
-  constructor(private sqliteDb: DatabaseSync) {
-    // Ensure foreign keys are enabled
-    this.sqliteDb.exec('PRAGMA foreign_keys = ON;');
-  }
-
-  prepare(query: string): D1PreparedStatementLike {
-    return new SqlitePreparedStatement(this.sqliteDb, query);
-  }
-
-  async exec(query: string): Promise<void> {
-    this.sqliteDb.exec(query);
-  }
-
-  async batch<T = unknown>(statements: D1PreparedStatementLike[]): Promise<D1ResultLike<T>[]> {
-    const results: D1ResultLike<T>[] = [];
-    for (const stmt of statements) {
-      results.push(await stmt.run<T>());
-    }
-    return results;
-  }
-
-  getNativeDb(): DatabaseSync {
-    return this.sqliteDb;
-  }
-}
-
-export function createMemoryD1Database(): D1DatabaseLike {
-  const db = new DatabaseSync(':memory:');
-  return new NodeSqliteD1Adapter(db);
+  return d1;
 }

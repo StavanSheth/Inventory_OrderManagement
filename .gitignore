@@ -16,3 +16,14 @@ next-env.d.ts
 
 # other tools' local worktrees (they hold copies of older sites)
 .kilo/
+
+# local database files & persistent SQLite storage
+.data/
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+*.db
+
+# testing & cloudflare
+coverage/
+.wrangler/

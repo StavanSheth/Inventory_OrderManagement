@@ -9,7 +9,7 @@ export interface MigrationRecord {
 }
 
 export async function runMigrations(db: D1DatabaseLike, migrationsDir?: string): Promise<string[]> {
-  const dir = migrationsDir ?? path.resolve(__dirname);
+  const dir = migrationsDir ?? path.resolve(process.cwd(), 'database', 'migrations');
 
   // 1. Enable foreign keys
   await db.exec('PRAGMA foreign_keys = ON;');
@@ -24,7 +24,12 @@ export async function runMigrations(db: D1DatabaseLike, migrationsDir?: string):
   `);
 
   // 3. Find migration files (*.sql)
-  const files = fs.readdirSync(dir)
+  if (!fs.existsSync(dir)) {
+    throw new Error(`Migrations directory not found: ${dir}`);
+  }
+
+  const files = fs
+    .readdirSync(dir)
     .filter((f) => f.endsWith('.sql'))
     .sort();
 
@@ -40,8 +45,15 @@ export async function runMigrations(db: D1DatabaseLike, migrationsDir?: string):
       const filePath = path.join(dir, file);
       const sql = fs.readFileSync(filePath, 'utf-8');
 
-      // Execute the migration SQL
-      await db.exec(sql);
+      try {
+        // Execute the migration SQL
+        await db.exec(sql);
+      } catch (err) {
+        throw new Error(
+          `Failed to apply migration "${file}": ${err instanceof Error ? err.message : String(err)}`,
+          { cause: err },
+        );
+      }
 
       // Record applied migration
       await db
@@ -54,4 +66,13 @@ export async function runMigrations(db: D1DatabaseLike, migrationsDir?: string):
   }
 
   return appliedNames;
+}
+
+export async function getAppliedMigrations(db: D1DatabaseLike): Promise<MigrationRecord[]> {
+  try {
+    const res = await db.prepare('SELECT * FROM _migrations ORDER BY id ASC').all<MigrationRecord>();
+    return res.results;
+  } catch {
+    return [];
+  }
 }

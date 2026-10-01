@@ -1,12 +1,18 @@
 import { HealthData } from '../../shared/schemas/health.schema';
 
 export class HealthController {
-  static getHealth(): HealthData {
+  static getHealth(dbBound: boolean = false): HealthData {
+    const uptimeSeconds =
+      typeof process !== 'undefined' && typeof process.uptime === 'function'
+        ? Math.floor(process.uptime())
+        : 0;
+
     return {
       status: 'ok',
       version: '1.0.0',
       timestamp: new Date().toISOString(),
-      uptime: process.uptime ? Math.floor(process.uptime()) : 0,
+      uptime: uptimeSeconds,
+      ...(dbBound ? { database: 'connected' } : {}),
     };
   }
 }

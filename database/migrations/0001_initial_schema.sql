@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS products (
   category_id TEXT NOT NULL REFERENCES categories(id) ON DELETE RESTRICT,
   name TEXT NOT NULL,
   description TEXT,
-  price REAL NOT NULL,
+  price REAL NOT NULL CHECK(price >= 0),
   active INTEGER NOT NULL DEFAULT 1,
   image_url TEXT,
   created_at TEXT NOT NULL,
@@ -82,8 +82,8 @@ CREATE TABLE IF NOT EXISTS raw_materials (
   branch_id TEXT NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   unit TEXT NOT NULL,
-  current_quantity REAL NOT NULL DEFAULT 0,
-  reorder_threshold REAL NOT NULL DEFAULT 0,
+  current_quantity REAL NOT NULL DEFAULT 0 CHECK(current_quantity >= 0),
+  reorder_threshold REAL NOT NULL DEFAULT 0 CHECK(reorder_threshold >= 0),
   active INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS product_components (
   id TEXT PRIMARY KEY,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   raw_material_id TEXT NOT NULL REFERENCES raw_materials(id) ON DELETE CASCADE,
-  quantity_required REAL NOT NULL,
+  quantity_required REAL NOT NULL CHECK(quantity_required > 0),
   unit TEXT NOT NULL
 );
 
@@ -103,8 +103,8 @@ CREATE TABLE IF NOT EXISTS inventory (
   id TEXT PRIMARY KEY,
   branch_id TEXT NOT NULL REFERENCES branches(id) ON DELETE CASCADE,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  quantity INTEGER NOT NULL DEFAULT 0,
-  reorder_threshold INTEGER NOT NULL DEFAULT 0,
+  quantity INTEGER NOT NULL DEFAULT 0 CHECK(quantity >= 0),
+  reorder_threshold INTEGER NOT NULL DEFAULT 0 CHECK(reorder_threshold >= 0),
   updated_at TEXT NOT NULL,
   UNIQUE(branch_id, product_id)
 );
@@ -149,9 +149,9 @@ CREATE TABLE IF NOT EXISTS coupons (
   code TEXT NOT NULL,
   name TEXT NOT NULL,
   discount_type TEXT NOT NULL,
-  discount_value REAL NOT NULL,
+  discount_value REAL NOT NULL CHECK(discount_value >= 0),
   max_discount REAL,
-  minimum_order_value REAL NOT NULL DEFAULT 0,
+  minimum_order_value REAL NOT NULL DEFAULT 0 CHECK(minimum_order_value >= 0),
   total_usage_limit INTEGER,
   per_user_usage_limit INTEGER,
   per_user_daily_limit INTEGER,
@@ -171,10 +171,10 @@ CREATE TABLE IF NOT EXISTS orders (
   branch_id TEXT NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
   customer_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
   status TEXT NOT NULL,
-  subtotal REAL NOT NULL DEFAULT 0,
-  discount REAL NOT NULL DEFAULT 0,
-  tax REAL NOT NULL DEFAULT 0,
-  total REAL NOT NULL DEFAULT 0,
+  subtotal REAL NOT NULL DEFAULT 0 CHECK(subtotal >= 0),
+  discount REAL NOT NULL DEFAULT 0 CHECK(discount >= 0),
+  tax REAL NOT NULL DEFAULT 0 CHECK(tax >= 0),
+  total REAL NOT NULL DEFAULT 0 CHECK(total >= 0),
   coupon_id TEXT REFERENCES coupons(id) ON DELETE SET NULL,
   offer_id TEXT REFERENCES offers(id) ON DELETE SET NULL,
   payment_status TEXT NOT NULL DEFAULT 'PENDING',
@@ -196,10 +196,10 @@ CREATE TABLE IF NOT EXISTS order_items (
   order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
   product_name_snapshot TEXT NOT NULL,
-  unit_price_snapshot REAL NOT NULL,
-  quantity INTEGER NOT NULL,
-  line_discount REAL NOT NULL DEFAULT 0,
-  line_total REAL NOT NULL,
+  unit_price_snapshot REAL NOT NULL CHECK(unit_price_snapshot >= 0),
+  quantity INTEGER NOT NULL CHECK(quantity > 0),
+  line_discount REAL NOT NULL DEFAULT 0 CHECK(line_discount >= 0),
+  line_total REAL NOT NULL CHECK(line_total >= 0),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -210,7 +210,7 @@ CREATE TABLE IF NOT EXISTS payments (
   order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
   branch_id TEXT NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
   method TEXT NOT NULL,
-  amount REAL NOT NULL,
+  amount REAL NOT NULL CHECK(amount >= 0),
   status TEXT NOT NULL DEFAULT 'PENDING',
   confirmed_by TEXT REFERENCES users(id) ON DELETE SET NULL,
   confirmed_at TEXT,
@@ -224,7 +224,7 @@ CREATE TABLE IF NOT EXISTS coupon_usages (
   coupon_id TEXT NOT NULL REFERENCES coupons(id) ON DELETE CASCADE,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-  discount_amount REAL NOT NULL,
+  discount_amount REAL NOT NULL CHECK(discount_amount >= 0),
   used_at TEXT NOT NULL
 );
 
