@@ -240,27 +240,133 @@ export class OrderRepository extends BaseRepository {
     const dateStr = now.toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
     const prefix = `${branchCode.toUpperCase()}-${dateStr}-`;
 
-    const row = await this.db
-      .prepare(`
-        SELECT order_number
-        FROM orders
-        WHERE branch_id = ? AND order_number LIKE ?
-        ORDER BY order_number DESC
-        LIMIT 1
-      `)
-      .bind(branchId, `${prefix}%`)
-      .first<{ order_number: string }>();
+    try {
+      // Ensure sequence row is seeded with max existing order if first call of the day
+      const existing = await this.db
+        .prepare('SELECT last_seq FROM order_sequences WHERE branch_id = ? AND date_str = ?')
+        .bind(branchId, dateStr)
+        .first<{ last_seq: number }>();
 
-    let nextSeq = 1;
-    if (row?.order_number) {
-      const parts = row.order_number.split('-');
-      const lastSeq = parseInt(parts[parts.length - 1], 10);
-      if (!isNaN(lastSeq)) {
-        nextSeq = lastSeq + 1;
+      if (!existing) {
+        const row = await this.db
+          .prepare(`
+            SELECT order_number
+            FROM orders
+            WHERE branch_id = ? AND order_number LIKE ?
+            ORDER BY order_number DESC
+            LIMIT 1
+          `)
+          .bind(branchId, `${prefix}%`)
+          .first<{ order_number: string }>();
+
+        let initSeq = 0;
+        if (row?.order_number) {
+          const parts = row.order_number.split('-');
+          const lastSeq = parseInt(parts[parts.length - 1], 10);
+          if (!isNaN(lastSeq)) initSeq = lastSeq;
+        }
+
+        await this.db
+          .prepare(`
+            INSERT INTO order_sequences (branch_id, date_str, last_seq)
+            VALUES (?, ?, ?)
+            ON CONFLICT(branch_id, date_str) DO NOTHING
+          `)
+          .bind(branchId, dateStr, initSeq)
+          .run();
       }
+
+      // Atomic counter increment
+      await this.db
+        .prepare(`
+          INSERT INTO order_sequences (branch_id, date_str, last_seq)
+          VALUES (?, ?, 1)
+          ON CONFLICT(branch_id, date_str) DO UPDATE SET last_seq = last_seq + 1
+        `)
+        .bind(branchId, dateStr)
+        .run();
+
+      const seqRow = await this.db
+        .prepare('SELECT last_seq FROM order_sequences WHERE branch_id = ? AND date_str = ?')
+        .bind(branchId, dateStr)
+        .first<{ last_seq: number }>();
+
+      const nextSeq = seqRow?.last_seq ?? 1;
+      return `${prefix}${nextSeq.toString().padStart(4, '0')}`;
+    } catch {
+      // Fallback if order_sequences is not present
+      const row = await this.db
+        .prepare(`
+          SELECT order_number
+          FROM orders
+          WHERE branch_id = ? AND order_number LIKE ?
+          ORDER BY order_number DESC
+          LIMIT 1
+        `)
+        .bind(branchId, `${prefix}%`)
+        .first<{ order_number: string }>();
+
+      let nextSeq = 1;
+      if (row?.order_number) {
+        const parts = row.order_number.split('-');
+        const lastSeq = parseInt(parts[parts.length - 1], 10);
+        if (!isNaN(lastSeq)) nextSeq = lastSeq + 1;
+      }
+      return `${prefix}${nextSeq.toString().padStart(4, '0')}`;
+    }
+  }
+
+  /**
+   * Concurrency-safe atomic confirmation using conditional SQL update.
+   * Succeeds only if order is PENDING, payment is VERIFIED, and order not expired.
+   */
+  async confirmOrderConditionally(orderId: string, nowIso: string = new Date().toISOString()): Promise<Order> {
+    const res = await this.db
+      .prepare(`
+        UPDATE orders
+        SET status = 'CONFIRMED',
+            confirmed_at = ?,
+            updated_at = ?
+        WHERE id = ?
+          AND status = 'PENDING'
+          AND payment_status = 'VERIFIED'
+          AND expires_at > ?
+      `)
+      .bind(nowIso, nowIso, orderId, nowIso)
+      .run();
+
+    const changes = Number((res?.meta as { changes?: number })?.changes ?? (res as { changes?: number })?.changes ?? 0);
+    if (changes === 0) {
+      throw new Error(`Order ${orderId} cannot be confirmed. It may already be confirmed, payment is not VERIFIED, or order has expired.`);
     }
 
-    return `${prefix}${nextSeq.toString().padStart(4, '0')}`;
+    const updated = await this.findById(orderId);
+    if (!updated) {
+      throw new Error(`Order ${orderId} not found after confirmation`);
+    }
+    return updated;
+  }
+
+  /**
+   * Concurrency-safe atomic expiry using conditional SQL update.
+   * Only transitions if status is PENDING and expires_at <= current time.
+   */
+  async expireOrderConditionally(orderId: string, nowIso: string = new Date().toISOString()): Promise<boolean> {
+    const res = await this.db
+      .prepare(`
+        UPDATE orders
+        SET status = 'EXPIRED',
+            cancelled_at = ?,
+            updated_at = ?
+        WHERE id = ?
+          AND status = 'PENDING'
+          AND expires_at <= ?
+      `)
+      .bind(nowIso, nowIso, orderId, nowIso)
+      .run();
+
+    const changes = Number((res?.meta as { changes?: number })?.changes ?? (res as { changes?: number })?.changes ?? 0);
+    return changes > 0;
   }
 
   async updateOrderItemsAndTotals(

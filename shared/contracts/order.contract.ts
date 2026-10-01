@@ -53,12 +53,22 @@ export interface EditOrderRequest {
   items: OrderItemInput[];
 }
 
+export interface PaymentDifference {
+  paymentDifference: number; // positive = additional payment required, negative = refund/credit
+  verifiedPaidAmount: number;
+  additionalAmountRequired: number;
+  overpaymentAmount: number;
+}
+
 export interface EditOrderResponseData {
   order: Order;
   items: OrderItem[];
   previousTotal: number;
   newTotal: number;
-  paymentDifference: number; // positive = additional payment required, negative = refund/credit
+  paymentDifference: number;
+  verifiedPaidAmount?: number;
+  additionalAmountRequired?: number;
+  overpaymentAmount?: number;
 }
 
 export interface OrderStatusEvent {

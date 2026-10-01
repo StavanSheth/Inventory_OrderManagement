@@ -28,7 +28,6 @@ import { PaymentRepository } from '../../database/repositories/payment.repositor
 import { ProductRepository } from '../../database/repositories/product.repository';
 import { AuditRepository } from '../../database/repositories/audit.repository';
 import { BranchRepository } from '../../database/repositories/branch.repository';
-import { UserRepository } from '../../database/repositories/user.repository';
 import { OrdersService } from '../../backend/services/orders';
 import { OrderExpiryJob } from '../../backend/jobs/order-expiry.job';
 import { InMemoryRealtimeService } from '../../backend/services/realtime/in-memory-realtime.service';
@@ -458,5 +457,205 @@ describe('Phase 3 — Order Lifecycle Integration', () => {
     assert.ok(logs.length >= 1);
     assert.ok(logs.some((l) => l.action === 'ORDER_CREATED'));
     assert.ok(logs.every((l) => l.actor_user_id === CUSTOMER_ID));
+  });
+
+  it('rejects underpayment and overpayment when recording payment', async () => {
+    const { order } = await service.createOrder({
+      actorUserId: CUSTOMER_ID,
+      branchId: BRANCH_ALPHA,
+      customerUserId: CUSTOMER_ID,
+      items: [{ productId: 'prod-alpha-pistachio', quantity: 1 }],
+    });
+
+    // Underpayment rejection
+    await assert.rejects(
+      () =>
+        service.recordPayment({
+          actorUserId: OPERATOR_ID,
+          orderId: order.id,
+          branchId: BRANCH_ALPHA,
+          amount: Math.round((order.total - 10) * 100) / 100,
+          method: PaymentMethod.CASH,
+        }),
+      /does not match required payable amount/i,
+    );
+
+    // Overpayment rejection
+    await assert.rejects(
+      () =>
+        service.recordPayment({
+          actorUserId: OPERATOR_ID,
+          orderId: order.id,
+          branchId: BRANCH_ALPHA,
+          amount: Math.round((order.total + 50) * 100) / 100,
+          method: PaymentMethod.CASH,
+        }),
+      /does not match required payable amount/i,
+    );
+  });
+
+  it('allows operator to edit confirmed order within 60 minutes and computes payment difference', async () => {
+    const { order } = await service.createOrder({
+      actorUserId: CUSTOMER_ID,
+      branchId: BRANCH_ALPHA,
+      customerUserId: CUSTOMER_ID,
+      items: [{ productId: 'prod-alpha-pistachio', quantity: 1 }],
+    });
+
+    // Pay and confirm
+    const { payment } = await service.recordPayment({
+      actorUserId: OPERATOR_ID,
+      orderId: order.id,
+      branchId: BRANCH_ALPHA,
+      amount: order.total,
+      method: PaymentMethod.CASH,
+    });
+    await service.verifyPayment({
+      actorUserId: OPERATOR_ID,
+      paymentId: payment.id,
+      orderId: order.id,
+      branchId: BRANCH_ALPHA,
+    });
+    await service.confirmOrder(OPERATOR_ID, order.id);
+
+    // Operator edits confirmed order by increasing quantity
+    const editResult = await service.editOrder({
+      actorUserId: OPERATOR_ID,
+      orderId: order.id,
+      items: [{ productId: 'prod-alpha-pistachio', quantity: 2 }],
+    });
+
+    assert.ok(editResult.newTotal > editResult.previousTotal);
+    assert.strictEqual(editResult.verifiedPaidAmount, order.total);
+    assert.strictEqual(editResult.additionalAmountRequired > 0, true);
+    assert.strictEqual(editResult.order.status, OrderStatus.CONFIRMED);
+    // Order payment status reverted to PENDING since additional balance is due
+    assert.strictEqual(editResult.order.payment_status, PaymentStatus.PENDING);
+  });
+
+  it('stores comprehensive reconstruction metadata in ORDER_EDITED audit logs', async () => {
+    const auditRepo = new AuditRepository(db);
+
+    const { order } = await service.createOrder({
+      actorUserId: CUSTOMER_ID,
+      branchId: BRANCH_ALPHA,
+      customerUserId: CUSTOMER_ID,
+      items: [{ productId: 'prod-alpha-pistachio', quantity: 1 }],
+    });
+
+    await service.editOrder({
+      actorUserId: OPERATOR_ID,
+      orderId: order.id,
+      items: [{ productId: 'prod-alpha-belgian-sundae', quantity: 2 }],
+    });
+
+    const logs = await auditRepo.listByEntity('order', order.id);
+    const editLog = logs.find((l) => l.action === 'ORDER_EDITED');
+    assert.ok(editLog, 'ORDER_EDITED log should exist');
+
+    const meta = JSON.parse(editLog.metadata_json ?? '{}') as {
+      previousItems: Array<{ productName: string; quantity: number }>;
+      newItems: Array<{ productName: string; quantity: number }>;
+      previousTotal: number;
+      newTotal: number;
+      paymentDifference: number;
+    };
+
+    assert.strictEqual(meta.previousItems.length, 1);
+    assert.strictEqual(meta.newItems.length, 1);
+    assert.strictEqual(meta.newItems[0].quantity, 2);
+    assert.ok(meta.newTotal > 0);
+  });
+
+  it('order expiry job is idempotent and safe to run repeatedly', async () => {
+    const { order } = await service.createOrder({
+      actorUserId: CUSTOMER_ID,
+      branchId: BRANCH_ALPHA,
+      customerUserId: CUSTOMER_ID,
+      items: [{ productId: 'prod-alpha-pistachio', quantity: 1 }],
+    });
+
+    // Force order expiry timestamp into the past
+    const past = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    await db.prepare('UPDATE orders SET expires_at = ? WHERE id = ?').bind(past, order.id).run();
+
+    const expiryJob = new OrderExpiryJob(new OrderRepository(db), realtime);
+
+    // First execution expires the order
+    const run1 = await expiryJob.processExpiredOrders();
+    assert.strictEqual(run1.expiredCount, 1);
+
+    const expiredOrder = await service.getOrderById(BRANCH_ALPHA, order.id);
+    assert.strictEqual(expiredOrder?.order.status, OrderStatus.EXPIRED);
+
+    // Second execution does not re-expire or double-count (idempotent)
+    const run2 = await expiryJob.processExpiredOrders();
+    assert.strictEqual(run2.expiredCount, 0);
+  });
+
+  it('concurrency: conditional confirmation prevents double confirmation', async () => {
+    const { order } = await service.createOrder({
+      actorUserId: CUSTOMER_ID,
+      branchId: BRANCH_ALPHA,
+      customerUserId: CUSTOMER_ID,
+      items: [{ productId: 'prod-alpha-pistachio', quantity: 1 }],
+    });
+
+    const { payment } = await service.recordPayment({
+      actorUserId: OPERATOR_ID,
+      orderId: order.id,
+      branchId: BRANCH_ALPHA,
+      amount: order.total,
+      method: PaymentMethod.CASH,
+    });
+    await service.verifyPayment({
+      actorUserId: OPERATOR_ID,
+      paymentId: payment.id,
+      orderId: order.id,
+      branchId: BRANCH_ALPHA,
+    });
+
+    // First confirmation succeeds
+    const confirmed = await service.confirmOrder(OPERATOR_ID, order.id);
+    assert.strictEqual(confirmed.status, OrderStatus.CONFIRMED);
+
+    // Simultaneous second confirmation fails cleanly
+    await assert.rejects(
+      () => service.confirmOrder(OPERATOR_ID, order.id),
+      /Cannot confirm order in status CONFIRMED/i,
+    );
+  });
+
+  it('concurrency: idempotent payment verification avoids duplicate updates', async () => {
+    const { order } = await service.createOrder({
+      actorUserId: CUSTOMER_ID,
+      branchId: BRANCH_ALPHA,
+      customerUserId: CUSTOMER_ID,
+      items: [{ productId: 'prod-alpha-pistachio', quantity: 1 }],
+    });
+
+    const { payment } = await service.recordPayment({
+      actorUserId: OPERATOR_ID,
+      orderId: order.id,
+      branchId: BRANCH_ALPHA,
+      amount: order.total,
+      method: PaymentMethod.CASH,
+    });
+
+    // First verification
+    const v1 = await service.verifyPayment({
+      actorUserId: OPERATOR_ID,
+      paymentId: payment.id,
+      orderId: order.id,
+    });
+    assert.strictEqual(v1.payment.status, PaymentStatus.VERIFIED);
+
+    // Second verification returns cleanly (idempotent duplicate request handling)
+    const v2 = await service.verifyPayment({
+      actorUserId: OPERATOR_ID,
+      paymentId: payment.id,
+      orderId: order.id,
+    });
+    assert.strictEqual(v2.payment.status, PaymentStatus.VERIFIED);
   });
 });

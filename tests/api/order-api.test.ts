@@ -19,9 +19,9 @@ import { handleSetPin, handleVerifyPin } from '../../api/routes/auth.route';
 import { resetRateLimits } from '../../api/middleware/rate-limiter';
 import {
   handleBranchOrdersRoute,
-  handleBranchOrderDetailRoute,
   handleBranchOrderStatusRoute,
   handleBranchOrderConfirmRoute,
+  handleBranchOrderEditRoute,
   handleRecordPaymentRoute,
   handleVerifyPaymentRoute,
 } from '../../api/routes/branch-orders.route';
@@ -425,6 +425,238 @@ describe('Phase 3 — Order API HTTP Endpoints', () => {
         const json = (await resp.json()) as { data: { status: string } };
         assert.strictEqual(json.data.status, to);
       }
+    });
+  });
+
+  // ─── Branch Operator: Order Editing & Strict Payment Validation ─────────────
+
+  describe('Branch Operator: Order Editing & Strict Payment Validation', () => {
+    async function createAlphaOrder(): Promise<{ orderId: string; total: number }> {
+      const resp = await handleCreateOrderRoute(
+        new Request('http://x/api/v1/customer/orders', {
+          method: 'POST',
+          headers: {
+            Authorization: bearerToken('fb-cust', 'cust@melt.local', 'Customer'),
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            branchId: 'branch-alpha',
+            items: [{ productId: 'prod-a1', quantity: 1 }],
+          }),
+        }),
+        { DB: db },
+      );
+      const json = (await resp.json()) as { data: { order: { id: string; total: number } } };
+      return { orderId: json.data.order.id, total: json.data.order.total };
+    }
+
+    it('allows operator to edit order and recalculates totals correctly', async () => {
+      const { orderId } = await createAlphaOrder();
+
+      const resp = await handleBranchOrderEditRoute(
+        new Request(`http://x/api/v1/branches/branch-alpha/orders/${orderId}`, {
+          method: 'PATCH',
+          headers: {
+            Authorization: bearerToken('fb-op', 'op@melt.local', 'Operator'),
+            'x-session-token': operatorSessionToken,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            items: [{ productId: 'prod-a1', quantity: 3 }],
+          }),
+        }),
+        'branch-alpha',
+        orderId,
+        { DB: db },
+      );
+
+      assert.strictEqual(resp.status, 200);
+      const json = (await resp.json()) as {
+        data: { newTotal: number; previousTotal: number; items: unknown[] };
+      };
+      assert.ok(json.data.newTotal > json.data.previousTotal);
+      assert.strictEqual(json.data.items.length, 1);
+    });
+
+    it('allows owner with global session to edit order in branch-alpha', async () => {
+      const { orderId } = await createAlphaOrder();
+
+      const resp = await handleBranchOrderEditRoute(
+        new Request(`http://x/api/v1/branches/branch-alpha/orders/${orderId}`, {
+          method: 'PATCH',
+          headers: {
+            Authorization: bearerToken('fb-owner', 'owner@melt.local', 'Owner'),
+            'x-session-token': ownerSessionToken,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            items: [{ productId: 'prod-a2', quantity: 2 }],
+          }),
+        }),
+        'branch-alpha',
+        orderId,
+        { DB: db },
+      );
+
+      assert.strictEqual(resp.status, 200);
+    });
+
+    it('forbids operator of branch-alpha from editing branch-beta order — 403', async () => {
+      const resp = await handleBranchOrderEditRoute(
+        new Request('http://x/api/v1/branches/branch-beta/orders/ord-fake', {
+          method: 'PATCH',
+          headers: {
+            Authorization: bearerToken('fb-op', 'op@melt.local', 'Operator'),
+            'x-session-token': operatorSessionToken,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            items: [{ productId: 'prod-a1', quantity: 1 }],
+          }),
+        }),
+        'branch-beta',
+        'ord-fake',
+        { DB: db },
+      );
+
+      assert.strictEqual(resp.status, 403);
+    });
+
+    it('forbids customer from calling operator edit endpoint — 403 or 401', async () => {
+      const { orderId } = await createAlphaOrder();
+
+      const resp = await handleBranchOrderEditRoute(
+        new Request(`http://x/api/v1/branches/branch-alpha/orders/${orderId}`, {
+          method: 'PATCH',
+          headers: {
+            Authorization: bearerToken('fb-cust', 'cust@melt.local', 'Customer'),
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            items: [{ productId: 'prod-a1', quantity: 2 }],
+          }),
+        }),
+        'branch-alpha',
+        orderId,
+        { DB: db },
+      );
+
+      assert.ok(resp.status === 401 || resp.status === 403);
+    });
+
+    it('rejects underpayment and overpayment when recording payment — 400', async () => {
+      const { orderId, total } = await createAlphaOrder();
+      const opHeaders = {
+        Authorization: bearerToken('fb-op', 'op@melt.local', 'Operator'),
+        'x-session-token': operatorSessionToken,
+        'Content-Type': 'application/json',
+      };
+
+      // Underpayment
+      const underResp = await handleRecordPaymentRoute(
+        new Request('http://x/', {
+          method: 'POST',
+          headers: opHeaders,
+          body: JSON.stringify({ amount: total - 10, method: PaymentMethod.CASH }),
+        }),
+        'branch-alpha',
+        orderId,
+        { DB: db },
+      );
+      assert.strictEqual(underResp.status, 400);
+
+      // Overpayment
+      const overResp = await handleRecordPaymentRoute(
+        new Request('http://x/', {
+          method: 'POST',
+          headers: opHeaders,
+          body: JSON.stringify({ amount: total + 100, method: PaymentMethod.CASH }),
+        }),
+        'branch-alpha',
+        orderId,
+        { DB: db },
+      );
+      assert.strictEqual(overResp.status, 400);
+    });
+
+    it('rejects payment on expired order — 400', async () => {
+      const { orderId, total } = await createAlphaOrder();
+      const opHeaders = {
+        Authorization: bearerToken('fb-op', 'op@melt.local', 'Operator'),
+        'x-session-token': operatorSessionToken,
+        'Content-Type': 'application/json',
+      };
+
+      // Expire order in DB
+      const past = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      await db.prepare("UPDATE orders SET status = 'EXPIRED', expires_at = ? WHERE id = ?").bind(past, orderId).run();
+
+      const resp = await handleRecordPaymentRoute(
+        new Request('http://x/', {
+          method: 'POST',
+          headers: opHeaders,
+          body: JSON.stringify({ amount: total, method: PaymentMethod.CASH }),
+        }),
+        'branch-alpha',
+        orderId,
+        { DB: db },
+      );
+
+      assert.strictEqual(resp.status, 400);
+    });
+
+    it('allows operator to edit order after confirmation', async () => {
+      const { orderId, total } = await createAlphaOrder();
+      const opHeaders = {
+        Authorization: bearerToken('fb-op', 'op@melt.local', 'Operator'),
+        'x-session-token': operatorSessionToken,
+        'Content-Type': 'application/json',
+      };
+
+      // Pay -> Verify -> Confirm
+      const payResp = await handleRecordPaymentRoute(
+        new Request('http://x/', { method: 'POST', headers: opHeaders, body: JSON.stringify({ amount: total, method: PaymentMethod.CASH }) }),
+        'branch-alpha',
+        orderId,
+        { DB: db },
+      );
+      const { data: pd } = (await payResp.json()) as { data: { payment: { id: string } } };
+
+      await handleVerifyPaymentRoute(
+        new Request('http://x/', { method: 'POST', headers: opHeaders, body: JSON.stringify({}) }),
+        'branch-alpha',
+        orderId,
+        pd.payment.id,
+        { DB: db },
+      );
+
+      await handleBranchOrderConfirmRoute(
+        new Request('http://x/', { method: 'POST', headers: opHeaders }),
+        'branch-alpha',
+        orderId,
+        { DB: db },
+      );
+
+      // Edit confirmed order
+      const editResp = await handleBranchOrderEditRoute(
+        new Request(`http://x/api/v1/branches/branch-alpha/orders/${orderId}`, {
+          method: 'PATCH',
+          headers: opHeaders,
+          body: JSON.stringify({
+            items: [{ productId: 'prod-a1', quantity: 2 }],
+          }),
+        }),
+        'branch-alpha',
+        orderId,
+        { DB: db },
+      );
+
+      assert.strictEqual(editResp.status, 200);
+      const editJson = (await editResp.json()) as {
+        data: { order: { status: string }; additionalAmountRequired: number };
+      };
+      assert.strictEqual(editJson.data.order.status, OrderStatus.CONFIRMED);
+      assert.ok(editJson.data.additionalAmountRequired > 0);
     });
   });
 });

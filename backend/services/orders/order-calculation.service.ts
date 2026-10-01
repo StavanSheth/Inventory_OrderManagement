@@ -10,10 +10,31 @@ export interface CalculatedOrderTotals {
   total: number;
 }
 
+export interface EditDifferenceResult {
+  paymentDifference: number;
+  isUnderpaid: boolean;
+  isOverpaid: boolean;
+  additionalAmountRequired: number;
+  overpaymentAmount: number;
+}
+
+export function roundCurrency(amount: number): number {
+  return Math.round(amount * 100) / 100;
+}
+
+export function toPaise(rupees: number): number {
+  return Math.round(rupees * 100);
+}
+
+export function fromPaise(paise: number): number {
+  return Math.round(paise) / 100;
+}
+
 export class OrderCalculationService {
   /**
    * Recalculates order line items and financial totals based strictly
-   * on verified database products. Never trusts client-supplied prices.
+   * on verified database products using deterministic minor unit arithmetic.
+   * Never trusts client-supplied prices.
    */
   calculateTotals(
     requestedItems: Array<{ productId: string; quantity: number }>,
@@ -24,7 +45,7 @@ export class OrderCalculationService {
       throw new BadRequestError('Order must contain at least one product item');
     }
 
-    let subtotal = 0;
+    let subtotalPaise = 0;
     const items: CreateOrderItemInput[] = [];
 
     for (const req of requestedItems) {
@@ -40,9 +61,10 @@ export class OrderCalculationService {
         throw new BadRequestError(`Product "${product.name}" is currently inactive.`);
       }
 
-      const unitPrice = product.price;
-      const lineTotal = Math.round(unitPrice * req.quantity * 100) / 100;
-      subtotal = Math.round((subtotal + lineTotal) * 100) / 100;
+      const unitPrice = roundCurrency(product.price);
+      const lineTotalPaise = toPaise(unitPrice) * req.quantity;
+      const lineTotal = fromPaise(lineTotalPaise);
+      subtotalPaise += lineTotalPaise;
 
       items.push({
         id: `oi-${crypto.randomUUID()}`,
@@ -55,9 +77,12 @@ export class OrderCalculationService {
       });
     }
 
+    const subtotal = fromPaise(subtotalPaise);
     const discount = 0;
-    const tax = Math.round(subtotal * taxRate * 100) / 100;
-    const total = Math.round((subtotal - discount + tax) * 100) / 100;
+    const taxPaise = Math.round(subtotalPaise * taxRate);
+    const tax = fromPaise(taxPaise);
+    const totalPaise = subtotalPaise - toPaise(discount) + taxPaise;
+    const total = fromPaise(totalPaise);
 
     return {
       items,
@@ -70,17 +95,26 @@ export class OrderCalculationService {
 
   /**
    * Calculates financial differences after an order edit.
+   * Compares new order total against authoritative already-paid amount from DB.
    */
   calculateEditDifference(
     previousTotal: number,
     newTotal: number,
     alreadyPaidAmount: number,
-  ): { paymentDifference: number; isUnderpaid: boolean; isOverpaid: boolean } {
-    const diff = Math.round((newTotal - alreadyPaidAmount) * 100) / 100;
+  ): EditDifferenceResult {
+    const _prevRounded = roundCurrency(previousTotal);
+    const newRounded = roundCurrency(newTotal);
+    const paidRounded = roundCurrency(alreadyPaidAmount);
+
+    const diffPaise = toPaise(newRounded) - toPaise(paidRounded);
+    const diff = fromPaise(diffPaise);
+
     return {
       paymentDifference: diff,
       isUnderpaid: diff > 0,
       isOverpaid: diff < 0,
+      additionalAmountRequired: diff > 0 ? diff : 0,
+      overpaymentAmount: diff < 0 ? Math.abs(diff) : 0,
     };
   }
 }

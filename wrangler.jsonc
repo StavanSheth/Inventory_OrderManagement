@@ -18,6 +18,11 @@
     }
   ],
 
+  // Scheduled Worker Cron Triggers (Order expiry job runs every minute)
+  "triggers": {
+    "crons": ["* * * * *"]
+  },
+
   // Environment-specific configurations
   "env": {
     "staging": {

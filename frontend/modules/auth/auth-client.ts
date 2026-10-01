@@ -21,6 +21,13 @@ export class AuthClient {
   }
 
   /**
+   * Retrieves the current user's Firebase ID token if authenticated.
+   */
+  async getIdToken(): Promise<string | null> {
+    return getCurrentFirebaseIdToken();
+  }
+
+  /**
    * Centralized helper to build authorized headers with a fresh Firebase ID token
    * and optional application session token.
    */

@@ -77,12 +77,78 @@ export function canConfirmOrder(order: {
 }
 
 export function isOrderEditable(
-  order: { status: OrderStatus; placed_at: string },
+  order: { status: OrderStatus; placed_at: string; confirmed_at?: string | null },
   editWindowMinutes: number = ORDER_EDIT_WINDOW_MINUTES,
   now: Date = new Date(),
 ): boolean {
-  if (order.status === OrderStatus.EXPIRED || order.status === OrderStatus.CANCELLED) {
+  if (
+    order.status === OrderStatus.COMPLETED ||
+    order.status === OrderStatus.EXPIRED ||
+    order.status === OrderStatus.CANCELLED
+  ) {
     return false;
   }
-  return isWithinOrderEditWindow(new Date(order.placed_at), editWindowMinutes, now);
+  const referenceDate = new Date(order.confirmed_at ?? order.placed_at);
+  return isWithinOrderEditWindow(referenceDate, editWindowMinutes, now);
 }
+
+export interface SimpleOrderItemCalculationInput {
+  unitPrice: number;
+  quantity: number;
+  taxRate?: number;
+}
+
+export interface SimpleOrderCalculationResult {
+  subtotal: number;
+  tax: number;
+  discount: number;
+  total: number;
+}
+
+export function calculateOrderTotals(
+  items: SimpleOrderItemCalculationInput[],
+  taxRate: number = 0.05,
+): SimpleOrderCalculationResult {
+  let subtotalPaise = 0;
+  for (const it of items) {
+    const unitPaise = Math.round(it.unitPrice * 100);
+    subtotalPaise += unitPaise * it.quantity;
+  }
+  const taxPaise = Math.round(subtotalPaise * taxRate);
+  const totalPaise = subtotalPaise + taxPaise;
+  return {
+    subtotal: subtotalPaise / 100,
+    tax: taxPaise / 100,
+    discount: 0,
+    total: totalPaise / 100,
+  };
+}
+
+export interface EditDifferenceResult {
+  paymentDifference: number;
+  isUnderpaid: boolean;
+  isOverpaid: boolean;
+  additionalAmountRequired: number;
+  overpaymentAmount: number;
+}
+
+export function calculateEditDifference(
+  previousTotal: number,
+  newTotal: number,
+  alreadyPaidAmount: number,
+): EditDifferenceResult {
+  const newPaise = Math.round(newTotal * 100);
+  const paidPaise = Math.round(alreadyPaidAmount * 100);
+
+  const diffPaise = newPaise - paidPaise;
+  const diff = diffPaise / 100;
+
+  return {
+    paymentDifference: diff,
+    isUnderpaid: diff > 0,
+    isOverpaid: diff < 0,
+    additionalAmountRequired: diff > 0 ? diff : 0,
+    overpaymentAmount: diff < 0 ? Math.abs(diff) : 0,
+  };
+}
+

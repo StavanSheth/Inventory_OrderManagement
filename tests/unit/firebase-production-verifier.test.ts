@@ -54,6 +54,7 @@ describe('FirebaseProductionVerifier (RS256 Web Crypto Verification)', () => {
       auth_time: now,
       email: 'verified.user@gmail.com',
       name: 'Verified User',
+      firebase: { sign_in_provider: 'google.com' },
       ...payloadOverrides,
     };
 

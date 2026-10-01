@@ -1,4 +1,9 @@
-// Orders feature module boundary (Phase 1 foundation)
 export interface OrdersModuleState {
   activeOrderId?: string;
+  activeBranchId?: string;
 }
+
+export * from './operator-queue-view';
+export * from './order-detail-modal';
+export * from './reception-payment-dialog';
+export * from './operator-order-editor';

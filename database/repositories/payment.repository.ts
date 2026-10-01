@@ -87,4 +87,31 @@ export class PaymentRepository extends BaseRepository {
     }
     return updated;
   }
+
+  async verifyPaymentConditionally(
+    id: string,
+    confirmedByUserId: string,
+    nowIso: string = new Date().toISOString(),
+  ): Promise<{ payment: Payment; wasUpdated: boolean }> {
+    const res = await this.db
+      .prepare(`
+        UPDATE payments
+        SET status = ?,
+            confirmed_by = ?,
+            confirmed_at = ?,
+            updated_at = ?
+        WHERE id = ?
+          AND status = ?
+      `)
+      .bind(PaymentStatus.VERIFIED, confirmedByUserId, nowIso, nowIso, id, PaymentStatus.RECORDED)
+      .run();
+
+    const changes = Number((res?.meta as { changes?: number })?.changes ?? (res as { changes?: number })?.changes ?? 0);
+    const payment = await this.findById(id);
+    if (!payment) {
+      throw new Error(`Payment ${id} not found`);
+    }
+
+    return { payment, wasUpdated: changes > 0 };
+  }
 }

@@ -13,7 +13,6 @@ import {
   assertValidOrderTransition,
   isTerminalOrderStatus,
   isOrderEditable,
-  canConfirmOrder,
 } from '../../../shared/business-rules/order-rules';
 import { OrderItemInput } from '../../../shared/contracts/order.contract';
 
@@ -51,6 +50,7 @@ export interface VerifyPaymentOptions {
   actorUserId: string;
   paymentId: string;
   orderId: string;
+  branchId?: string;
   notes?: string;
 }
 
@@ -168,6 +168,9 @@ export class OrdersService implements IOrdersService {
     previousTotal: number;
     newTotal: number;
     paymentDifference: number;
+    verifiedPaidAmount: number;
+    additionalAmountRequired: number;
+    overpaymentAmount: number;
   }> {
     if (!this.productRepo) throw new BadRequestError('ProductRepository is required to edit orders');
 
@@ -184,6 +187,7 @@ export class OrdersService implements IOrdersService {
       throw new BadRequestError('Order edit window has expired');
     }
 
+    const previousItems = await this.orderRepo.getOrderItems(opts.orderId);
     const allProducts = await this.productRepo.listByBranch(order.branch_id, true);
     const productsMap = new Map(allProducts.map((p) => [p.id, p]));
 
@@ -191,7 +195,7 @@ export class OrdersService implements IOrdersService {
     const previousTotal = order.total;
     const lastEditedAt = new Date().toISOString();
 
-    const updatedOrder = await this.orderRepo.updateOrderItemsAndTotals(
+    let updatedOrder = await this.orderRepo.updateOrderItemsAndTotals(
       opts.orderId,
       newCalcItems,
       subtotal,
@@ -201,8 +205,18 @@ export class OrdersService implements IOrdersService {
     );
     const updatedItems = await this.orderRepo.getOrderItems(opts.orderId);
 
-    // ponytail: alreadyPaid uses 0 (Phase 4 will sum verified payments)
-    const { paymentDifference } = this.calc.calculateEditDifference(previousTotal, newTotal, 0);
+    // Authoritative calculation of verified payments from database
+    const payments = this.paymentRepo ? await this.paymentRepo.listByOrder(opts.orderId) : [];
+    const verifiedPaidAmount = payments
+      .filter((p) => p.status === PaymentStatus.VERIFIED || p.status === PaymentStatus.COMPLETED)
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    const editDiff = this.calc.calculateEditDifference(previousTotal, newTotal, verifiedPaidAmount);
+
+    // If new total exceeds verified paid amount, order is no longer fully verified
+    if (newTotal > verifiedPaidAmount && order.payment_status === PaymentStatus.VERIFIED) {
+      updatedOrder = await this.orderRepo.updatePaymentStatus(opts.orderId, PaymentStatus.PENDING);
+    }
 
     await this.auditRepo?.log({
       branch_id: order.branch_id,
@@ -210,7 +224,30 @@ export class OrdersService implements IOrdersService {
       action: 'ORDER_EDITED',
       entity_type: 'order',
       entity_id: opts.orderId,
-      metadata: { previousTotal, newTotal, paymentDifference },
+      metadata: {
+        previousItems: previousItems.map((i) => ({
+          productId: i.product_id,
+          productName: i.product_name_snapshot,
+          quantity: i.quantity,
+          unitPrice: i.unit_price_snapshot,
+          lineTotal: i.line_total,
+        })),
+        newItems: newCalcItems.map((i) => ({
+          productId: i.product_id,
+          productName: i.product_name_snapshot,
+          quantity: i.quantity,
+          unitPrice: i.unit_price_snapshot,
+          lineTotal: i.line_total,
+        })),
+        previousTotal,
+        newTotal,
+        verifiedPaidAmount,
+        paymentDifference: editDiff.paymentDifference,
+        additionalAmountRequired: editDiff.additionalAmountRequired,
+        overpaymentAmount: editDiff.overpaymentAmount,
+        actor: opts.actorUserId,
+        timestamp: lastEditedAt,
+      },
     });
 
     await this.realtime?.publish({
@@ -225,7 +262,16 @@ export class OrdersService implements IOrdersService {
       },
     });
 
-    return { order: updatedOrder, items: updatedItems, previousTotal, newTotal, paymentDifference };
+    return {
+      order: updatedOrder,
+      items: updatedItems,
+      previousTotal,
+      newTotal,
+      paymentDifference: editDiff.paymentDifference,
+      verifiedPaidAmount,
+      additionalAmountRequired: editDiff.additionalAmountRequired,
+      overpaymentAmount: editDiff.overpaymentAmount,
+    };
   }
 
   async updateOrderStatus(actorUserId: string, orderId: string, nextStatus: OrderStatus): Promise<Order> {
@@ -271,12 +317,54 @@ export class OrdersService implements IOrdersService {
   async confirmOrder(actorUserId: string, orderId: string): Promise<Order> {
     const order = await this.orderRepo.findById(orderId);
     if (!order) throw new NotFoundError(`Order ${orderId} not found`);
-    if (!canConfirmOrder(order)) {
+
+    if (order.status !== OrderStatus.PENDING) {
+      throw new BadRequestError(`Cannot confirm order in status ${order.status}. Must be PENDING.`);
+    }
+
+    if (order.payment_status !== PaymentStatus.VERIFIED && order.payment_status !== PaymentStatus.COMPLETED) {
       throw new BadRequestError(
-        `Order cannot be confirmed. Status: ${order.status}, Payment: ${order.payment_status}`,
+        `Order cannot be confirmed. Payment status is ${order.payment_status}. Payment must be VERIFIED first.`,
       );
     }
-    return this.updateOrderStatus(actorUserId, orderId, OrderStatus.CONFIRMED);
+
+    const now = new Date();
+    if (now >= new Date(order.expires_at)) {
+      throw new BadRequestError('Cannot confirm expired order');
+    }
+
+    const nowIso = now.toISOString();
+    let updated: Order;
+    try {
+      updated = await this.orderRepo.confirmOrderConditionally(orderId, nowIso);
+    } catch (err) {
+      throw new BadRequestError(err instanceof Error ? err.message : 'Confirmation failed');
+    }
+
+    await this.auditRepo?.log({
+      branch_id: order.branch_id,
+      actor_user_id: actorUserId,
+      action: 'ORDER_CONFIRMED',
+      entity_type: 'order',
+      entity_id: orderId,
+      metadata: { confirmedAt: nowIso, previousStatus: order.status },
+    });
+
+    await this.realtime?.publish({
+      type: 'OrderStatusChanged',
+      payload: {
+        orderId,
+        orderNumber: updated.order_number,
+        branchId: updated.branch_id,
+        customerUserId: updated.customer_user_id,
+        status: OrderStatus.CONFIRMED,
+        paymentStatus: updated.payment_status,
+        total: updated.total,
+        timestamp: nowIso,
+      },
+    });
+
+    return updated;
   }
 
   async recordPayment(opts: RecordPaymentOptions): Promise<{ payment: Payment; order: Order }> {
@@ -284,8 +372,44 @@ export class OrdersService implements IOrdersService {
 
     const order = await this.orderRepo.findById(opts.orderId);
     if (!order) throw new NotFoundError(`Order ${opts.orderId} not found`);
+
+    if (order.branch_id !== opts.branchId) {
+      throw new ForbiddenError('Order belongs to a different branch');
+    }
+
     if (isTerminalOrderStatus(order.status)) {
       throw new BadRequestError(`Cannot record payment for order in status ${order.status}`);
+    }
+
+    const now = new Date();
+    if (new Date(order.expires_at) <= now || order.status === OrderStatus.EXPIRED) {
+      throw new BadRequestError('Cannot record payment for expired order');
+    }
+
+    if (order.status === OrderStatus.CANCELLED) {
+      throw new BadRequestError('Cannot record payment for cancelled order');
+    }
+
+    if (!opts.amount || typeof opts.amount !== 'number' || opts.amount <= 0) {
+      throw new BadRequestError('Payment amount must be greater than zero');
+    }
+
+    // Determine current verified payments to calculate exact payable amount
+    const payments = await this.paymentRepo.listByOrder(opts.orderId);
+    const verifiedPaid = payments
+      .filter((p) => p.status === PaymentStatus.VERIFIED || p.status === PaymentStatus.COMPLETED)
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    const payableAmount = Math.round((order.total - verifiedPaid) * 100) / 100;
+    if (payableAmount <= 0) {
+      throw new BadRequestError('Order is already fully paid');
+    }
+
+    const roundedPaymentAmount = Math.round(opts.amount * 100) / 100;
+    if (roundedPaymentAmount !== payableAmount) {
+      throw new BadRequestError(
+        `Payment amount ₹${roundedPaymentAmount} does not match required payable amount ₹${payableAmount}`,
+      );
     }
 
     const paymentId = `pay-${crypto.randomUUID()}`;
@@ -294,7 +418,7 @@ export class OrdersService implements IOrdersService {
       order_id: opts.orderId,
       branch_id: opts.branchId,
       method: opts.method,
-      amount: opts.amount,
+      amount: roundedPaymentAmount,
       status: PaymentStatus.RECORDED,
     });
 
@@ -306,7 +430,7 @@ export class OrdersService implements IOrdersService {
       action: 'PAYMENT_RECORDED',
       entity_type: 'payment',
       entity_id: paymentId,
-      metadata: { orderId: opts.orderId, amount: opts.amount, method: opts.method, notes: opts.notes ?? null },
+      metadata: { orderId: opts.orderId, amount: roundedPaymentAmount, method: opts.method, notes: opts.notes ?? null },
     });
 
     await this.realtime?.publish({
@@ -315,9 +439,9 @@ export class OrdersService implements IOrdersService {
         orderId: opts.orderId,
         branchId: opts.branchId,
         paymentId,
-        amount: opts.amount,
+        amount: roundedPaymentAmount,
         status: PaymentStatus.RECORDED,
-        timestamp: new Date().toISOString(),
+        timestamp: now.toISOString(),
       },
     });
 
@@ -332,34 +456,57 @@ export class OrdersService implements IOrdersService {
     if (payment.order_id !== opts.orderId) {
       throw new ForbiddenError('Payment does not belong to the specified order');
     }
+    if (opts.branchId && payment.branch_id !== opts.branchId) {
+      throw new ForbiddenError('Payment does not belong to the specified branch');
+    }
+
+    const order = await this.orderRepo.findById(opts.orderId);
+    if (!order) throw new NotFoundError(`Order ${opts.orderId} not found`);
+
+    if (order.status === OrderStatus.CANCELLED || order.status === OrderStatus.EXPIRED) {
+      throw new BadRequestError(`Cannot verify payment for order in ${order.status} status`);
+    }
+
+    // Idempotent duplicate verification check
     if (payment.status === PaymentStatus.VERIFIED || payment.status === PaymentStatus.COMPLETED) {
-      throw new BadRequestError(`Payment is already ${payment.status}`);
+      return { payment, order };
+    }
+
+    if (payment.status !== PaymentStatus.RECORDED) {
+      throw new BadRequestError(`Payment in status ${payment.status} cannot be verified`);
     }
 
     const now = new Date().toISOString();
-    const updatedPayment = await this.paymentRepo.updateStatus(opts.paymentId, PaymentStatus.VERIFIED, opts.actorUserId, now);
+    const { payment: updatedPayment, wasUpdated } = await this.paymentRepo.verifyPaymentConditionally(
+      opts.paymentId,
+      opts.actorUserId,
+      now,
+    );
+
     const updatedOrder = await this.orderRepo.updatePaymentStatus(opts.orderId, PaymentStatus.VERIFIED);
 
-    await this.auditRepo?.log({
-      branch_id: payment.branch_id,
-      actor_user_id: opts.actorUserId,
-      action: 'PAYMENT_VERIFIED',
-      entity_type: 'payment',
-      entity_id: opts.paymentId,
-      metadata: { orderId: opts.orderId, notes: opts.notes ?? null },
-    });
+    if (wasUpdated) {
+      await this.auditRepo?.log({
+        branch_id: payment.branch_id,
+        actor_user_id: opts.actorUserId,
+        action: 'PAYMENT_VERIFIED',
+        entity_type: 'payment',
+        entity_id: opts.paymentId,
+        metadata: { orderId: opts.orderId, amount: payment.amount, notes: opts.notes ?? null },
+      });
 
-    await this.realtime?.publish({
-      type: 'PaymentUpdated',
-      payload: {
-        orderId: opts.orderId,
-        branchId: payment.branch_id,
-        paymentId: opts.paymentId,
-        amount: payment.amount,
-        status: PaymentStatus.VERIFIED,
-        timestamp: now,
-      },
-    });
+      await this.realtime?.publish({
+        type: 'PaymentUpdated',
+        payload: {
+          orderId: opts.orderId,
+          branchId: payment.branch_id,
+          paymentId: opts.paymentId,
+          amount: payment.amount,
+          status: PaymentStatus.VERIFIED,
+          timestamp: now,
+        },
+      });
+    }
 
     return { payment: updatedPayment, order: updatedOrder };
   }

@@ -11,6 +11,9 @@ const testFiles = [
   'tests/unit/firebase-production-verifier.test.ts',
   'tests/unit/environment-auth.test.ts',
   'tests/unit/policies.test.ts',
+  'tests/unit/order-rules.test.ts',
+  'tests/unit/order-calculation.test.ts',
+  'tests/unit/payment-difference.test.ts',
   'tests/integration/schema-migrations.test.ts',
   'tests/integration/seed-data.test.ts',
   'tests/integration/repositories.test.ts',
@@ -22,6 +25,7 @@ const testFiles = [
   'tests/api/health.test.ts',
   'tests/api/auth-endpoints.test.ts',
   'tests/api/order-api.test.ts',
+  'tests/api/realtime-api.test.ts',
   'tests/e2e/e2e-stub.test.ts',
 ].map((rel) => path.resolve(process.cwd(), rel));
 

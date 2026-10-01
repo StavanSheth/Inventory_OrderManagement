@@ -15,29 +15,25 @@ export class OrderExpiryJob implements IOrderExpiryJob {
 
     let expiredCount = 0;
     for (const order of expiredOrders) {
-      // ponytail: audit_logs has NOT NULL FK on actor_user_id referencing users;
-      // system-generated expiry has no user row. The EXPIRED status on the order
-      // itself is the authoritative audit trail. Upgrade trigger: add a system_user
-      // sentinel row to support system-sourced audit entries.
-      await this.orderRepo.updateStatus(order.id, OrderStatus.EXPIRED, {
-        cancelled_at: now,
-      });
+      // Atomic conditional update ensures idempotency and avoids races with confirmation
+      const didExpire = await this.orderRepo.expireOrderConditionally(order.id, now);
+      if (didExpire) {
+        await this.realtime?.publish({
+          type: 'OrderStatusChanged',
+          payload: {
+            orderId: order.id,
+            orderNumber: order.order_number,
+            branchId: order.branch_id,
+            customerUserId: order.customer_user_id,
+            status: OrderStatus.EXPIRED,
+            paymentStatus: order.payment_status as PaymentStatus,
+            total: order.total,
+            timestamp: now,
+          },
+        });
 
-      await this.realtime?.publish({
-        type: 'OrderStatusChanged',
-        payload: {
-          orderId: order.id,
-          orderNumber: order.order_number,
-          branchId: order.branch_id,
-          customerUserId: order.customer_user_id,
-          status: OrderStatus.EXPIRED,
-          paymentStatus: order.payment_status as PaymentStatus,
-          total: order.total,
-          timestamp: now,
-        },
-      });
-
-      expiredCount++;
+        expiredCount++;
+      }
     }
 
     return { expiredCount };

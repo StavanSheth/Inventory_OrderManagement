@@ -8,7 +8,7 @@ import { OrdersService } from '../../backend/services/orders';
 import { requireBranchAccess, requireApplicationSession } from '../../backend/policies/branch-access.policy';
 import { requireOperatorOrOwner } from '../../backend/policies/role.policy';
 import { validateRequest } from '../validators/request.validator';
-import { recordPaymentSchema, verifyPaymentSchema } from '../validators/order.validator';
+import { recordPaymentSchema, verifyPaymentSchema, editOrderSchema } from '../validators/order.validator';
 import { successResponse } from '../serializers/response';
 import { handleApiError } from '../middleware/error-handler';
 import { extractRequestContext } from '../middleware/request-context';
@@ -276,7 +276,57 @@ export async function handleVerifyPaymentRoute(
       actorUserId: userContext.userId,
       paymentId,
       orderId,
+      branchId,
       notes: body.notes,
+    });
+
+    return successResponse(result, 200, responseHeaders);
+  } catch (error) {
+    return handleApiError(error, responseHeaders);
+  }
+}
+
+/**
+ * PATCH /api/v1/branches/:branchId/orders/:orderId
+ * Operator edits order (within 60-min window).
+ */
+export async function handleBranchOrderEditRoute(
+  request: Request,
+  branchId: string,
+  orderId: string,
+  env?: { DB?: D1DatabaseLike },
+  options: AuthFactoryOptions = {},
+): Promise<Response> {
+  const preflight = handleCorsPreflight(request, config.allowedOrigins);
+  if (preflight) return preflight;
+
+  const { responseHeaders } = buildHeaders(request);
+
+  try {
+    const { db, authMiddleware } = createAuthInfrastructure(env, options);
+    const ordersService = buildOrdersService(db);
+
+    const userContext = await authMiddleware.authenticateRequest(request, {
+      requireSession: true,
+      targetBranchId: branchId,
+    });
+    requireOperatorOrOwner(userContext);
+    requireApplicationSession(userContext.session, userContext, branchId);
+    requireBranchAccess(userContext, branchId);
+
+    // Verify order exists and belongs to the specified branch
+    const detail = await ordersService.getOrderById(branchId, orderId);
+    if (!detail) {
+      return handleApiError(new Error(`Order ${orderId} not found in branch ${branchId}`), responseHeaders);
+    }
+
+    const rawBody = await request.json();
+    const body = validateRequest(editOrderSchema, rawBody);
+
+    const result = await ordersService.editOrder({
+      actorUserId: userContext.userId,
+      orderId,
+      items: body.items,
     });
 
     return successResponse(result, 200, responseHeaders);
