@@ -1,0 +1,142 @@
+{
+  "branches": [
+    {
+      "id": "branch-alpha",
+      "name": "Melt Parlour - Downtown Alpha",
+      "code": "ALPHA-01",
+      "status": "ACTIVE",
+      "address": "101 Scoop Boulevard, Alpha District",
+      "phone": "+91 90000 00001",
+      "email": "alpha@melt.example.internal",
+      "timezone": "Asia/Kolkata"
+    },
+    {
+      "id": "branch-beta",
+      "name": "Melt Parlour - Uptown Beta",
+      "code": "BETA-02",
+      "status": "ACTIVE",
+      "address": "202 Waffle Avenue, Beta Heights",
+      "phone": "+91 90000 00002",
+      "email": "beta@melt.example.internal",
+      "timezone": "Asia/Kolkata"
+    }
+  ],
+  "categories": [
+    {
+      "id": "cat-alpha-scoops",
+      "branch_id": "branch-alpha",
+      "name": "Handmade Scoops",
+      "active": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "cat-alpha-sundaes",
+      "branch_id": "branch-alpha",
+      "name": "Signature Sundaes",
+      "active": 1,
+      "sort_order": 2
+    },
+    {
+      "id": "cat-beta-scoops",
+      "branch_id": "branch-beta",
+      "name": "Artisanal Scoops",
+      "active": 1,
+      "sort_order": 1
+    },
+    {
+      "id": "cat-beta-tubs",
+      "branch_id": "branch-beta",
+      "name": "Take-Home Tubs",
+      "active": 1,
+      "sort_order": 2
+    }
+  ],
+  "products": [
+    {
+      "id": "prod-alpha-pistachio",
+      "branch_id": "branch-alpha",
+      "category_id": "cat-alpha-scoops",
+      "name": "Roasted Pistachio Scoop",
+      "description": "Slow-churned roasted Sicilian pistachio cream.",
+      "price": 180,
+      "active": 1
+    },
+    {
+      "id": "prod-alpha-belgian-sundae",
+      "branch_id": "branch-alpha",
+      "category_id": "cat-alpha-sundaes",
+      "name": "Warm Fudge Belgian Sundae",
+      "description": "Double dark chocolate scoop with warm hot fudge sauce.",
+      "price": 260,
+      "active": 1
+    },
+    {
+      "id": "prod-beta-alphonso",
+      "branch_id": "branch-beta",
+      "category_id": "cat-beta-scoops",
+      "name": "Ratnagiri Alphonso Scoop",
+      "description": "Fresh summer mango purée folded with sweet cream.",
+      "price": 190,
+      "active": 1
+    },
+    {
+      "id": "prod-beta-cold-brew-tub",
+      "branch_id": "branch-beta",
+      "category_id": "cat-beta-tubs",
+      "name": "Cold Brew Espresso Tub (500ml)",
+      "description": "Arabica cold brew infused gelato pint.",
+      "price": 450,
+      "active": 1
+    }
+  ],
+  "raw_materials": [
+    {
+      "id": "raw-alpha-milk",
+      "branch_id": "branch-alpha",
+      "name": "A2 Whole Milk",
+      "unit": "LITER",
+      "current_quantity": 120,
+      "reorder_threshold": 30,
+      "active": 1
+    },
+    {
+      "id": "raw-beta-milk",
+      "branch_id": "branch-beta",
+      "name": "A2 Whole Milk",
+      "unit": "LITER",
+      "current_quantity": 85,
+      "reorder_threshold": 25,
+      "active": 1
+    }
+  ],
+  "inventory": [
+    {
+      "id": "inv-alpha-pistachio",
+      "branch_id": "branch-alpha",
+      "product_id": "prod-alpha-pistachio",
+      "quantity": 45,
+      "reorder_threshold": 10
+    },
+    {
+      "id": "inv-alpha-belgian-sundae",
+      "branch_id": "branch-alpha",
+      "product_id": "prod-alpha-belgian-sundae",
+      "quantity": 28,
+      "reorder_threshold": 5
+    },
+    {
+      "id": "inv-beta-alphonso",
+      "branch_id": "branch-beta",
+      "product_id": "prod-beta-alphonso",
+      "quantity": 60,
+      "reorder_threshold": 15
+    },
+    {
+      "id": "inv-beta-cold-brew-tub",
+      "branch_id": "branch-beta",
+      "product_id": "prod-beta-cold-brew-tub",
+      "quantity": 18,
+      "reorder_threshold": 4
+    }
+  ]
+}

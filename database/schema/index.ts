@@ -1,0 +1,25 @@
+export const TABLES = {
+  BRANCHES: 'branches',
+  USERS: 'users',
+  BRANCH_MEMBERSHIPS: 'branch_memberships',
+  CUSTOMER_PROFILES: 'customer_profiles',
+  CATEGORIES: 'categories',
+  PRODUCTS: 'products',
+  RAW_MATERIALS: 'raw_materials',
+  PRODUCT_COMPONENTS: 'product_components',
+  INVENTORY: 'inventory',
+  INVENTORY_MOVEMENTS: 'inventory_movements',
+  ORDERS: 'orders',
+  ORDER_ITEMS: 'order_items',
+  PAYMENTS: 'payments',
+  OFFERS: 'offers',
+  COUPONS: 'coupons',
+  COUPON_USAGES: 'coupon_usages',
+  BRANCH_SETTINGS: 'branch_settings',
+  APPLICATION_SESSIONS: 'application_sessions',
+  AUDIT_LOGS: 'audit_logs',
+  MESSAGING_CAMPAIGNS: 'messaging_campaigns',
+  DELETION_JOBS: 'deletion_jobs',
+} as const;
+
+export type TableName = (typeof TABLES)[keyof typeof TABLES];
