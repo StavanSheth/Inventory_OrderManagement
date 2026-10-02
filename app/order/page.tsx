@@ -7,6 +7,9 @@ import {
   CartView,
   OrderStatusView,
   OrderHistoryView,
+  loadCartFromStorage,
+  saveCartToStorage,
+  clearCartStorage,
 } from '@/frontend/modules/customer';
 import { Product } from '@/shared/types/entities.types';
 import { GlobalNavigation, BunMobileNav } from '@/frontend/components/ui';
@@ -19,6 +22,33 @@ export default function CustomerOrderPage() {
   const [activeTab, setActiveTab] = useState<'catalog' | 'cart' | 'status' | 'history'>('catalog');
 
   useEffect(() => {
+    // 1. Initial cart load from localStorage
+    const stored = loadCartFromStorage();
+    if (stored.length > 0) {
+      setCartItems(stored);
+    }
+
+    // 2. Check URL query params for initial tab (e.g. ?tab=cart)
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      if (tabParam === 'cart' || tabParam === 'status' || tabParam === 'history' || tabParam === 'catalog') {
+        setActiveTab(tabParam);
+      }
+    }
+
+    // 3. Listen for cross-component cart updates
+    const onCartUpdated = (e: Event) => {
+      const customEvent = e as CustomEvent<Array<{ product: Product; quantity: number }>>;
+      if (customEvent.detail) {
+        setCartItems(customEvent.detail);
+      } else {
+        setCartItems(loadCartFromStorage());
+      }
+    };
+    window.addEventListener('melt:cart-updated', onCartUpdated);
+
+    // 4. Fetch branches
     fetch('/api/v1/branches')
       .then((res) => res.json() as Promise<{ success?: boolean; data?: Array<{ id: string; name: string; code: string }> }>)
       .then((json) => {
@@ -28,37 +58,50 @@ export default function CustomerOrderPage() {
         }
       })
       .catch(() => {});
+
+    return () => {
+      window.removeEventListener('melt:cart-updated', onCartUpdated);
+    };
   }, []);
 
   const handleAddToCart = (product: Product, quantity: number = 1) => {
     setCartItems((prev) => {
       const existing = prev.find((it) => it.product.id === product.id);
-      if (existing) {
-        return prev.map((it) =>
-          it.product.id === product.id ? { ...it, quantity: it.quantity + quantity } : it,
-        );
-      }
-      return [...prev, { product, quantity }];
+      const updated = existing
+        ? prev.map((it) =>
+            it.product.id === product.id ? { ...it, quantity: it.quantity + quantity } : it,
+          )
+        : [...prev, { product, quantity }];
+      saveCartToStorage(updated);
+      return updated;
     });
   };
 
   const handleUpdateCartQuantity = (productId: string, quantity: number) => {
-    setCartItems((prev) =>
-      prev
+    setCartItems((prev) => {
+      const updated = prev
         .map((it) => (it.product.id === productId ? { ...it, quantity } : it))
-        .filter((it) => it.quantity > 0),
-    );
+        .filter((it) => it.quantity > 0);
+      saveCartToStorage(updated);
+      return updated;
+    });
   };
 
   const handleRemoveFromCart = (productId: string) => {
-    setCartItems((prev) => prev.filter((it) => it.product.id !== productId));
+    setCartItems((prev) => {
+      const updated = prev.filter((it) => it.product.id !== productId);
+      saveCartToStorage(updated);
+      return updated;
+    });
   };
 
   const handleClearCart = () => {
+    clearCartStorage();
     setCartItems([]);
   };
 
   const handleOrderCreated = (orderData: { order: { id: string } }) => {
+    clearCartStorage();
     setActiveOrderId(orderData.order.id);
     setActiveTab('status');
   };

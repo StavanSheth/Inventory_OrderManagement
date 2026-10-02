@@ -71,6 +71,42 @@
       "active": 1
     },
     {
+      "id": "prod-alpha-mango",
+      "branch_id": "branch-alpha",
+      "category_id": "cat-alpha-scoops",
+      "name": "Alphonso Mango Scoop",
+      "description": "Ratnagiri Alphonsos churned fresh, folded into sweet malai cream.",
+      "price": 140,
+      "active": 1
+    },
+    {
+      "id": "prod-alpha-strawberry",
+      "branch_id": "branch-alpha",
+      "category_id": "cat-alpha-scoops",
+      "name": "Strawberry Cream Scoop",
+      "description": "Fresh seasonal strawberries with homemade ripple jam.",
+      "price": 140,
+      "active": 1
+    },
+    {
+      "id": "prod-alpha-coffee",
+      "branch_id": "branch-alpha",
+      "category_id": "cat-alpha-scoops",
+      "name": "Filter Coffee Scoop",
+      "description": "Real South Indian decoction with organic jaggery.",
+      "price": 150,
+      "active": 1
+    },
+    {
+      "id": "prod-alpha-meetha",
+      "branch_id": "branch-alpha",
+      "category_id": "cat-alpha-scoops",
+      "name": "Double ka Meetha Scoop",
+      "description": "Saffron cream, caramelised bread, and toasted almond slivers.",
+      "price": 160,
+      "active": 1
+    },
+    {
       "id": "prod-beta-alphonso",
       "branch_id": "branch-beta",
       "category_id": "cat-beta-scoops",

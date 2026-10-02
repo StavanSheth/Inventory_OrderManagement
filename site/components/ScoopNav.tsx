@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { gsap, prefersReducedMotion } from "@/lib/gsap";
 import { onReveal } from "./ScoopLoader";
 import { nav } from "../content";
+import { loadCartFromStorage } from "@/frontend/modules/customer/cart-storage";
 
 /** Tell the nav something went into the order (the cone builder does this). */
 export const addToOrder = () => window.dispatchEvent(new Event("melt:order"));
@@ -30,11 +31,20 @@ export default function ScoopNav() {
     const offIntro = onReveal(() => {
       if (!prefersReducedMotion()) gsap.from(ref.current, { y: -90, opacity: 0, duration: 0.9, delay: 0.3, ease: "power3.out" });
     });
+
+    const syncCount = () => {
+      const items = loadCartFromStorage();
+      const totalCount = items.reduce((sum, it) => sum + it.quantity, 0);
+      setCount(totalCount);
+    };
+    syncCount();
+
     const onOrder = () => {
-      setCount((n) => n + 1);
+      syncCount();
       setBump((n) => n + 1);
     };
     window.addEventListener("melt:order", onOrder);
+    window.addEventListener("melt:cart-updated", onOrder);
 
     // the section whose top has passed 45% of the screen is "active"
     const targets = nav.links.map((l) => document.querySelector<HTMLElement>(l.href));
@@ -51,6 +61,7 @@ export default function ScoopNav() {
     return () => {
       offIntro();
       window.removeEventListener("melt:order", onOrder);
+      window.removeEventListener("melt:cart-updated", onOrder);
       window.removeEventListener("scroll", onScroll);
     };
   }, []);
@@ -69,8 +80,12 @@ export default function ScoopNav() {
   }, [open]);
 
   const order = (
-    <a href={nav.cta.href} aria-label={`${nav.cta.label}, ${count} items`} className="flex items-center gap-2 rounded-full bg-accent py-2 pr-2 pl-4 text-[14px] font-extrabold text-accent-fg transition-transform hover:scale-[1.04]">
-      {nav.cta.label}
+    <a
+      href={count > 0 ? "/order?tab=cart" : "/order"}
+      aria-label={`${count > 0 ? "Cart" : nav.cta.label}, ${count} items`}
+      className="flex items-center gap-2 rounded-full bg-accent py-2 pr-2 pl-4 text-[14px] font-extrabold text-accent-fg transition-transform hover:scale-[1.04]"
+    >
+      {count > 0 ? "Cart" : nav.cta.label}
       <span key={bump} className={`tnum grid h-7 min-w-7 place-items-center rounded-full bg-white px-1.5 text-[13px] text-accent ${bump ? "order-bump" : ""}`}>
         {count}
       </span>

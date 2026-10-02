@@ -355,6 +355,42 @@ export async function runComprehensiveSeed(db: D1DatabaseLike): Promise<Comprehe
       active: 1,
     },
     {
+      id: 'prod-alpha-mango',
+      branch_id: 'branch-alpha',
+      category_id: 'cat-alpha-scoops',
+      name: 'Alphonso Mango Scoop',
+      description: 'Ratnagiri Alphonsos churned fresh, folded into sweet malai cream.',
+      price: 140,
+      active: 1,
+    },
+    {
+      id: 'prod-alpha-strawberry',
+      branch_id: 'branch-alpha',
+      category_id: 'cat-alpha-scoops',
+      name: 'Strawberry Cream Scoop',
+      description: 'Fresh seasonal strawberries with homemade ripple jam.',
+      price: 140,
+      active: 1,
+    },
+    {
+      id: 'prod-alpha-coffee',
+      branch_id: 'branch-alpha',
+      category_id: 'cat-alpha-scoops',
+      name: 'Filter Coffee Scoop',
+      description: 'Real South Indian decoction with organic jaggery.',
+      price: 150,
+      active: 1,
+    },
+    {
+      id: 'prod-alpha-meetha',
+      branch_id: 'branch-alpha',
+      category_id: 'cat-alpha-scoops',
+      name: 'Double ka Meetha Scoop',
+      description: 'Saffron cream, caramelised bread, and toasted almond slivers.',
+      price: 160,
+      active: 1,
+    },
+    {
       id: 'prod-alpha-seasonal-berry',
       branch_id: 'branch-alpha',
       category_id: 'cat-alpha-archived',
@@ -496,6 +532,10 @@ export async function runComprehensiveSeed(db: D1DatabaseLike): Promise<Comprehe
     { id: 'inv-alpha-belgian-sundae', branch_id: 'branch-alpha', product_id: 'prod-alpha-belgian-sundae', quantity: 4, reorder_threshold: 10 }, // Low stock!
     { id: 'inv-alpha-madagascar-vanilla', branch_id: 'branch-alpha', product_id: 'prod-alpha-madagascar-vanilla', quantity: 0, reorder_threshold: 5 }, // Out of stock!
     { id: 'inv-alpha-dark-chocolate', branch_id: 'branch-alpha', product_id: 'prod-alpha-dark-chocolate', quantity: 38, reorder_threshold: 8 }, // High
+    { id: 'inv-alpha-mango', branch_id: 'branch-alpha', product_id: 'prod-alpha-mango', quantity: 50, reorder_threshold: 12 }, // High
+    { id: 'inv-alpha-strawberry', branch_id: 'branch-alpha', product_id: 'prod-alpha-strawberry', quantity: 45, reorder_threshold: 10 }, // High
+    { id: 'inv-alpha-coffee', branch_id: 'branch-alpha', product_id: 'prod-alpha-coffee', quantity: 40, reorder_threshold: 10 }, // High
+    { id: 'inv-alpha-meetha', branch_id: 'branch-alpha', product_id: 'prod-alpha-meetha', quantity: 35, reorder_threshold: 8 }, // High
     { id: 'inv-alpha-waffle-basket', branch_id: 'branch-alpha', product_id: 'prod-alpha-waffle-basket', quantity: 5, reorder_threshold: 10 }, // Low stock!
     // Beta Inventory
     { id: 'inv-beta-alphonso', branch_id: 'branch-beta', product_id: 'prod-beta-alphonso', quantity: 60, reorder_threshold: 15 }, // High

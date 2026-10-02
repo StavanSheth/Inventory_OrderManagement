@@ -1,14 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { gsap, prefersReducedMotion } from "@/lib/gsap";
 import Heading from "./Heading";
 import { addToOrder } from "./ScoopNav";
 import { builder, flavours, Flavour } from "../content";
+import { addItemsToCartStorage } from "@/frontend/modules/customer/cart-storage";
+import { CartItem } from "@/frontend/modules/customer/catalog-view";
 
 type SelectedScoop = Flavour & { uid: number };
 
 export default function ScoopStacker() {
+  const router = useRouter();
   const root = useRef<HTMLElement>(null);
   const drops = useRef<(HTMLDivElement | null)[]>([]);
   const squish = useRef<(HTMLImageElement | null)[]>([]);
@@ -203,16 +207,89 @@ export default function ScoopStacker() {
             </div>
             <button
               onClick={() => {
-                if (selectedScoops.length > 0 && !ordered.current) {
-                  ordered.current = true;
-                  addToOrder();
-                  setDone(true);
+                if (selectedScoops.length === 0 || ordered.current) return;
+                ordered.current = true;
+                setDone(true);
+                addToOrder();
+
+                const flavourMap: Record<string, { id: string; name: string; price: number; description: string }> = {
+                  pistachio: {
+                    id: 'prod-alpha-pistachio',
+                    name: 'Roasted Pistachio Scoop',
+                    price: 180,
+                    description: 'Slow-churned roasted Sicilian pistachio gelato with crushed kernels.',
+                  },
+                  mango: {
+                    id: 'prod-alpha-mango',
+                    name: 'Alphonso Mango Scoop',
+                    price: 140,
+                    description: 'Ratnagiri Alphonsos churned fresh, folded into sweet malai cream.',
+                  },
+                  strawberry: {
+                    id: 'prod-alpha-strawberry',
+                    name: 'Strawberry Cream Scoop',
+                    price: 140,
+                    description: 'Fresh seasonal strawberries with homemade ripple jam.',
+                  },
+                  coffee: {
+                    id: 'prod-alpha-coffee',
+                    name: 'Filter Coffee Scoop',
+                    price: 150,
+                    description: 'Real South Indian decoction with organic jaggery.',
+                  },
+                  cocoa: {
+                    id: 'prod-alpha-dark-chocolate',
+                    name: '70% Single Origin Dark Chocolate',
+                    price: 190,
+                    description: 'Velvety Ecuadorian dark chocolate churned to silky perfection.',
+                  },
+                  meetha: {
+                    id: 'prod-alpha-meetha',
+                    name: 'Double ka Meetha Scoop',
+                    price: 160,
+                    description: 'Saffron cream, caramelised bread, and toasted almond slivers.',
+                  },
+                };
+
+                const counts: Record<string, number> = {};
+                for (const s of selectedScoops) {
+                  counts[s.id] = (counts[s.id] || 0) + 1;
                 }
+
+                const itemsToAdd: CartItem[] = Object.entries(counts).map(([flavourId, qty]) => {
+                  const meta = flavourMap[flavourId] || {
+                    id: `prod-alpha-${flavourId}`,
+                    name: `${flavourId.charAt(0).toUpperCase() + flavourId.slice(1)} Scoop`,
+                    price: 140,
+                    description: 'Handcrafted fresh scoop.',
+                  };
+                  return {
+                    product: {
+                      id: meta.id,
+                      branch_id: 'branch-alpha',
+                      category_id: 'cat-alpha-scoops',
+                      name: meta.name,
+                      description: meta.description,
+                      price: meta.price,
+                      active: true,
+                      image_url: `/images/melt/scoop-${flavourId}.webp`,
+                      created_at: new Date().toISOString(),
+                      updated_at: new Date().toISOString(),
+                    },
+                    quantity: qty,
+                  };
+                });
+
+                addItemsToCartStorage(itemsToAdd);
+
+                setTimeout(() => {
+                  router.push('/order?tab=cart');
+                }, 300);
               }}
               className={`btn mt-3 w-full justify-center lg:mt-5 ${selectedScoops.length > 0 ? "btn-solid" : "btn-outline opacity-50"}`}
               disabled={selectedScoops.length === 0 || done}
             >
-              {done ? `Added to order ✓` : `${builder.cta} · ₹${total}`}
+              {done ? `Added! Taking you to cart →` : `${builder.cta} · ₹${total}`}
             </button>
           </div>
         </div>
