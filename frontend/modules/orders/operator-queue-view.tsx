@@ -114,7 +114,6 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
 
   const filteredOrders = orders.filter((o) => {
     if (activeTab === 'ALL') return true;
-    if (activeTab === 'PAYMENT_RECORDED') return o.payment_status === PaymentStatus.RECORDED;
     return o.status === activeTab;
   });
 
@@ -141,11 +140,7 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
   const tabs = [
     { id: 'ALL', label: 'All Orders' },
     { id: OrderStatus.PENDING, label: 'Pending' },
-    { id: 'PAYMENT_RECORDED', label: 'Payment Recorded' },
     { id: OrderStatus.CONFIRMED, label: 'Confirmed' },
-    { id: OrderStatus.PREPARING, label: 'Preparing' },
-    { id: OrderStatus.READY, label: 'Ready' },
-    { id: OrderStatus.COMPLETED, label: 'Completed' },
     { id: OrderStatus.EXPIRED, label: 'Expired' },
   ];
 

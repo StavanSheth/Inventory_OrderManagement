@@ -139,24 +139,29 @@ export const OrderHistoryView: React.FC<OrderHistoryViewProps> = ({
           overflowX: 'auto',
         }}
       >
-        {['ALL', OrderStatus.PENDING, OrderStatus.CONFIRMED, OrderStatus.READY, OrderStatus.COMPLETED].map((tab) => (
+        {[
+          { id: 'ALL', label: 'All Orders' },
+          { id: OrderStatus.PENDING, label: 'Pending' },
+          { id: OrderStatus.CONFIRMED, label: 'Confirmed' },
+          { id: OrderStatus.EXPIRED, label: 'Expired' },
+        ].map((tab) => (
           <button
-            key={tab}
-            onClick={() => setStatusFilter(tab)}
+            key={tab.id}
+            onClick={() => setStatusFilter(tab.id)}
             style={{
               padding: '0.45rem 1rem',
               borderRadius: '9999px',
-              border: statusFilter === tab ? 'none' : '1px solid #f4d3dd',
-              background: statusFilter === tab ? '#d61c5d' : '#ffffff',
-              color: statusFilter === tab ? '#ffffff' : '#2b1233',
+              border: statusFilter === tab.id ? 'none' : '1px solid #f4d3dd',
+              background: statusFilter === tab.id ? '#d61c5d' : '#ffffff',
+              color: statusFilter === tab.id ? '#ffffff' : '#2b1233',
               fontSize: '0.8125rem',
               fontWeight: 800,
               cursor: 'pointer',
-              boxShadow: statusFilter === tab ? '0 3px 0 #a3134a' : '0 2px 8px -4px rgba(120,20,60,0.08)',
+              boxShadow: statusFilter === tab.id ? '0 3px 0 #a3134a' : '0 2px 8px -4px rgba(120,20,60,0.08)',
               transition: 'all 0.15s ease',
             }}
           >
-            {tab === 'ALL' ? 'All Orders' : tab.replace('_', ' ')}
+            {tab.label}
           </button>
         ))}
       </div>
