@@ -45,7 +45,7 @@ export default function BunMobileNav({
   }, [pathname]);
 
   const portals = [
-    { href: '/order', label: 'Store', icon: '🍦', active: pathname.startsWith('/order') },
+    { href: '/order', label: 'Menu', icon: '🍨', active: pathname.startsWith('/order') },
     { href: '/operator', label: 'Operator', icon: '📋', active: pathname.startsWith('/operator') },
     { href: '/owner', label: 'Owner', icon: '👑', active: pathname.startsWith('/owner') },
     { href: '/', label: 'Home', icon: '✨', active: pathname === '/' },

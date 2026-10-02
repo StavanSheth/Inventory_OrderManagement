@@ -91,6 +91,10 @@ export class OrdersService implements IOrdersService {
     return this.orderRepo.listByBranchAndStatus(branchId, status, limit);
   }
 
+  async getOrderItemsByOrderIds(orderIds: string[]): Promise<Record<string, OrderItem[]>> {
+    return this.orderRepo.getOrderItemsByOrderIds(orderIds);
+  }
+
   async getOrderDetail(orderId: string): Promise<{ order: Order; items: OrderItem[]; payments: Payment[] } | null> {
     const order = await this.orderRepo.findById(orderId);
     if (!order) return null;

@@ -83,7 +83,10 @@ export async function handleBranchOrdersRoute(
       : undefined;
 
     const orders = await ordersService.listOrdersByStatus(branchId, status, limit);
-    return successResponse(orders, 200, responseHeaders);
+    const orderIds = orders.map((o) => o.id);
+    const itemsMap = await ordersService.getOrderItemsByOrderIds(orderIds);
+    const enriched = orders.map((o) => ({ ...o, items: itemsMap[o.id] ?? [] }));
+    return successResponse(enriched, 200, responseHeaders);
   } catch (error) {
     return handleApiError(error, responseHeaders);
   }

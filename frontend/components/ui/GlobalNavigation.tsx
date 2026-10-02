@@ -186,7 +186,7 @@ export default function GlobalNavigation({
                 gap: '0.35rem',
               }}
             >
-              <span>🍦 Store</span>
+              <span>🍨 Menu</span>
               {cartCount > 0 && isCustomer && (
                 <span style={{ background: '#ffcf4d', color: '#2b1233', fontSize: '0.7rem', fontWeight: 900, borderRadius: '9999px', padding: '0.05rem 0.4rem' }}>
                   {cartCount}

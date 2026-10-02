@@ -5,11 +5,12 @@ import Link from 'next/link';
 import { OperatorQueueView } from '@/frontend/modules/orders';
 import { OperatorInventoryView } from '@/frontend/modules/inventory';
 import { OperatorPromotionsView } from '@/frontend/modules/promotions';
+import { UnifiedLedgerView } from '@/frontend/modules/ledger';
 import { useAuth } from '@/frontend/modules/auth/auth-hooks';
 import { UserRole } from '@/shared/enums/roles.enum';
 import { GlobalNavigation, BunMobileNav } from '@/frontend/components/ui';
 
-type TabType = 'orders' | 'inventory' | 'promotions';
+type TabType = 'orders' | 'inventory' | 'promotions' | 'ledger';
 
 export default function OperatorPortalPage() {
   const [branches, setBranches] = useState<Array<{ id: string; name: string; code: string }>>([]);
@@ -55,6 +56,7 @@ export default function OperatorPortalPage() {
     { id: 'orders', label: 'Live Orders', icon: '📋' },
     { id: 'inventory', label: 'Inventory', icon: '📦' },
     { id: 'promotions', label: 'Promotions', icon: '🏷️' },
+    { id: 'ledger', label: 'Ledger', icon: '📑' },
   ];
 
   return (
@@ -84,7 +86,7 @@ export default function OperatorPortalPage() {
             transition: 'all 0.15s ease',
           }}
         >
-          Customer Store &rarr;
+          Customer Menu &rarr;
         </Link>
       </GlobalNavigation>
 
@@ -158,6 +160,7 @@ export default function OperatorPortalPage() {
             {activeTab === 'orders' && <OperatorQueueView branchId={branchId} />}
             {activeTab === 'inventory' && <OperatorInventoryView branchId={branchId} />}
             {activeTab === 'promotions' && <OperatorPromotionsView branchId={branchId} />}
+            {activeTab === 'ledger' && <UnifiedLedgerView branchId={branchId} />}
           </>
         ) : (
           <div className="app-card" style={{ textAlign: 'center', padding: '3.5rem 1.5rem', color: '#6f5569' }}>

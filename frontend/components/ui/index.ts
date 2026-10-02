@@ -10,4 +10,5 @@ export { default as StatusBadge } from './StatusBadge';
 export { default as SearchInput } from './SearchInput';
 export { default as ResponsiveDialog } from './ResponsiveDialog';
 export { default as EmptyState } from './EmptyState';
+export { default as DeviceLockOverlay } from './DeviceLockOverlay';
 

@@ -108,6 +108,21 @@ export class OrderRepository extends BaseRepository {
     return res.results;
   }
 
+  async getOrderItemsByOrderIds(orderIds: string[]): Promise<Record<string, OrderItem[]>> {
+    if (orderIds.length === 0) return {};
+    const placeholders = orderIds.map(() => '?').join(',');
+    const res = await this.db
+      .prepare(`SELECT * FROM order_items WHERE order_id IN (${placeholders}) ORDER BY created_at ASC`)
+      .bind(...orderIds)
+      .all<OrderItem>();
+    const grouped: Record<string, OrderItem[]> = {};
+    for (const item of res.results) {
+      if (!grouped[item.order_id]) grouped[item.order_id] = [];
+      grouped[item.order_id].push(item);
+    }
+    return grouped;
+  }
+
   async countOrderHistory(options: {
     branchId?: string;
     customerUserId?: string;

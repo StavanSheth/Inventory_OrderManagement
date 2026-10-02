@@ -189,6 +189,84 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onBac
         </div>
       </div>
 
+      {/* Synced Order Workflow Stages */}
+      <div className="bg-[#fff1f4] p-4 rounded-2xl border border-[#f4d3dd]">
+        <div className="flex justify-between items-center text-xs font-black uppercase tracking-wider text-[#6f5569] mb-3">
+          <span>Live Order Tracking</span>
+          <span className="text-[#d61c5d]">
+            {order.status === OrderStatus.READY
+              ? '🎉 Ready for pickup!'
+              : order.status === OrderStatus.PREPARING
+              ? '🍳 Crafting scoops...'
+              : order.status === OrderStatus.CONFIRMED
+              ? '💳 Payment confirmed'
+              : order.status === OrderStatus.COMPLETED
+              ? '✨ Collected'
+              : 'Awaiting payment'}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {[
+            { key: OrderStatus.CONFIRMED, label: '1. Payment done', icon: '💳' },
+            { key: OrderStatus.PREPARING, label: '2. Preparing', icon: '🍳' },
+            { key: OrderStatus.READY, label: '3. Ready', icon: '🍦' },
+            { key: OrderStatus.COMPLETED, label: '4. Collected', icon: '🛍️' },
+          ].map((st) => {
+            const sequence = [
+              OrderStatus.PENDING,
+              OrderStatus.CONFIRMED,
+              OrderStatus.PREPARING,
+              OrderStatus.READY,
+              OrderStatus.COMPLETED,
+            ];
+            const currentIdx = sequence.indexOf(order.status as OrderStatus);
+            const stageIdx = sequence.indexOf(st.key);
+            const isDone = currentIdx >= stageIdx;
+            const isCurrent = currentIdx === stageIdx - 1;
+
+            return (
+              <div
+                key={st.key}
+                className={`py-2 px-3 rounded-xl text-center text-xs font-black flex items-center justify-center gap-1.5 transition-all ${
+                  isDone
+                    ? 'bg-[#dcfce7] border border-[#86efac] text-[#166534]'
+                    : isCurrent
+                    ? st.key === OrderStatus.PREPARING
+                      ? 'bg-[#facc15] border border-[#eab308] text-[#713f12] shadow-sm animate-pulse'
+                      : 'bg-[#d61c5d] text-white shadow-sm'
+                    : 'bg-white/70 border border-[#f4d3dd] text-[#9d8695]'
+                }`}
+              >
+                <span>{isDone ? '✓' : st.icon}</span>
+                <span>{st.label}</span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Realtime Alert when Operator marks Ready */}
+        {order.status === OrderStatus.READY && (
+          <div className="mt-3.5 p-3.5 bg-[#dbeafe] border-2 border-[#3b82f6] rounded-xl text-center animate-bounce">
+            <span className="font-display text-base font-black text-[#1e40af] block">
+              🎉 YOUR ORDER IS READY AT THE COUNTER!
+            </span>
+            <span className="text-xs font-bold text-[#1e3a8a] mt-0.5 block">
+              Please present Order #{order.order_number} to the staff to collect your treat!
+            </span>
+          </div>
+        )}
+
+        {/* Preparing Alert */}
+        {order.status === OrderStatus.PREPARING && (
+          <div className="mt-3 p-3 bg-[#fef08a] border border-[#eab308] rounded-xl text-center">
+            <span className="text-xs font-extrabold text-[#854d0e]">
+              🍳 Our scoop masters are preparing your fresh ice cream right now!
+            </span>
+          </div>
+        )}
+      </div>
+
       {/* Expiry Countdown Box for Pending Orders */}
       {order.status === OrderStatus.PENDING && (
         <div className="p-5 bg-[#ffcf4d]/25 border border-[#ffcf4d] rounded-2xl flex items-center justify-between">

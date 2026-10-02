@@ -143,6 +143,7 @@ export interface Order {
   cancelled_at?: IsoDateTimeUtc | null;
   expired_at?: IsoDateTimeUtc | null;
   last_edited_at?: IsoDateTimeUtc | null;
+  items?: OrderItem[];
   created_at: IsoDateTimeUtc;
   updated_at: IsoDateTimeUtc;
 }

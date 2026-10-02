@@ -72,8 +72,11 @@ export async function handleCustomerOrdersRoute(
 
     const targetUserId = requestedCustomerId ?? userContext.userId;
     const orders = await ordersService.listCustomerOrders(targetUserId, limit);
+    const orderIds = orders.map((o) => o.id);
+    const itemsMap = await ordersService.getOrderItemsByOrderIds(orderIds);
+    const enriched = orders.map((o) => ({ ...o, items: itemsMap[o.id] ?? [] }));
 
-    return successResponse(orders, 200, responseHeaders);
+    return successResponse(enriched, 200, responseHeaders);
   } catch (error) {
     return handleApiError(error, responseHeaders);
   }

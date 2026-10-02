@@ -30,6 +30,9 @@ export const BranchSettingsView: React.FC<BranchSettingsViewProps> = ({
   const [isOperational, setIsOperational] = useState<boolean>(true);
   const [openingTime, setOpeningTime] = useState<string>('10:00');
   const [closingTime, setClosingTime] = useState<string>('23:00');
+  const [devicePin, setDevicePin] = useState<string>('1234');
+  const [newDevicePin, setNewDevicePin] = useState<string>('');
+  const [pinChangeMsg, setPinChangeMsg] = useState<string | null>(null);
 
   const fetchBranchDetail = useCallback(async () => {
     if (!selectedBranchId || selectedBranchId === 'ALL') return;
@@ -76,7 +79,27 @@ export const BranchSettingsView: React.FC<BranchSettingsViewProps> = ({
 
   useEffect(() => {
     fetchBranchDetail();
+    try {
+      const stored = localStorage.getItem('melt_device_lock_pin');
+      if (stored) setDevicePin(stored);
+    } catch {}
   }, [fetchBranchDetail]);
+
+  const handleUpdatePin = () => {
+    if (!newDevicePin || newDevicePin.length < 4) {
+      setPinChangeMsg('PIN must be at least 4 digits');
+      return;
+    }
+    try {
+      localStorage.setItem('melt_device_lock_pin', newDevicePin);
+      setDevicePin(newDevicePin);
+      setNewDevicePin('');
+      setPinChangeMsg('Device lock PIN updated successfully!');
+      setTimeout(() => setPinChangeMsg(null), 3500);
+    } catch {
+      setPinChangeMsg('Failed to persist PIN');
+    }
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -374,6 +397,75 @@ export const BranchSettingsView: React.FC<BranchSettingsViewProps> = ({
                 }}
               />
             </div>
+          </div>
+        </div>
+
+        <hr style={{ border: 'none', borderTop: '1px solid #fceef2', margin: 0 }} />
+
+        {/* Device Lock & PIN Security Settings */}
+        <div>
+          <h3 style={{ fontSize: '1.125rem', fontWeight: 800, color: '#2b1233', margin: '0 0 0.25rem 0' }}>
+            🔒 Staff & Owner Device Lock Security
+          </h3>
+          <p style={{ fontSize: '0.8125rem', color: '#6f5569', margin: 0 }}>
+            Configure default device lock authentication and security PIN for Operator and Owner desks. Can be changed from settings only.
+          </p>
+
+          <div style={{ marginTop: '1rem', background: '#fff1f4', border: '1px solid #f4d3dd', borderRadius: '1rem', padding: '1.25rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div>
+                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#6f5569', textTransform: 'uppercase' }}>
+                  Current Device Lock PIN
+                </span>
+                <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#2b1233', letterSpacing: '0.15em', marginTop: '0.15rem' }}>
+                  •••• ({devicePin.length} digits configured)
+                </div>
+              </div>
+              <span style={{ fontSize: '0.75rem', background: '#dcfce7', color: '#166534', padding: '0.25rem 0.75rem', borderRadius: '9999px', fontWeight: 800, border: '1px solid #86efac' }}>
+                ✓ Default Device Lock Allowed
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <input
+                type="password"
+                maxLength={6}
+                placeholder="Enter new 4-6 digit PIN"
+                value={newDevicePin}
+                onChange={(e) => setNewDevicePin(e.target.value.replace(/\D/g, ''))}
+                style={{
+                  padding: '0.55rem 0.85rem',
+                  borderRadius: '0.5rem',
+                  border: '1px solid #f4d3dd',
+                  fontSize: '0.875rem',
+                  width: '200px',
+                  background: '#ffffff',
+                }}
+              />
+              <button
+                type="button"
+                onClick={handleUpdatePin}
+                style={{
+                  padding: '0.55rem 1.25rem',
+                  borderRadius: '9999px',
+                  border: 'none',
+                  background: '#d61c5d',
+                  color: '#ffffff',
+                  fontWeight: 800,
+                  fontSize: '0.8125rem',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 0 #a3134a',
+                }}
+              >
+                Update PIN
+              </button>
+            </div>
+
+            {pinChangeMsg && (
+              <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', fontWeight: 700, color: pinChangeMsg.includes('success') ? '#16a34a' : '#e11d48' }}>
+                {pinChangeMsg}
+              </div>
+            )}
           </div>
         </div>
 

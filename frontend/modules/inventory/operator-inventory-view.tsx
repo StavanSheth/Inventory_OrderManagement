@@ -645,7 +645,7 @@ export const OperatorInventoryView: React.FC<OperatorInventoryViewProps> = ({ br
       {/* Recipe / BOM Management Modal */}
       {recipeProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#2b1233]/45 backdrop-blur-sm p-4">
-          <div className="bg-white border border-[#f4d3dd] rounded-3xl p-6 md:p-8 max-w-lg w-full shadow-2xl space-y-4 text-[#2b1233] max-h-[90vh] overflow-y-auto">
+          <div className="bg-white border border-[#f4d3dd] rounded-3xl p-6 md:p-8 max-w-xl w-full shadow-2xl space-y-4 text-[#2b1233] max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center border-b border-[#f4d3dd] pb-3">
               <div>
                 <h3 className="font-display text-lg font-bold text-[#2b1233]">Product BOM Recipe</h3>
@@ -710,7 +710,7 @@ export const OperatorInventoryView: React.FC<OperatorInventoryViewProps> = ({ br
                               </option>
                             ))}
                           </select>
-                          <div className="flex items-center gap-1 w-28">
+                          <div className="flex items-center gap-1.5 w-36 shrink-0">
                             <input
                               type="number"
                               step="any"
@@ -722,9 +722,9 @@ export const OperatorInventoryView: React.FC<OperatorInventoryViewProps> = ({ br
                                 updated[idx].quantityRequired = parseFloat(e.target.value) || 0;
                                 setRecipeComponents(updated);
                               }}
-                              className="w-full px-2.5 py-1.5 bg-white border border-[#f4d3dd] rounded-xl text-xs font-mono text-[#2b1233] focus:outline-none focus:border-[#d61c5d]"
+                              className="w-20 px-2.5 py-1.5 bg-white border border-[#f4d3dd] rounded-xl text-xs font-mono text-[#2b1233] focus:outline-none focus:border-[#d61c5d]"
                             />
-                            <span className="text-[10px] text-[#6f5569] font-bold uppercase truncate">
+                            <span className="text-xs text-[#6f5569] font-bold uppercase whitespace-nowrap bg-white px-2 py-1 rounded-lg border border-[#f4d3dd]">
                               {selectedMat?.unit ?? 'units'}
                             </span>
                           </div>

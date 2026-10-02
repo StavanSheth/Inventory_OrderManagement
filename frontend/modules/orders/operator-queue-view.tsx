@@ -7,8 +7,6 @@ import { Order, OrderItem, Payment } from '../../../shared/types/entities.types'
 import { OrderStatus, PaymentStatus, PaymentMethod } from '../../../shared/enums/order.enum';
 import { ReceptionPaymentDialog } from './reception-payment-dialog';
 import { OperatorOrderEditor } from './operator-order-editor';
-import { OrderDetailModal } from './order-detail-modal';
-import { isOrderEditable } from '../../../shared/business-rules/order-rules';
 
 interface OperatorQueueViewProps {
   branchId: string;
@@ -34,7 +32,6 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
   const [advancingOrderId, setAdvancingOrderId] = useState<string | null>(null);
 
   // Modal states
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [paymentModalData, setPaymentModalData] = useState<{ order: Order; payments: Payment[] } | null>(null);
   const [editModalData, setEditModalData] = useState<{
     order: Order;
@@ -95,35 +92,6 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
     };
   }, [branchId, fetchOrders]);
 
-  const handleOpenPayment = async (order: Order) => {
-    try {
-      const res = await orderApiClient.getBranchOrderDetail(branchId, order.id);
-      if (res.success) {
-        setPaymentModalData({
-          order: res.data.order,
-          payments: res.data.payments,
-        });
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleOpenEdit = async (order: Order) => {
-    try {
-      const res = await orderApiClient.getBranchOrderDetail(branchId, order.id);
-      if (res.success) {
-        setEditModalData({
-          order: res.data.order,
-          items: res.data.items,
-          payments: res.data.payments,
-        });
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
   // Move order through its lifecycle stages
   const handleAdvanceStage = async (order: Order, targetStatus: OrderStatus) => {
     if (advancingOrderId) return;
@@ -132,21 +100,35 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
 
     try {
       if (targetStatus === OrderStatus.CONFIRMED) {
-        // Confirming order requires verified payment
+        // If payment is pending at reception, record and verify cash atomically
         if (
           order.payment_status !== PaymentStatus.VERIFIED &&
           order.payment_status !== PaymentStatus.COMPLETED
         ) {
-          // Open payment modal if payment is still pending
-          await handleOpenPayment(order);
-          setAdvancingOrderId(null);
-          return;
+          const recRes = await orderApiClient.recordPayment(branchId, order.id, {
+            method: PaymentMethod.CASH,
+            amount: order.total,
+            notes: 'Counter reception payment',
+          });
+
+          if (recRes.success) {
+            await orderApiClient.verifyPayment(
+              branchId,
+              order.id,
+              recRes.data.payment.id,
+              'Counter verified'
+            );
+          }
         }
 
         const res = await orderApiClient.confirmOrder(branchId, order.id);
         if (res.success) {
           setOrders((prev) =>
-            prev.map((o) => (o.id === order.id ? { ...o, status: OrderStatus.CONFIRMED } : o))
+            prev.map((o) =>
+              o.id === order.id
+                ? { ...o, status: OrderStatus.CONFIRMED, payment_status: PaymentStatus.VERIFIED }
+                : o
+            )
           );
           await fetchOrders();
         } else {
@@ -174,63 +156,9 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
     }
   };
 
-  // Quick 1-click cash recording, verification, and confirmation for counter reception
-  const handleQuickCashConfirm = async (order: Order) => {
-    if (advancingOrderId) return;
-    setAdvancingOrderId(order.id);
-    setError(null);
-
-    try {
-      const recRes = await orderApiClient.recordPayment(branchId, order.id, {
-        method: PaymentMethod.CASH,
-        amount: order.total,
-        notes: 'Quick cash payment verified at reception counter',
-      });
-
-      if (!recRes.success) {
-        setError(recRes.error.message || 'Failed to record cash payment');
-        setAdvancingOrderId(null);
-        return;
-      }
-
-      const verRes = await orderApiClient.verifyPayment(
-        branchId,
-        order.id,
-        recRes.data.payment.id,
-        'Quick verified at reception counter',
-      );
-
-      if (!verRes.success) {
-        setError(verRes.error.message || 'Failed to verify payment');
-        setAdvancingOrderId(null);
-        return;
-      }
-
-      const confRes = await orderApiClient.confirmOrder(branchId, order.id);
-      if (!confRes.success) {
-        setError(confRes.error.message || 'Failed to confirm order');
-        setAdvancingOrderId(null);
-        return;
-      }
-
-      setOrders((prev) =>
-        prev.map((o) =>
-          o.id === order.id
-            ? { ...o, status: OrderStatus.CONFIRMED, payment_status: PaymentStatus.VERIFIED }
-            : o
-        )
-      );
-      await fetchOrders();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error processing quick cash confirmation');
-    } finally {
-      setAdvancingOrderId(null);
-    }
-  };
-
+  // Tabs: removed 'Pending' as requested by user
   const tabs = [
     { id: 'ALL', label: 'All Orders' },
-    { id: OrderStatus.PENDING, label: 'Pending' },
     { id: OrderStatus.CONFIRMED, label: 'Payment done' },
     { id: OrderStatus.PREPARING, label: 'Preparing' },
     { id: OrderStatus.READY, label: 'Ready' },
@@ -256,6 +184,15 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
     return o.status === activeTab;
   });
 
+  // Sort: Latest orders on top, Expired/Cancelled at bottom
+  const sortedOrders = [...filteredOrders].sort((a, b) => {
+    const aTerminal = a.status === OrderStatus.EXPIRED || a.status === OrderStatus.CANCELLED;
+    const bTerminal = b.status === OrderStatus.EXPIRED || b.status === OrderStatus.CANCELLED;
+    if (aTerminal && !bTerminal) return 1;
+    if (!aTerminal && bTerminal) return -1;
+    return new Date(b.placed_at).getTime() - new Date(a.placed_at).getTime();
+  });
+
   const getStatusBadge = (status: OrderStatus) => {
     switch (status) {
       case OrderStatus.PENDING:
@@ -263,7 +200,7 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
       case OrderStatus.CONFIRMED:
         return { label: 'Payment done', bg: '#dcfce7', text: '#166534' };
       case OrderStatus.PREPARING:
-        return { label: 'Preparing', bg: '#fef3c7', text: '#92400e' };
+        return { label: 'Preparing', bg: '#fef08a', text: '#854d0e' };
       case OrderStatus.READY:
         return { label: 'Ready', bg: '#dbeafe', text: '#1e40af' };
       case OrderStatus.COMPLETED:
@@ -434,7 +371,7 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
       )}
 
       {/* Empty State */}
-      {!loading && filteredOrders.length === 0 && (
+      {!loading && sortedOrders.length === 0 && (
         <div
           style={{
             padding: '3rem',
@@ -450,8 +387,8 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
         </div>
       )}
 
-      {/* Orders Grid */}
-      {!loading && filteredOrders.length > 0 && (
+      {/* Orders Grid - Sorted with latest on top, expired on bottom */}
+      {!loading && sortedOrders.length > 0 && (
         <div
           style={{
             display: 'grid',
@@ -459,16 +396,13 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
             gap: '1.25rem',
           }}
         >
-          {filteredOrders.map((order) => {
+          {sortedOrders.map((order) => {
             const badge = getStatusBadge(order.status);
             const isPending = order.status === OrderStatus.PENDING;
             const isConfirmed = order.status === OrderStatus.CONFIRMED;
-            const isPreparing = order.status === OrderStatus.PREPARING;
-            const isReady = order.status === OrderStatus.READY;
             const isCompleted = order.status === OrderStatus.COMPLETED;
             const isTerminalExpired =
               order.status === OrderStatus.EXPIRED || order.status === OrderStatus.CANCELLED;
-            const canEdit = isOrderEditable(order);
             const isAdvancing = advancingOrderId === order.id;
             const isPaymentVerified =
               order.payment_status === PaymentStatus.VERIFIED ||
@@ -479,7 +413,7 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
                 key={order.id}
                 style={{
                   background: '#ffffff',
-                  border: '1px solid #f4d3dd',
+                  border: isConfirmed ? '1.5px solid #86efac' : '1px solid #f4d3dd',
                   borderRadius: '1.5rem',
                   padding: '1.5rem',
                   boxShadow: '0 8px 24px -12px rgba(120, 20, 60, 0.12)',
@@ -487,6 +421,7 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
                   flexDirection: 'column',
                   justifyContent: 'space-between',
                   transition: 'all 0.15s ease',
+                  opacity: isTerminalExpired ? 0.75 : 1,
                 }}
               >
                 <div>
@@ -514,6 +449,7 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
                         {new Date(order.placed_at).toLocaleTimeString()} &bull; ID: {order.id.slice(0, 8)}...
                       </div>
                     </div>
+                    {/* Right Top Status Tag (Properly synced) */}
                     <span
                       style={{
                         padding: '0.25rem 0.75rem',
@@ -522,19 +458,20 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
                         color: badge.text,
                         fontSize: '0.75rem',
                         fontWeight: 800,
+                        border: '1px solid rgba(0,0,0,0.05)',
                       }}
                     >
                       {badge.label}
                     </span>
                   </div>
 
-                  {/* Order Details Box */}
+                  {/* Order Summary Box */}
                   <div
                     style={{
                       background: '#fff1f4',
-                      padding: '0.85rem 1rem',
+                      padding: '0.75rem 1rem',
                       borderRadius: '1rem',
-                      marginBottom: '1rem',
+                      marginBottom: '0.75rem',
                       fontSize: '0.8125rem',
                       border: '1px solid #f4d3dd',
                     }}
@@ -578,7 +515,7 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
                     {isPending && (
                       <div
                         style={{
-                          marginTop: '0.45rem',
+                          marginTop: '0.35rem',
                           color: '#d61c5d',
                           fontSize: '0.75rem',
                           fontWeight: 700,
@@ -589,8 +526,58 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
                     )}
                   </div>
 
+                  {/* Order Details / Items Visible Directly on Card */}
+                  {order.items && order.items.length > 0 && (
+                    <div
+                      style={{
+                        background: '#ffffff',
+                        border: '1px solid #f4d3dd',
+                        borderRadius: '0.85rem',
+                        padding: '0.75rem',
+                        marginBottom: '0.85rem',
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: '0.6875rem',
+                          fontWeight: 800,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.05em',
+                          color: '#6f5569',
+                          marginBottom: '0.35rem',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                        }}
+                      >
+                        <span>Order Items ({order.items.reduce((sum, it) => sum + it.quantity, 0)})</span>
+                        <span>₹{order.total.toFixed(2)}</span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                        {order.items.map((it) => (
+                          <div
+                            key={it.id}
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              fontSize: '0.78rem',
+                            }}
+                          >
+                            <span style={{ fontWeight: 700, color: '#2b1233' }}>
+                              🍦 {it.product_name_snapshot}{' '}
+                              <span style={{ color: '#d61c5d', fontWeight: 800 }}>×{it.quantity}</span>
+                            </span>
+                            <span style={{ fontWeight: 800, color: '#6f5569' }}>
+                              ₹{it.line_total.toFixed(2)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Stage Buttons Workflow Section */}
-                  <div style={{ marginBottom: '1.15rem' }}>
+                  <div style={{ marginBottom: '0.5rem' }}>
                     <div
                       style={{
                         display: 'flex',
@@ -601,7 +588,7 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
                         textTransform: 'uppercase',
                         letterSpacing: '0.05em',
                         color: '#6f5569',
-                        marginBottom: '0.5rem',
+                        marginBottom: '0.45rem',
                       }}
                     >
                       <span>Order Stages</span>
@@ -610,7 +597,7 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
                           ? '✓ Fulfilled'
                           : isTerminalExpired
                           ? 'Voided'
-                          : 'Click next stage to move'}
+                          : 'Click stage to move'}
                       </span>
                     </div>
 
@@ -645,6 +632,9 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
                           const isActive = state === 'active';
                           const isButtonPendingAdvancing = isAdvancing && isActive;
 
+                          // When payment done is clicked, preparing button becomes YELLOW
+                          const isPreparingYellow = st.key === 'PREPARING' && isActive;
+
                           if (isDone) {
                             return (
                               <button
@@ -652,12 +642,12 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
                                 type="button"
                                 disabled
                                 style={{
-                                  padding: '0.45rem 0.5rem',
+                                  padding: '0.5rem',
                                   background: '#dcfce7',
                                   border: '1px solid #86efac',
                                   borderRadius: '0.75rem',
                                   color: '#166534',
-                                  fontSize: '0.72rem',
+                                  fontSize: '0.75rem',
                                   fontWeight: 800,
                                   cursor: 'default',
                                   display: 'flex',
@@ -682,15 +672,27 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
                                 onClick={() => handleAdvanceStage(order, st.targetStatus)}
                                 title={`Advance order to ${st.label}`}
                                 style={{
-                                  padding: '0.45rem 0.5rem',
-                                  background: '#d61c5d',
-                                  border: 'none',
+                                  padding: '0.5rem',
+                                  background: isPreparingYellow
+                                    ? '#facc15'
+                                    : st.key === 'READY'
+                                    ? '#2563eb'
+                                    : st.key === 'COMPLETED'
+                                    ? '#059669'
+                                    : '#d61c5d',
+                                  border: isPreparingYellow ? '1.5px solid #eab308' : 'none',
                                   borderRadius: '0.75rem',
-                                  color: '#ffffff',
-                                  fontSize: '0.72rem',
-                                  fontWeight: 800,
+                                  color: isPreparingYellow ? '#713f12' : '#ffffff',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 900,
                                   cursor: isAdvancing ? 'wait' : 'pointer',
-                                  boxShadow: '0 3px 0 #a3134a',
+                                  boxShadow: isPreparingYellow
+                                    ? '0 3px 0 #ca8a04'
+                                    : st.key === 'READY'
+                                    ? '0 3px 0 #1d4ed8'
+                                    : st.key === 'COMPLETED'
+                                    ? '0 3px 0 #047857'
+                                    : '0 3px 0 #a3134a',
                                   display: 'flex',
                                   alignItems: 'center',
                                   justifyContent: 'center',
@@ -716,12 +718,12 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
                               type="button"
                               disabled
                               style={{
-                                padding: '0.45rem 0.5rem',
+                                padding: '0.5rem',
                                 background: '#fcf8fa',
                                 border: '1px dashed #eedbe3',
                                 borderRadius: '0.75rem',
                                 color: '#9d8695',
-                                fontSize: '0.72rem',
+                                fontSize: '0.75rem',
                                 fontWeight: 700,
                                 cursor: 'not-allowed',
                                 display: 'flex',
@@ -737,262 +739,12 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
                         })}
                       </div>
                     )}
-
-                    {/* Primary Next Action Banner / Prominent Button */}
-                    {!isTerminalExpired && !isCompleted && (
-                      <div style={{ marginTop: '0.65rem' }}>
-                        {isPending && (
-                          <div style={{ display: 'flex', gap: '0.4rem', flexDirection: 'column' }}>
-                            {isPaymentVerified ? (
-                              <button
-                                type="button"
-                                disabled={isAdvancing}
-                                onClick={() => handleAdvanceStage(order, OrderStatus.CONFIRMED)}
-                                style={{
-                                  width: '100%',
-                                  padding: '0.55rem',
-                                  background: '#166534',
-                                  color: '#ffffff',
-                                  border: 'none',
-                                  borderRadius: '9999px',
-                                  fontWeight: 800,
-                                  fontSize: '0.75rem',
-                                  cursor: isAdvancing ? 'wait' : 'pointer',
-                                  boxShadow: '0 3px 0 #14532d',
-                                  transition: 'all 0.15s ease',
-                                }}
-                              >
-                                {isAdvancing
-                                  ? 'Confirming Order...'
-                                  : '✓ Confirm Order (Payment Done)'}
-                              </button>
-                            ) : (
-                              <div style={{ display: 'flex', gap: '0.4rem' }}>
-                                <button
-                                  type="button"
-                                  disabled={isAdvancing}
-                                  onClick={() => handleQuickCashConfirm(order)}
-                                  style={{
-                                    flex: 1,
-                                    padding: '0.55rem 0.65rem',
-                                    background: '#16a34a',
-                                    color: '#ffffff',
-                                    border: 'none',
-                                    borderRadius: '9999px',
-                                    fontWeight: 800,
-                                    fontSize: '0.75rem',
-                                    cursor: isAdvancing ? 'wait' : 'pointer',
-                                    boxShadow: '0 3px 0 #15803d',
-                                    transition: 'all 0.15s ease',
-                                    whiteSpace: 'nowrap',
-                                  }}
-                                >
-                                  {isAdvancing ? 'Processing...' : '⚡ Quick Cash & Confirm'}
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={isAdvancing}
-                                  onClick={() => handleOpenPayment(order)}
-                                  style={{
-                                    flex: 1,
-                                    padding: '0.55rem 0.65rem',
-                                    background: '#d61c5d',
-                                    color: '#ffffff',
-                                    border: 'none',
-                                    borderRadius: '9999px',
-                                    fontWeight: 800,
-                                    fontSize: '0.75rem',
-                                    cursor: 'pointer',
-                                    boxShadow: '0 3px 0 #a3134a',
-                                    transition: 'all 0.15s ease',
-                                    whiteSpace: 'nowrap',
-                                  }}
-                                >
-                                  💳 Pay / UPI / Card
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {isConfirmed && (
-                          <button
-                            type="button"
-                            disabled={isAdvancing}
-                            onClick={() => handleAdvanceStage(order, OrderStatus.PREPARING)}
-                            style={{
-                              width: '100%',
-                              padding: '0.55rem',
-                              background: '#d61c5d',
-                              color: '#ffffff',
-                              border: 'none',
-                              borderRadius: '9999px',
-                              fontWeight: 800,
-                              fontSize: '0.75rem',
-                              cursor: isAdvancing ? 'wait' : 'pointer',
-                              boxShadow: '0 3px 0 #a3134a',
-                              transition: 'all 0.15s ease',
-                            }}
-                          >
-                            {isAdvancing ? 'Starting...' : '🍳 Start Preparing →'}
-                          </button>
-                        )}
-
-                        {isPreparing && (
-                          <button
-                            type="button"
-                            disabled={isAdvancing}
-                            onClick={() => handleAdvanceStage(order, OrderStatus.READY)}
-                            style={{
-                              width: '100%',
-                              padding: '0.55rem',
-                              background: '#2563eb',
-                              color: '#ffffff',
-                              border: 'none',
-                              borderRadius: '9999px',
-                              fontWeight: 800,
-                              fontSize: '0.75rem',
-                              cursor: isAdvancing ? 'wait' : 'pointer',
-                              boxShadow: '0 3px 0 #1d4ed8',
-                              transition: 'all 0.15s ease',
-                            }}
-                          >
-                            {isAdvancing ? 'Marking...' : '🍦 Mark as Ready →'}
-                          </button>
-                        )}
-
-                        {isReady && (
-                          <button
-                            type="button"
-                            disabled={isAdvancing}
-                            onClick={() => handleAdvanceStage(order, OrderStatus.COMPLETED)}
-                            style={{
-                              width: '100%',
-                              padding: '0.55rem',
-                              background: '#059669',
-                              color: '#ffffff',
-                              border: 'none',
-                              borderRadius: '9999px',
-                              fontWeight: 800,
-                              fontSize: '0.75rem',
-                              cursor: isAdvancing ? 'wait' : 'pointer',
-                              boxShadow: '0 3px 0 #047857',
-                              transition: 'all 0.15s ease',
-                            }}
-                          >
-                            {isAdvancing ? 'Completing...' : '🛍️ Mark Collected (All done) ✓'}
-                          </button>
-                        )}
-                      </div>
-                    )}
-
-                    {isCompleted && (
-                      <div
-                        style={{
-                          marginTop: '0.65rem',
-                          padding: '0.55rem',
-                          background: '#dcfce7',
-                          border: '1px solid #86efac',
-                          borderRadius: '9999px',
-                          textAlign: 'center',
-                          color: '#166534',
-                          fontWeight: 800,
-                          fontSize: '0.75rem',
-                        }}
-                      >
-                        🎉 All done & Collected
-                      </div>
-                    )}
                   </div>
-                </div>
-
-                {/* Secondary Action Buttons */}
-                <div
-                  style={{
-                    display: 'flex',
-                    gap: '0.5rem',
-                    flexWrap: 'wrap',
-                    borderTop: '1px solid #f4d3dd',
-                    paddingTop: '0.85rem',
-                  }}
-                >
-                  <button
-                    onClick={() => setSelectedOrderId(order.id)}
-                    style={{
-                      flex: 1,
-                      padding: '0.5rem',
-                      background: '#fff1f4',
-                      color: '#2b1233',
-                      border: '1px solid #f4d3dd',
-                      borderRadius: '9999px',
-                      fontSize: '0.75rem',
-                      fontWeight: 800,
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease',
-                    }}
-                  >
-                    View Detail
-                  </button>
-
-                  <button
-                    onClick={() => handleOpenPayment(order)}
-                    style={{
-                      flex: 1,
-                      padding: '0.5rem',
-                      background: '#ffffff',
-                      color: '#d61c5d',
-                      border: '1px solid #f4d3dd',
-                      borderRadius: '9999px',
-                      fontSize: '0.75rem',
-                      fontWeight: 800,
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease',
-                    }}
-                  >
-                    Payment
-                  </button>
-
-                  {canEdit && (
-                    <button
-                      onClick={() => handleOpenEdit(order)}
-                      style={{
-                        padding: '0.5rem 0.9rem',
-                        background: '#ffffff',
-                        color: '#2b1233',
-                        border: '1px solid #f4d3dd',
-                        borderRadius: '9999px',
-                        fontSize: '0.75rem',
-                        fontWeight: 800,
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease',
-                      }}
-                    >
-                      Edit
-                    </button>
-                  )}
                 </div>
               </div>
             );
           })}
         </div>
-      )}
-
-      {/* Modals */}
-      {selectedOrderId && (
-        <OrderDetailModal
-          branchId={branchId}
-          orderId={selectedOrderId}
-          onClose={() => setSelectedOrderId(null)}
-          onOpenPayment={(ord, pays) => {
-            setSelectedOrderId(null);
-            setPaymentModalData({ order: ord, payments: pays });
-          }}
-          onOpenEdit={(ord, itms, pays) => {
-            setSelectedOrderId(null);
-            setEditModalData({ order: ord, items: itms, payments: pays });
-          }}
-          onStatusChanged={fetchOrders}
-        />
       )}
 
       {paymentModalData && (
