@@ -33,6 +33,48 @@ export const UnifiedOrderHistoryView: React.FC<UnifiedOrderHistoryViewProps> = (
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [customerFilter, setCustomerFilter] = useState<string>('');
+  const [activeDatePreset, setActiveDatePreset] = useState<string>('ALL');
+
+  const applyDatePreset = (preset: 'ALL' | 'TODAY' | 'THIS_WEEK' | 'THIS_MONTH' | 'LAST_3_MONTHS' | 'LAST_6_MONTHS' | 'LAST_12_MONTHS') => {
+    setActiveDatePreset(preset);
+    const now = new Date();
+    const toYMD = (d: Date) => d.toISOString().split('T')[0];
+    const todayStr = toYMD(now);
+
+    if (preset === 'ALL') {
+      setStartDate('');
+      setEndDate('');
+    } else if (preset === 'TODAY') {
+      setStartDate(todayStr);
+      setEndDate(todayStr);
+    } else if (preset === 'THIS_WEEK') {
+      const day = now.getDay();
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+      const startOfWeek = new Date(now.getFullYear(), now.getMonth(), diff);
+      setStartDate(toYMD(startOfWeek));
+      setEndDate(todayStr);
+    } else if (preset === 'THIS_MONTH') {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      setStartDate(toYMD(startOfMonth));
+      setEndDate(todayStr);
+    } else if (preset === 'LAST_3_MONTHS') {
+      const d = new Date(now);
+      d.setMonth(d.getMonth() - 3);
+      setStartDate(toYMD(d));
+      setEndDate(todayStr);
+    } else if (preset === 'LAST_6_MONTHS') {
+      const d = new Date(now);
+      d.setMonth(d.getMonth() - 6);
+      setStartDate(toYMD(d));
+      setEndDate(todayStr);
+    } else if (preset === 'LAST_12_MONTHS') {
+      const d = new Date(now);
+      d.setMonth(d.getMonth() - 12);
+      setStartDate(toYMD(d));
+      setEndDate(todayStr);
+    }
+    setPage(1);
+  };
 
   // Order Details Modal
   const [selectedOrder, setSelectedOrder] = useState<OrderWithItems | null>(null);
@@ -224,6 +266,7 @@ export const UnifiedOrderHistoryView: React.FC<UnifiedOrderHistoryViewProps> = (
               value={endDate}
               onChange={(e) => {
                 setEndDate(e.target.value);
+                setActiveDatePreset('CUSTOM');
                 setPage(1);
               }}
               style={{
@@ -233,6 +276,37 @@ export const UnifiedOrderHistoryView: React.FC<UnifiedOrderHistoryViewProps> = (
                 fontSize: '0.8125rem',
               }}
             />
+          </div>
+
+          {/* Quick Date Presets */}
+          <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            {[
+              { id: 'ALL', label: 'All' },
+              { id: 'TODAY', label: 'Today' },
+              { id: 'THIS_WEEK', label: 'This Week' },
+              { id: 'THIS_MONTH', label: 'This Month' },
+              { id: 'LAST_3_MONTHS', label: '3M' },
+              { id: 'LAST_6_MONTHS', label: '6M' },
+              { id: 'LAST_12_MONTHS', label: '12M' },
+            ].map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => applyDatePreset(p.id as any)}
+                style={{
+                  padding: '0.25rem 0.6rem',
+                  borderRadius: '9999px',
+                  border: '1px solid #f4d3dd',
+                  background: activeDatePreset === p.id ? '#d61c5d' : '#fff1f4',
+                  color: activeDatePreset === p.id ? '#ffffff' : '#2b1233',
+                  fontSize: '0.75rem',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                }}
+              >
+                {p.label}
+              </button>
+            ))}
           </div>
 
           {/* Customer filter for owners */}

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { OwnerDashboardView } from '@/frontend/modules/dashboard';
-import { UnifiedOrderHistoryView } from '@/frontend/modules/orders';
+import { UnifiedOrderHistoryView, OperatorQueueView } from '@/frontend/modules/orders';
 import { BranchManagementView } from '@/frontend/modules/branches';
 import { BranchSettingsView, DataManagementView } from '@/frontend/modules/settings';
 import { UnifiedLedgerView } from '@/frontend/modules/ledger';
@@ -11,7 +11,7 @@ import { OperatorInventoryView } from '@/frontend/modules/inventory';
 import { Branch } from '@/shared/types/entities.types';
 import { GlobalNavigation, BunMobileNav } from '@/frontend/components/ui';
 
-type OwnerTab = 'dashboard' | 'orders' | 'inventory' | 'branches' | 'ledger' | 'settings' | 'data';
+type OwnerTab = 'dashboard' | 'queue' | 'orders' | 'inventory' | 'branches' | 'ledger' | 'settings' | 'data';
 
 export default function OwnerPortalPage() {
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -53,6 +53,7 @@ export default function OwnerPortalPage() {
 
   const tabItems = [
     { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+    { id: 'queue', label: 'Order Queue', icon: '🛎️' },
     { id: 'orders', label: 'History', icon: '📜' },
     { id: 'inventory', label: 'Inventory', icon: '📦' },
     { id: 'branches', label: 'Branches', icon: '🏢' },
@@ -170,6 +171,36 @@ export default function OwnerPortalPage() {
                 onBranchChange={setSelectedBranchId}
               />
             )}
+            {activeTab === 'queue' && (
+              <div>
+                {selectedBranchId === 'ALL' && branches.length > 0 && (
+                  <div
+                    style={{
+                      marginBottom: '1rem',
+                      padding: '0.75rem 1.25rem',
+                      background: '#eff6ff',
+                      border: '1px solid #bfdbfe',
+                      borderRadius: '1rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      color: '#1e40af',
+                      fontSize: '0.875rem',
+                      fontWeight: 600,
+                    }}
+                  >
+                    <span>
+                      📍 Viewing live queue for default branch: <strong style={{ color: '#1e3a8a' }}>{branches[0].name}</strong>.
+                      Select a specific branch in the header to switch branches.
+                    </span>
+                  </div>
+                )}
+                <OperatorQueueView
+                  branchId={selectedBranchId === 'ALL' && branches[0] ? branches[0].id : selectedBranchId}
+                  isOwner={true}
+                />
+              </div>
+            )}
             {activeTab === 'orders' && (
               <UnifiedOrderHistoryView
                 branches={branches}
@@ -180,6 +211,7 @@ export default function OwnerPortalPage() {
             {activeTab === 'inventory' && (
               <OperatorInventoryView
                 branchId={selectedBranchId === 'ALL' && branches[0] ? branches[0].id : selectedBranchId}
+                isOwner={true}
               />
             )}
             {activeTab === 'branches' && (

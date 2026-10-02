@@ -86,7 +86,7 @@ export class InventoryRepository extends BaseRepository {
       .first<Inventory>();
   }
 
-  async listByBranch(branchId: string): Promise<Array<Inventory & { product_name?: string; selling_price?: number; tax_rate?: number; cgst_rate?: number; sgst_rate?: number; igst_rate?: number }>> {
+  async listByBranch(branchId: string): Promise<Array<Inventory & { product_name?: string; selling_price?: number; tax_rate?: number; cgst_rate?: number; sgst_rate?: number; igst_rate?: number; serving_size?: string; price_rate?: number; serving_sizes_json?: string }>> {
     const res = await this.db
       .prepare(`
         SELECT 
@@ -96,14 +96,17 @@ export class InventoryRepository extends BaseRepository {
           COALESCE(i.tax_rate, p.tax_rate, 5) as tax_rate,
           COALESCE(i.cgst_rate, p.cgst_rate, 2.5) as cgst_rate,
           COALESCE(i.sgst_rate, p.sgst_rate, 2.5) as sgst_rate,
-          COALESCE(i.igst_rate, p.igst_rate, 0) as igst_rate
+          COALESCE(i.igst_rate, p.igst_rate, 0) as igst_rate,
+          COALESCE(i.serving_size, p.serving_size, '100g') as serving_size,
+          COALESCE(i.price_rate, p.price_rate, 0) as price_rate,
+          COALESCE(i.serving_sizes_json, p.serving_sizes_json, '[]') as serving_sizes_json
         FROM inventory i
         LEFT JOIN products p ON p.id = i.product_id
         WHERE i.branch_id = ?
         ORDER BY i.quantity ASC
       `)
       .bind(branchId)
-      .all<Inventory & { product_name?: string; selling_price?: number; tax_rate?: number; cgst_rate?: number; sgst_rate?: number; igst_rate?: number }>();
+      .all<Inventory & { product_name?: string; selling_price?: number; tax_rate?: number; cgst_rate?: number; sgst_rate?: number; igst_rate?: number; serving_size?: string; price_rate?: number; serving_sizes_json?: string }>();
     return res.results;
   }
 
@@ -116,6 +119,9 @@ export class InventoryRepository extends BaseRepository {
       cgst_rate?: number;
       sgst_rate?: number;
       igst_rate?: number;
+      serving_size?: string;
+      price_rate?: number;
+      serving_sizes_json?: string;
     },
   ): Promise<Inventory> {
     const now = new Date().toISOString();
@@ -124,8 +130,8 @@ export class InventoryRepository extends BaseRepository {
       const invId = `inv_${crypto.randomUUID().replace(/-/g, '')}`;
       await this.db
         .prepare(`
-          INSERT INTO inventory (id, branch_id, product_id, quantity, reorder_threshold, selling_price, tax_rate, cgst_rate, sgst_rate, igst_rate, updated_at)
-          VALUES (?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?)
+          INSERT INTO inventory (id, branch_id, product_id, quantity, reorder_threshold, selling_price, tax_rate, cgst_rate, sgst_rate, igst_rate, serving_size, price_rate, serving_sizes_json, updated_at)
+          VALUES (?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `)
         .bind(
           invId,
@@ -136,6 +142,9 @@ export class InventoryRepository extends BaseRepository {
           pricing.cgst_rate !== undefined ? pricing.cgst_rate : 2.5,
           pricing.sgst_rate !== undefined ? pricing.sgst_rate : 2.5,
           pricing.igst_rate !== undefined ? pricing.igst_rate : 0,
+          pricing.serving_size !== undefined ? pricing.serving_size : '100g',
+          pricing.price_rate !== undefined ? pricing.price_rate : 0,
+          pricing.serving_sizes_json !== undefined ? pricing.serving_sizes_json : '[]',
           now,
         )
         .run();
@@ -148,6 +157,9 @@ export class InventoryRepository extends BaseRepository {
               cgst_rate = COALESCE(?, cgst_rate),
               sgst_rate = COALESCE(?, sgst_rate),
               igst_rate = COALESCE(?, igst_rate),
+              serving_size = COALESCE(?, serving_size),
+              price_rate = COALESCE(?, price_rate),
+              serving_sizes_json = COALESCE(?, serving_sizes_json),
               updated_at = ?
           WHERE branch_id = ? AND product_id = ?
         `)
@@ -157,6 +169,9 @@ export class InventoryRepository extends BaseRepository {
           pricing.cgst_rate !== undefined ? pricing.cgst_rate : null,
           pricing.sgst_rate !== undefined ? pricing.sgst_rate : null,
           pricing.igst_rate !== undefined ? pricing.igst_rate : null,
+          pricing.serving_size !== undefined ? pricing.serving_size : null,
+          pricing.price_rate !== undefined ? pricing.price_rate : null,
+          pricing.serving_sizes_json !== undefined ? pricing.serving_sizes_json : null,
           now,
           branchId,
           productId,
@@ -164,36 +179,39 @@ export class InventoryRepository extends BaseRepository {
         .run();
     }
 
-    // Keep product catalog in sync with updated pricing and tax breakdown
-    if (pricing.selling_price !== undefined || pricing.tax_rate !== undefined) {
-      await this.db
-        .prepare(`
-          UPDATE products
-          SET price = COALESCE(?, price),
-              selling_price = COALESCE(?, selling_price),
-              tax_rate = COALESCE(?, tax_rate),
-              cgst_rate = COALESCE(?, cgst_rate),
-              sgst_rate = COALESCE(?, sgst_rate),
-              igst_rate = COALESCE(?, igst_rate),
-              updated_at = ?
-          WHERE id = ? AND branch_id = ?
-        `)
-        .bind(
-          pricing.selling_price !== undefined ? pricing.selling_price : null,
-          pricing.selling_price !== undefined ? pricing.selling_price : null,
-          pricing.tax_rate !== undefined ? pricing.tax_rate : null,
-          pricing.cgst_rate !== undefined ? pricing.cgst_rate : null,
-          pricing.sgst_rate !== undefined ? pricing.sgst_rate : null,
-          pricing.igst_rate !== undefined ? pricing.igst_rate : null,
-          now,
-          productId,
-          branchId,
-        )
-        .run();
-    }
+    // Keep product catalog in sync with updated pricing, serving sizes, and tax breakdown
+    await this.db
+      .prepare(`
+        UPDATE products
+        SET price = COALESCE(?, price),
+            selling_price = COALESCE(?, selling_price),
+            tax_rate = COALESCE(?, tax_rate),
+            cgst_rate = COALESCE(?, cgst_rate),
+            sgst_rate = COALESCE(?, sgst_rate),
+            igst_rate = COALESCE(?, igst_rate),
+            serving_size = COALESCE(?, serving_size),
+            price_rate = COALESCE(?, price_rate),
+            serving_sizes_json = COALESCE(?, serving_sizes_json),
+            updated_at = ?
+        WHERE id = ? AND branch_id = ?
+      `)
+      .bind(
+        pricing.selling_price !== undefined ? pricing.selling_price : null,
+        pricing.selling_price !== undefined ? pricing.selling_price : null,
+        pricing.tax_rate !== undefined ? pricing.tax_rate : null,
+        pricing.cgst_rate !== undefined ? pricing.cgst_rate : null,
+        pricing.sgst_rate !== undefined ? pricing.sgst_rate : null,
+        pricing.igst_rate !== undefined ? pricing.igst_rate : null,
+        pricing.serving_size !== undefined ? pricing.serving_size : null,
+        pricing.price_rate !== undefined ? pricing.price_rate : null,
+        pricing.serving_sizes_json !== undefined ? pricing.serving_sizes_json : null,
+        now,
+        productId,
+        branchId,
+      )
+      .run();
 
-    const updated = await this.findByProduct(branchId, productId);
-    return updated!;
+    return (await this.findByProduct(branchId, productId))!;
   }
 
   async upsertStock(input: SetInventoryInput): Promise<Inventory> {
@@ -217,6 +235,53 @@ export class InventoryRepository extends BaseRepository {
       throw new Error(`Failed to retrieve inventory for branch ${input.branch_id} product ${input.product_id}`);
     }
     return updated;
+  }
+
+  prepareRestockStatement(
+    branchId: string,
+    productId: string,
+    quantityDelta: number,
+    nowIso: string = new Date().toISOString(),
+  ): D1PreparedStatementLike {
+    const invId = `inv_${crypto.randomUUID().replace(/-/g, '')}`;
+    return this.db
+      .prepare(`
+        INSERT INTO inventory (id, branch_id, product_id, quantity, reorder_threshold, updated_at)
+        VALUES (?, ?, ?, ?, 0, ?)
+        ON CONFLICT(branch_id, product_id) DO UPDATE SET
+          quantity = inventory.quantity + excluded.quantity,
+          updated_at = excluded.updated_at
+      `)
+      .bind(invId, branchId, productId, quantityDelta, nowIso);
+  }
+
+  prepareMovementStatement(
+    input: RecordMovementInput,
+    nowIso: string = new Date().toISOString(),
+  ): D1PreparedStatementLike {
+    return this.db
+      .prepare(`
+        INSERT INTO inventory_movements (
+          id, branch_id, inventory_item_type, product_id, raw_material_id,
+          quantity_delta, movement_type, reason, reference_type, reference_id,
+          actor_user_id, created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      .bind(
+        input.id,
+        input.branch_id,
+        input.inventory_item_type,
+        input.product_id ?? null,
+        input.raw_material_id ?? null,
+        input.quantity_delta,
+        input.movement_type,
+        input.reason ?? null,
+        input.reference_type ?? null,
+        input.reference_id ?? null,
+        input.actor_user_id ?? null,
+        nowIso,
+      );
   }
 
   async refillProductStock(input: RefillStockInput): Promise<{ inventory: Inventory; movement: InventoryMovement }> {

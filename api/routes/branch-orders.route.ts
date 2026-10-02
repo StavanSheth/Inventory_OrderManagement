@@ -8,7 +8,7 @@ import { OrdersService } from '../../backend/services/orders';
 import { requireBranchAccess, requireApplicationSession } from '../../backend/policies/branch-access.policy';
 import { requireOperatorOrOwner } from '../../backend/policies/role.policy';
 import { validateRequest } from '../validators/request.validator';
-import { recordPaymentSchema, verifyPaymentSchema, editOrderSchema, updateOrderStatusSchema, idSchema } from '../validators/order.validator';
+import { recordPaymentSchema, verifyPaymentSchema, editOrderSchema, updateOrderStatusSchema, idSchema, createBranchOrderSchema } from '../validators/order.validator';
 import { successResponse } from '../serializers/response';
 import { handleApiError } from '../middleware/error-handler';
 import { extractRequestContext } from '../middleware/request-context';
@@ -47,7 +47,8 @@ function buildHeaders(request: Request): { corsHeaders: Record<string, string>; 
 
 /**
  * GET /api/v1/branches/:branchId/orders[?status=PENDING&limit=50]
- * Branch operator order queue.
+ * POST /api/v1/branches/:branchId/orders
+ * Branch operator order queue and counter order booking.
  */
 export async function handleBranchOrdersRoute(
   request: Request,
@@ -72,6 +73,59 @@ export async function handleBranchOrdersRoute(
     requireOperatorOrOwner(userContext);
     requireApplicationSession(userContext.session, userContext, branchId);
     requireBranchAccess(userContext, branchId);
+
+    // Operator/Owner Direct Order Booking
+    if (request.method === 'POST') {
+      const rawBody = (await request.json()) as Record<string, unknown>;
+      const body = validateRequest(createBranchOrderSchema, { ...rawBody, branchId });
+
+      const result = await ordersService.createOrder({
+        actorUserId: userContext.userId,
+        branchId,
+        customerUserId: body.customerUserId || userContext.userId,
+        items: body.items,
+        couponId: body.couponId ?? null,
+        couponCode: body.couponCode ?? null,
+        offerId: body.offerId ?? null,
+      });
+
+      let currentOrder = result.order;
+      const targetStatus = body.initialStatus || OrderStatus.PENDING;
+
+      if (targetStatus !== OrderStatus.PENDING) {
+        // Record payment
+        const paymentResult = await ordersService.recordPayment({
+          actorUserId: userContext.userId,
+          orderId: currentOrder.id,
+          branchId,
+          amount: currentOrder.total,
+          method: (body.paymentMethod as PaymentMethod) || PaymentMethod.CASH,
+          notes: body.paymentNotes || 'Counter operator direct booking',
+        });
+        // Verify payment
+        await ordersService.verifyPayment({
+          actorUserId: userContext.userId,
+          paymentId: paymentResult.payment.id,
+          orderId: currentOrder.id,
+          branchId,
+          notes: 'Counter operator verified',
+        });
+        // Confirm order
+        currentOrder = await ordersService.confirmOrder(userContext.userId, currentOrder.id);
+
+        if (targetStatus === OrderStatus.PREPARING || targetStatus === OrderStatus.READY || targetStatus === OrderStatus.COMPLETED) {
+          currentOrder = await ordersService.updateOrderStatus(userContext.userId, currentOrder.id, OrderStatus.PREPARING);
+        }
+        if (targetStatus === OrderStatus.READY || targetStatus === OrderStatus.COMPLETED) {
+          currentOrder = await ordersService.updateOrderStatus(userContext.userId, currentOrder.id, OrderStatus.READY);
+        }
+        if (targetStatus === OrderStatus.COMPLETED) {
+          currentOrder = await ordersService.updateOrderStatus(userContext.userId, currentOrder.id, OrderStatus.COMPLETED);
+        }
+      }
+
+      return successResponse({ order: currentOrder, items: result.items, expiresAt: result.expiresAt }, 201, responseHeaders);
+    }
 
     const url = new URL(request.url);
     const statusParam = url.searchParams.get('status');
@@ -355,6 +409,58 @@ export async function handleBranchOrderEditRoute(
     });
 
     return successResponse(result, 200, responseHeaders);
+  } catch (error) {
+    return handleApiError(error, responseHeaders);
+  }
+}
+
+/**
+ * POST /api/v1/branches/:branchId/orders/:orderId/cancel
+ * Operator cancels order at any stage, with refund calculation and optional inventory restocking.
+ */
+export async function handleCancelBranchOrderRoute(
+  request: Request,
+  branchId: string,
+  orderId: string,
+  env?: { DB?: D1DatabaseLike },
+  options: AuthFactoryOptions = {},
+): Promise<Response> {
+  const preflight = handleCorsPreflight(request, config.allowedOrigins);
+  if (preflight) return preflight;
+
+  const { responseHeaders } = buildHeaders(request);
+
+  try {
+    validateRequest(idSchema, branchId);
+    validateRequest(idSchema, orderId);
+    const { db, authMiddleware } = createAuthInfrastructure(env, options);
+    const ordersService = buildOrdersService(db);
+
+    const userContext = await authMiddleware.authenticateRequest(request, {
+      requireSession: true,
+      targetBranchId: branchId,
+    });
+    requireOperatorOrOwner(userContext);
+    requireApplicationSession(userContext.session, userContext, branchId);
+    requireBranchAccess(userContext, branchId);
+
+    const rawBody = (await request.json().catch(() => ({}))) as Record<string, any>;
+    const refundType = rawBody.refundType as 'FULL' | 'PARTIAL' | 'NONE' | undefined;
+    const refundAmount = typeof rawBody.refundAmount === 'number' ? rawBody.refundAmount : undefined;
+    const reason = typeof rawBody.reason === 'string' ? rawBody.reason : undefined;
+    const restockInventory = rawBody.restockInventory !== false;
+
+    const cancelled = await ordersService.cancelOrder({
+      actorUserId: userContext.userId,
+      orderId,
+      branchId,
+      reason,
+      refundType,
+      refundAmount,
+      restockInventory,
+    });
+
+    return successResponse(cancelled, 200, responseHeaders);
   } catch (error) {
     return handleApiError(error, responseHeaders);
   }

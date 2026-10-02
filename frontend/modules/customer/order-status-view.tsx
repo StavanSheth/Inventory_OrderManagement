@@ -19,19 +19,44 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onBac
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [timeLeftMs, setTimeLeftMs] = useState<number>(0);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [cancelling, setCancelling] = useState<boolean>(false);
 
-  const refetchOrder = React.useCallback(() => {
-    orderApiClient
-      .getCustomerOrderDetail(orderId)
-      .then((res) => {
-        if (res.success) {
-          setOrder(res.data.order);
-          setItems(res.data.items);
-          setPayments(res.data.payments);
-        }
-      })
-      .catch(() => {});
+  const refetchOrder = React.useCallback(async () => {
+    try {
+      const res = await orderApiClient.getCustomerOrderDetail(orderId);
+      if (res.success) {
+        setOrder(res.data.order);
+        setItems(res.data.items);
+        setPayments(res.data.payments);
+      }
+    } catch {
+      // silently handle background refetch failure
+    }
   }, [orderId]);
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    await refetchOrder();
+    setTimeout(() => setIsRefreshing(false), 400);
+  };
+
+  const handleCustomerCancel = async () => {
+    if (!confirm('Are you sure you want to cancel this order?')) return;
+    setCancelling(true);
+    try {
+      const res = await orderApiClient.cancelCustomerOrder(orderId);
+      if (res.success) {
+        setOrder(res.data);
+      } else {
+        alert(res.error.message || 'Failed to cancel order');
+      }
+    } catch {
+      alert('Network error while cancelling order');
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   // Fetch initial details
   useEffect(() => {
@@ -192,7 +217,19 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onBac
       {/* Synced Order Workflow Stages */}
       <div className="bg-[#fff1f4] p-4 rounded-2xl border border-[#f4d3dd]">
         <div className="flex justify-between items-center text-xs font-black uppercase tracking-wider text-[#6f5569] mb-3">
-          <span>Live Order Tracking</span>
+          <div className="flex items-center gap-2">
+            <span>Live Order Tracking</span>
+            <button
+              type="button"
+              onClick={handleManualRefresh}
+              disabled={isRefreshing}
+              className="px-2.5 py-1 bg-white hover:bg-[#ffe3eb] border border-[#f4d3dd] text-[#d61c5d] rounded-full text-[11px] font-black tracking-normal transition flex items-center gap-1 shadow-xs cursor-pointer"
+              title="Refresh order stage tracking"
+            >
+              <span className={isRefreshing ? 'animate-spin inline-block' : ''}>↻</span>
+              <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
+            </button>
+          </div>
           <span className="text-[#d61c5d]">
             {order.status === OrderStatus.READY
               ? '🎉 Ready for pickup!'
@@ -202,7 +239,9 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onBac
               ? '💳 Payment confirmed'
               : order.status === OrderStatus.COMPLETED
               ? '✨ Collected'
-              : 'Awaiting payment'}
+              : order.status === OrderStatus.CANCELLED
+              ? '🚫 Cancelled'
+              : 'Payment Left'}
           </span>
         </div>
 
@@ -343,18 +382,31 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onBac
         </div>
       </div>
 
-      {/* Footer Navigation */}
-      <div className="flex justify-between items-center pt-4 border-t border-[#f4d3dd]">
+      {/* Footer Navigation & Customer Cancel Order Option */}
+      <div className="flex flex-col sm:flex-row justify-between items-center pt-4 border-t border-[#f4d3dd] gap-3">
         {onBackToCatalog && (
           <button
             onClick={onBackToCatalog}
-            className="px-5 py-2.5 bg-[#fff1f4] hover:bg-white border border-[#f4d3dd] text-[#2b1233] font-extrabold rounded-full text-xs transition shadow-sm"
+            className="px-5 py-2.5 bg-[#fff1f4] hover:bg-white border border-[#f4d3dd] text-[#2b1233] font-extrabold rounded-full text-xs transition shadow-sm cursor-pointer"
           >
             ← Back to Counter
           </button>
         )}
 
-        {isEditable && order.status !== OrderStatus.COMPLETED && order.status !== OrderStatus.CANCELLED && (
+        {/* Customer can cancel order IF payment done stage is not done (i.e. status is PENDING) */}
+        {order.status === OrderStatus.PENDING && (
+          <button
+            type="button"
+            onClick={handleCustomerCancel}
+            disabled={cancelling}
+            className="px-4 py-2 bg-white hover:bg-[#fee2e2] border border-[#fca5a5] text-[#b91c1c] font-black rounded-full text-xs transition shadow-xs cursor-pointer flex items-center gap-1.5"
+          >
+            <span>✕</span>
+            <span>{cancelling ? 'Cancelling...' : 'Cancel Order'}</span>
+          </button>
+        )}
+
+        {isEditable && order.status !== OrderStatus.COMPLETED && order.status !== OrderStatus.CANCELLED && order.status !== OrderStatus.PENDING && (
           <span className="text-xs text-[#6f5569] italic">
             Order can be modified at reception within 60 mins.
           </span>

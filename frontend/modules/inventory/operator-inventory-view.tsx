@@ -6,14 +6,29 @@ import { apiClient } from '../../services/api-client';
 
 interface OperatorInventoryViewProps {
   branchId: string;
+  isOwner?: boolean;
 }
 
-export const OperatorInventoryView: React.FC<OperatorInventoryViewProps> = ({ branchId }) => {
+export const OperatorInventoryView: React.FC<OperatorInventoryViewProps> = ({ branchId, isOwner = false }) => {
   const [activeTab, setActiveTab] = useState<'products' | 'materials' | 'movements'>('products');
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [products, setProducts] = useState<Array<Inventory & { product_name?: string; selling_price?: number; tax_rate?: number; cgst_rate?: number; sgst_rate?: number; igst_rate?: number }>>([]);
+  const [products, setProducts] = useState<
+    Array<
+      Inventory & {
+        product_name?: string;
+        selling_price?: number;
+        tax_rate?: number;
+        cgst_rate?: number;
+        sgst_rate?: number;
+        igst_rate?: number;
+        serving_size?: string;
+        price_rate?: number;
+        serving_sizes_json?: string;
+      }
+    >
+  >([]);
   const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
   const [lowStock, setLowStock] = useState<{ products: Inventory[]; rawMaterials: RawMaterial[] }>({
     products: [],
@@ -43,14 +58,23 @@ export const OperatorInventoryView: React.FC<OperatorInventoryViewProps> = ({ br
     cgst_rate: number;
     sgst_rate: number;
     igst_rate: number;
+    serving_size: string;
+    price_rate: number;
+    serving_sizes_json: string;
   } | null>(null);
   const [editSellingPrice, setEditSellingPrice] = useState<string>('0');
   const [editTaxRate, setEditTaxRate] = useState<string>('5');
   const [editCgstRate, setEditCgstRate] = useState<string>('2.5');
   const [editSgstRate, setEditSgstRate] = useState<string>('2.5');
   const [editIgstRate, setEditIgstRate] = useState<string>('0');
+  const [editServingSize, setEditServingSize] = useState<string>('100g');
+  const [editPriceRate, setEditPriceRate] = useState<string>('0');
+  const [editCustomTiers, setEditCustomTiers] = useState<Array<{ name: string; size: string; price: number }>>([]);
   const [pricingSubmitting, setPricingSubmitting] = useState<boolean>(false);
   const [pricingError, setPricingError] = useState<string | null>(null);
+
+  // Movements Date Filter
+  const [movementDateFilter, setMovementDateFilter] = useState<'TODAY' | 'THIS_WEEK' | 'THIS_MONTH' | 'LAST_3_MONTHS' | 'LAST_6_MONTHS' | 'LAST_12_MONTHS' | 'ALL'>('ALL');
 
   // Recipe / BOM Modal states
   const [recipeProduct, setRecipeProduct] = useState<{ id: string; name: string } | null>(null);
@@ -68,12 +92,38 @@ export const OperatorInventoryView: React.FC<OperatorInventoryViewProps> = ({ br
   const [matSubmitting, setMatSubmitting] = useState<boolean>(false);
   const [matError, setMatError] = useState<string | null>(null);
 
-  const handleOpenPricing = (item: Inventory & { product_name?: string; selling_price?: number; tax_rate?: number; cgst_rate?: number; sgst_rate?: number; igst_rate?: number }) => {
+  const handleOpenPricing = (
+    item: Inventory & {
+      product_name?: string;
+      selling_price?: number;
+      tax_rate?: number;
+      cgst_rate?: number;
+      sgst_rate?: number;
+      igst_rate?: number;
+      serving_size?: string;
+      price_rate?: number;
+      serving_sizes_json?: string;
+    }
+  ) => {
+    if (!isOwner) return;
+
     const sp = item.selling_price ?? 0;
     const tr = item.tax_rate ?? 5;
     const cgst = item.cgst_rate ?? tr / 2;
     const sgst = item.sgst_rate ?? tr / 2;
     const igst = item.igst_rate ?? 0;
+    const ss = item.serving_size || '100g';
+    const pr = item.price_rate ?? 0;
+
+    let tiers: Array<{ name: string; size: string; price: number }> = [];
+    try {
+      if (item.serving_sizes_json) {
+        tiers = JSON.parse(item.serving_sizes_json);
+      }
+    } catch {
+      tiers = [];
+    }
+
     setPricingProduct({
       id: item.product_id,
       name: item.product_name ?? item.product_id,
@@ -82,12 +132,18 @@ export const OperatorInventoryView: React.FC<OperatorInventoryViewProps> = ({ br
       cgst_rate: cgst,
       sgst_rate: sgst,
       igst_rate: igst,
+      serving_size: ss,
+      price_rate: pr,
+      serving_sizes_json: item.serving_sizes_json || '[]',
     });
     setEditSellingPrice(sp.toString());
     setEditTaxRate(tr.toString());
     setEditCgstRate(cgst.toString());
     setEditSgstRate(sgst.toString());
     setEditIgstRate(igst.toString());
+    setEditServingSize(ss);
+    setEditPriceRate(pr.toString());
+    setEditCustomTiers(tiers);
     setPricingError(null);
   };
 
@@ -131,6 +187,9 @@ export const OperatorInventoryView: React.FC<OperatorInventoryViewProps> = ({ br
           cgst_rate: isNaN(cgst) ? tr / 2 : cgst,
           sgst_rate: isNaN(sgst) ? tr / 2 : sgst,
           igst_rate: isNaN(igst) ? 0 : igst,
+          serving_size: editServingSize.trim() || '100g',
+          price_rate: parseFloat(editPriceRate) || 0,
+          serving_sizes_json: JSON.stringify(editCustomTiers),
         }),
       });
 
@@ -374,6 +433,42 @@ export const OperatorInventoryView: React.FC<OperatorInventoryViewProps> = ({ br
 
   const totalLowStockCount = lowStock.products.length + lowStock.rawMaterials.length;
 
+  const filteredMovements = movements.filter((m) => {
+    if (movementDateFilter === 'ALL') return true;
+    const createdAt = new Date(m.created_at).getTime();
+    const now = new Date();
+    if (movementDateFilter === 'TODAY') {
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      return createdAt >= startOfDay;
+    }
+    if (movementDateFilter === 'THIS_WEEK') {
+      const day = now.getDay();
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+      const startOfWeek = new Date(now.getFullYear(), now.getMonth(), diff).getTime();
+      return createdAt >= startOfWeek;
+    }
+    if (movementDateFilter === 'THIS_MONTH') {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+      return createdAt >= startOfMonth;
+    }
+    if (movementDateFilter === 'LAST_3_MONTHS') {
+      const d = new Date(now);
+      d.setMonth(d.getMonth() - 3);
+      return createdAt >= d.getTime();
+    }
+    if (movementDateFilter === 'LAST_6_MONTHS') {
+      const d = new Date(now);
+      d.setMonth(d.getMonth() - 6);
+      return createdAt >= d.getTime();
+    }
+    if (movementDateFilter === 'LAST_12_MONTHS') {
+      const d = new Date(now);
+      d.setMonth(d.getMonth() - 12);
+      return createdAt >= d.getTime();
+    }
+    return true;
+  });
+
   return (
     <div className="space-y-6">
       {/* Low Stock Alert Banner */}
@@ -459,6 +554,7 @@ export const OperatorInventoryView: React.FC<OperatorInventoryViewProps> = ({ br
             <thead className="bg-[#fff1f4] text-xs uppercase text-[#6f5569] font-extrabold border-b border-[#f4d3dd]">
               <tr>
                 <th className="px-5 py-3.5">Product Name</th>
+                <th className="px-4 py-3.5">Serving & Rate</th>
                 <th className="px-4 py-3.5">Selling Price</th>
                 <th className="px-5 py-3.5">Tax & Sub-Taxes (GST)</th>
                 <th className="px-4 py-3.5">Current Stock</th>
@@ -490,6 +586,29 @@ export const OperatorInventoryView: React.FC<OperatorInventoryViewProps> = ({ br
                     <tr key={item.id} className="hover:bg-[#fff1f4]/40 transition">
                       <td className="px-5 py-4 font-bold text-[#2b1233]">
                         {item.product_name ?? item.product_id}
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-extrabold text-[#2b1233] text-xs">
+                            {item.serving_size || '100g'}
+                          </span>
+                          <span className="text-[11px] font-mono font-bold text-[#6f5569]">
+                            Rate: ₹{(item.price_rate ?? 0).toFixed(2)}
+                          </span>
+                          {(() => {
+                            try {
+                              const parsed = item.serving_sizes_json ? JSON.parse(item.serving_sizes_json) : [];
+                              if (Array.isArray(parsed) && parsed.length > 0) {
+                                return (
+                                  <span className="text-[10px] text-[#d61c5d] font-bold">
+                                    {parsed.length} custom {parsed.length === 1 ? 'tier' : 'tiers'}
+                                  </span>
+                                );
+                              }
+                            } catch {}
+                            return null;
+                          })()}
+                        </div>
                       </td>
                       <td className="px-4 py-4 font-mono font-extrabold text-[#d61c5d]">
                         ₹{price.toFixed(2)}
@@ -534,13 +653,15 @@ export const OperatorInventoryView: React.FC<OperatorInventoryViewProps> = ({ br
                         )}
                       </td>
                       <td className="px-5 py-4 text-right space-x-1.5 whitespace-nowrap">
-                        <button
-                          onClick={() => handleOpenPricing(item)}
-                          className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-xs font-extrabold rounded-full transition shadow-sm"
-                          title="Configure Selling Price & GST Tax Rates"
-                        >
-                          ₹ Price & Tax
-                        </button>
+                        {isOwner && (
+                          <button
+                            onClick={() => handleOpenPricing(item)}
+                            className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-xs font-extrabold rounded-full transition shadow-sm"
+                            title="Configure Serving Sizes, Rates & Taxes (Owner Only)"
+                          >
+                            ⚙️ Price, Sizes & Taxes
+                          </button>
+                        )}
                         <button
                           onClick={() => handleOpenRecipe(item.product_id, item.product_name ?? item.product_id)}
                           className="px-2.5 py-1 bg-white hover:bg-[#fff1f4] border border-[#f4d3dd] text-[#2b1233] text-xs font-extrabold rounded-full transition shadow-sm"
@@ -655,31 +776,63 @@ export const OperatorInventoryView: React.FC<OperatorInventoryViewProps> = ({ br
 
       {/* Tab 3: Movement Ledger */}
       {activeTab === 'movements' && (
-        <div className="bg-white border border-[#f4d3dd] rounded-2xl shadow-[0_8px_24px_-12px_rgba(120,20,60,0.12)] overflow-hidden">
-          <table className="w-full text-left text-sm text-[#2b1233]">
-            <thead className="bg-[#fff1f4] text-xs uppercase text-[#6f5569] font-extrabold border-b border-[#f4d3dd]">
-              <tr>
-                <th className="px-6 py-3.5">Timestamp</th>
-                <th className="px-6 py-3.5">Type</th>
-                <th className="px-6 py-3.5">Item / Target</th>
-                <th className="px-6 py-3.5">Delta</th>
-                <th className="px-6 py-3.5">Reason</th>
-                <th className="px-6 py-3.5">Reference</th>
-              </tr>
-            </thead>
+        <div className="space-y-3">
+          {/* Movement Date Filter Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-white border border-[#f4d3dd] rounded-2xl">
+            <span className="text-xs font-bold text-[#6f5569] uppercase tracking-wider">Date Filter:</span>
+            <div className="flex flex-wrap gap-1">
+              {[
+                { id: 'ALL', label: 'All Time' },
+                { id: 'TODAY', label: 'Today' },
+                { id: 'THIS_WEEK', label: 'This Week' },
+                { id: 'THIS_MONTH', label: 'This Month' },
+                { id: 'LAST_3_MONTHS', label: 'Last 3 Months' },
+                { id: 'LAST_6_MONTHS', label: 'Last 6 Months' },
+                { id: 'LAST_12_MONTHS', label: 'Last 12 Months' },
+              ].map((df) => (
+                <button
+                  key={df.id}
+                  onClick={() => setMovementDateFilter(df.id as any)}
+                  className={`px-3 py-1 rounded-full text-xs font-extrabold transition cursor-pointer ${
+                    movementDateFilter === df.id
+                      ? 'bg-[#d61c5d] text-white shadow-xs'
+                      : 'bg-[#fff1f4] text-[#2b1233] hover:bg-white border border-[#f4d3dd]'
+                  }`}
+                >
+                  {df.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-white border border-[#f4d3dd] rounded-2xl shadow-[0_8px_24px_-12px_rgba(120,20,60,0.12)] overflow-hidden">
+            <table className="w-full text-left text-sm text-[#2b1233]">
+              <thead className="bg-[#fff1f4] text-xs uppercase text-[#6f5569] font-extrabold border-b border-[#f4d3dd]">
+                <tr>
+                  <th className="px-6 py-3.5">Timestamp</th>
+                  <th className="px-6 py-3.5">Type</th>
+                  <th className="px-6 py-3.5">Item / Target</th>
+                  <th className="px-6 py-3.5">Delta</th>
+                  <th className="px-6 py-3.5">Reason</th>
+                  <th className="px-6 py-3.5">Reference</th>
+                </tr>
+              </thead>
             <tbody className="divide-y divide-[#f4d3dd]/60 font-mono text-xs">
-              {movements.length === 0 ? (
+              {filteredMovements.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-8 text-center text-[#6f5569] font-sans text-sm">
-                    No movements recorded yet.
+                    No movements found for the selected time range.
                   </td>
                 </tr>
               ) : (
-                movements.map((m) => {
+                filteredMovements.map((m) => {
                   const isPositive = m.quantity_delta > 0;
                   return (
                     <tr key={m.id} className="hover:bg-[#fff1f4]/40 transition">
                       <td className="px-6 py-3.5 text-[#6f5569]">
+                        <span className="font-sans font-semibold mr-1.5">
+                          {new Date(m.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                        </span>
                         {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                       </td>
                       <td className="px-6 py-3.5 font-bold">
@@ -708,6 +861,7 @@ export const OperatorInventoryView: React.FC<OperatorInventoryViewProps> = ({ br
               )}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
@@ -1012,10 +1166,132 @@ export const OperatorInventoryView: React.FC<OperatorInventoryViewProps> = ({ br
               </div>
             )}
 
+            {/* Serving Size & Price Rate (Owner Only) */}
+            <div className="bg-[#fff1f4]/60 border border-[#f4d3dd] rounded-2xl p-4 space-y-3">
+              <span className="text-xs font-black uppercase text-[#6f5569] tracking-wider block">
+                Serving Size & Pricing Rate (Owner Only)
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-[#6f5569] mb-1">
+                    Standard Serving Size (e.g. 100g, 150g)
+                  </label>
+                  <input
+                    type="text"
+                    value={editServingSize}
+                    onChange={(e) => setEditServingSize(e.target.value)}
+                    placeholder="100g"
+                    className="w-full px-3 py-2 bg-white border border-[#f4d3dd] rounded-xl text-xs font-bold text-[#2b1233] focus:outline-none focus:border-[#d61c5d]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-[#6f5569] mb-1">
+                    Price Rate (₹ per unit or standard rate)
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      value={editPriceRate}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEditPriceRate(val);
+                        const rateNum = parseFloat(val);
+                        if (!isNaN(rateNum) && rateNum > 0) {
+                          setEditSellingPrice(rateNum.toString());
+                        }
+                      }}
+                      placeholder="0.00"
+                      className="w-full px-3 py-2 bg-white border border-[#f4d3dd] rounded-xl text-xs font-mono font-bold text-[#2b1233] focus:outline-none focus:border-[#d61c5d]"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Custom Tiered Serving Sizes */}
+            <div className="bg-[#fff1f4]/60 border border-[#f4d3dd] rounded-2xl p-4 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-black uppercase text-[#6f5569] tracking-wider">
+                  Custom Tiered Serving Sizes (Optional)
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setEditCustomTiers([
+                      ...editCustomTiers,
+                      { name: `Size ${editCustomTiers.length + 1}`, size: '150g', price: parseFloat(editSellingPrice) || 150 },
+                    ])
+                  }
+                  className="text-xs text-[#d61c5d] hover:underline font-bold"
+                >
+                  + Add Size Tier
+                </button>
+              </div>
+
+              {editCustomTiers.length === 0 ? (
+                <p className="text-xs text-[#6f5569] italic">
+                  Using default pricing based on rate & standard serving size. Click above to add customized tiers (e.g. Small / Medium / Large).
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {editCustomTiers.map((tier, idx) => (
+                    <div key={idx} className="flex items-center gap-2 bg-white p-2.5 rounded-xl border border-[#f4d3dd]">
+                      <input
+                        type="text"
+                        placeholder="Tier Name (e.g. Small)"
+                        value={tier.name}
+                        onChange={(e) => {
+                          const updated = [...editCustomTiers];
+                          updated[idx].name = e.target.value;
+                          setEditCustomTiers(updated);
+                        }}
+                        className="flex-1 px-2.5 py-1.5 border border-[#f4d3dd] rounded-lg text-xs font-bold text-[#2b1233]"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Size (e.g. 100g)"
+                        value={tier.size}
+                        onChange={(e) => {
+                          const updated = [...editCustomTiers];
+                          updated[idx].size = e.target.value;
+                          setEditCustomTiers(updated);
+                        }}
+                        className="w-20 px-2 py-1.5 border border-[#f4d3dd] rounded-lg text-xs font-bold text-[#2b1233]"
+                      />
+                      <div className="flex items-center gap-1 w-24">
+                        <span className="text-xs font-bold text-[#6f5569]">₹</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={tier.price}
+                          onChange={(e) => {
+                            const updated = [...editCustomTiers];
+                            updated[idx].price = parseFloat(e.target.value) || 0;
+                            setEditCustomTiers(updated);
+                          }}
+                          className="w-full px-2 py-1.5 border border-[#f4d3dd] rounded-lg text-xs font-mono font-bold text-[#d61c5d]"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setEditCustomTiers(editCustomTiers.filter((_, i) => i !== idx))}
+                        className="text-xs text-[#d61c5d] font-bold px-2 py-1 hover:bg-rose-50 rounded"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Base Selling Price */}
             <div>
               <label className="block text-xs font-bold text-[#6f5569] mb-1">
-                Base Selling Price (₹) *
+                Default Base Selling Price (₹) *
               </label>
               <div className="relative">
                 <span className="absolute left-4 top-2.5 text-[#6f5569] font-bold text-sm">₹</span>
@@ -1035,7 +1311,7 @@ export const OperatorInventoryView: React.FC<OperatorInventoryViewProps> = ({ br
             {/* GST Tax Slabs Presets */}
             <div>
               <label className="block text-xs font-bold text-[#6f5569] mb-1.5">
-                Quick GST Tax Slabs
+                Quick GST Tax Slabs (Owner Configured)
               </label>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {[

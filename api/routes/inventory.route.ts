@@ -56,6 +56,9 @@ const updatePricingSchema = z.object({
   cgst_rate: z.number().min(0).max(100).optional(),
   sgst_rate: z.number().min(0).max(100).optional(),
   igst_rate: z.number().min(0).max(100).optional(),
+  serving_size: z.string().optional(),
+  price_rate: z.number().nonnegative().optional(),
+  serving_sizes_json: z.string().optional(),
 });
 
 function buildHeaders(request: Request): { corsHeaders: Record<string, string>; responseHeaders: Record<string, string> } {
@@ -390,6 +393,9 @@ export async function handleUpdateInventoryPricingRoute(
         cgst_rate: body.cgst_rate,
         sgst_rate: body.sgst_rate,
         igst_rate: body.igst_rate,
+        serving_size: body.serving_size,
+        price_rate: body.price_rate,
+        serving_sizes_json: body.serving_sizes_json,
       },
       userContext.userId,
     );

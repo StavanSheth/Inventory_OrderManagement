@@ -73,13 +73,27 @@ export class AuthClient {
       idToken = this.getDevIdToken();
     }
 
-    // Auto-fallback in local development mode
+    // Auto-fallback in local development mode with subdomain awareness
     if (!idToken && typeof window !== 'undefined') {
-      const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const host = window.location.hostname.toLowerCase();
+      const isLocalHost = host === 'localhost' || host === '127.0.0.1' || host.endsWith('.localhost');
       if (isLocalHost) {
-        if (window.location.pathname.startsWith('/owner')) {
+        const isOwnerContext =
+          host.startsWith('owner.') ||
+          host.startsWith('admin.') ||
+          window.location.pathname.startsWith('/owner');
+
+        const isOperatorContext =
+          host.startsWith('operator.') ||
+          host.startsWith('staff.') ||
+          host.startsWith('pos.') ||
+          host.startsWith('alpha.') ||
+          host.startsWith('beta.') ||
+          window.location.pathname.startsWith('/operator');
+
+        if (isOwnerContext) {
           idToken = 'mock-user:fb-owner-master:owner@melt.example.com:Stavan Sheth (Owner)';
-        } else if (window.location.pathname.startsWith('/operator')) {
+        } else if (isOperatorContext) {
           idToken = 'mock-user:fb-op-alpha:operator.alpha@melt.example.com:Raj Patel (Alpha Lead)';
         } else {
           idToken = 'mock-user:fb-cust-alice:alice@example.com:Alice Walker';
@@ -101,10 +115,14 @@ export class AuthClient {
 
     // Auto-verify PIN in localhost dev if session is required but not yet established
     if (options.requireSession && !sessionToken && typeof window !== 'undefined') {
-      const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const host = window.location.hostname.toLowerCase();
+      const isLocalHost = host === 'localhost' || host === '127.0.0.1' || host.endsWith('.localhost');
       if (isLocalHost) {
         try {
-          const isOwner = window.location.pathname.startsWith('/owner');
+          const isOwner =
+            host.startsWith('owner.') ||
+            host.startsWith('admin.') ||
+            window.location.pathname.startsWith('/owner');
           const verifyPayload: VerifyPinRequest = {
             pin: '123456',
             scope: isOwner ? 'GLOBAL' : 'BRANCH',

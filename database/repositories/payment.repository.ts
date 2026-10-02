@@ -48,6 +48,30 @@ export class PaymentRepository extends BaseRepository {
     return created;
   }
 
+  prepareCreateStatement(input: CreatePaymentInput, nowIso: string = new Date().toISOString()): D1PreparedStatementLike {
+    const status = input.status ?? PaymentStatus.RECORDED;
+    return this.db
+      .prepare(`
+        INSERT INTO payments (
+          id, order_id, branch_id, method, amount, status,
+          confirmed_by, confirmed_at, created_at, updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      .bind(
+        input.id,
+        input.order_id,
+        input.branch_id,
+        input.method,
+        input.amount,
+        status,
+        input.confirmed_by ?? null,
+        input.confirmed_at ?? null,
+        nowIso,
+        nowIso,
+      );
+  }
+
   async findById(id: string): Promise<Payment | null> {
     return this.db
       .prepare('SELECT * FROM payments WHERE id = ?')

@@ -13,6 +13,7 @@ interface UnifiedLedgerViewProps {
 }
 
 type LedgerFilter = 'ALL' | 'ORDERS' | 'INVENTORY';
+type DateRangeFilter = 'ALL' | 'TODAY' | 'THIS_WEEK' | 'THIS_MONTH' | 'LAST_3_MONTHS' | 'LAST_6_MONTHS' | 'LAST_12_MONTHS';
 
 export const UnifiedLedgerView: React.FC<UnifiedLedgerViewProps> = ({ branchId, isOwner = false }) => {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -20,6 +21,7 @@ export const UnifiedLedgerView: React.FC<UnifiedLedgerViewProps> = ({ branchId, 
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<LedgerFilter>('ALL');
+  const [dateFilter, setDateFilter] = useState<DateRangeFilter>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   const fetchLedgerData = useCallback(async () => {
@@ -70,6 +72,22 @@ export const UnifiedLedgerView: React.FC<UnifiedLedgerViewProps> = ({ branchId, 
     // Map Orders
     orders.forEach((o) => {
       const isPaid = o.payment_status === 'VERIFIED' || o.payment_status === 'COMPLETED';
+
+      // If cancelled and has refund:
+      if (o.status === OrderStatus.CANCELLED && (o.refund_amount ?? 0) > 0) {
+        list.push({
+          id: `ord-ref-${o.id}`,
+          type: 'ORDER',
+          timestamp: o.updated_at || o.placed_at,
+          reference: o.order_number,
+          title: `Refund for Order #${o.order_number}`,
+          category: 'Refunds & Returns',
+          amountOrDelta: `-₹${(o.refund_amount ?? 0).toFixed(2)}`,
+          statusOrReason: `CANCELLED • Refund: ₹${(o.refund_amount ?? 0).toFixed(2)}${o.cancellation_reason ? ` (${o.cancellation_reason})` : ''}`,
+          isPositive: false,
+        });
+      }
+
       list.push({
         id: `ord-${o.id}`,
         type: 'ORDER',
@@ -77,8 +95,8 @@ export const UnifiedLedgerView: React.FC<UnifiedLedgerViewProps> = ({ branchId, 
         reference: o.order_number,
         title: `Order #${o.order_number} (${o.status})`,
         category: 'Sales & Orders',
-        amountOrDelta: `₹${o.total.toFixed(2)}`,
-        statusOrReason: `${o.status} • Payment: ${o.payment_status}`,
+        amountOrDelta: o.status === OrderStatus.CANCELLED ? `₹0.00` : `₹${o.total.toFixed(2)}`,
+        statusOrReason: `${o.status} • Payment: ${o.payment_status}${o.cancellation_reason ? ` • Reason: ${o.cancellation_reason}` : ''}`,
         isPositive: isPaid && o.status !== OrderStatus.CANCELLED,
       });
     });
@@ -111,6 +129,36 @@ export const UnifiedLedgerView: React.FC<UnifiedLedgerViewProps> = ({ branchId, 
     return combinedEntries.filter((item) => {
       if (filter === 'ORDERS' && item.type !== 'ORDER') return false;
       if (filter === 'INVENTORY' && item.type !== 'INVENTORY') return false;
+
+      if (dateFilter !== 'ALL') {
+        const itemTime = new Date(item.timestamp).getTime();
+        const now = new Date();
+        if (dateFilter === 'TODAY') {
+          const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+          if (itemTime < start) return false;
+        } else if (dateFilter === 'THIS_WEEK') {
+          const day = now.getDay();
+          const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+          const start = new Date(now.getFullYear(), now.getMonth(), diff).getTime();
+          if (itemTime < start) return false;
+        } else if (dateFilter === 'THIS_MONTH') {
+          const start = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+          if (itemTime < start) return false;
+        } else if (dateFilter === 'LAST_3_MONTHS') {
+          const d = new Date(now);
+          d.setMonth(d.getMonth() - 3);
+          if (itemTime < d.getTime()) return false;
+        } else if (dateFilter === 'LAST_6_MONTHS') {
+          const d = new Date(now);
+          d.setMonth(d.getMonth() - 6);
+          if (itemTime < d.getTime()) return false;
+        } else if (dateFilter === 'LAST_12_MONTHS') {
+          const d = new Date(now);
+          d.setMonth(d.getMonth() - 12);
+          if (itemTime < d.getTime()) return false;
+        }
+      }
+
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         return (
@@ -122,13 +170,24 @@ export const UnifiedLedgerView: React.FC<UnifiedLedgerViewProps> = ({ branchId, 
       }
       return true;
     });
-  }, [combinedEntries, filter, searchQuery]);
+  }, [combinedEntries, filter, dateFilter, searchQuery]);
 
   // Financial & inventory stats
   const totalRevenue = useMemo(() => {
+    return (
+      orders
+        .filter((o) => o.status !== OrderStatus.CANCELLED && o.status !== OrderStatus.EXPIRED)
+        .reduce((sum, o) => sum + o.total, 0) -
+      orders
+        .filter((o) => o.status === OrderStatus.CANCELLED)
+        .reduce((sum, o) => sum + (o.refund_amount ?? 0), 0)
+    );
+  }, [orders]);
+
+  const totalRefunds = useMemo(() => {
     return orders
-      .filter((o) => o.status !== OrderStatus.CANCELLED && o.status !== OrderStatus.EXPIRED)
-      .reduce((sum, o) => sum + o.total, 0);
+      .filter((o) => o.status === OrderStatus.CANCELLED)
+      .reduce((sum, o) => sum + (o.refund_amount ?? 0), 0);
   }, [orders]);
 
   const totalStockIn = useMemo(() => {
@@ -226,10 +285,61 @@ export const UnifiedLedgerView: React.FC<UnifiedLedgerViewProps> = ({ branchId, 
           <div style={{ fontFamily: 'var(--font-display-family)', fontSize: '1.75rem', fontWeight: 900, color: '#2b1233', marginTop: '0.35rem' }}>
             {combinedEntries.length}
           </div>
-          <span style={{ fontSize: '0.75rem', color: '#6f5569', fontWeight: 600 }}>
-            Combined transactions
+          <span style={{ fontSize: '0.75rem', color: totalRefunds > 0 ? '#d61c5d' : '#6f5569', fontWeight: 600 }}>
+            {totalRefunds > 0 ? `₹${totalRefunds.toFixed(2)} refunded` : 'Combined transactions'}
           </span>
         </div>
+      </div>
+
+      {/* Date Range Selection Bar */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          marginBottom: '1rem',
+          padding: '0.75rem 1rem',
+          background: '#ffffff',
+          border: '1px solid #f4d3dd',
+          borderRadius: '1rem',
+          flexWrap: 'wrap',
+        }}
+      >
+        <span style={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', color: '#6f5569', letterSpacing: '0.05em', marginRight: '0.25rem' }}>
+          Date Filter:
+        </span>
+        {[
+          { id: 'ALL', label: 'All Time' },
+          { id: 'TODAY', label: 'Today' },
+          { id: 'THIS_WEEK', label: 'This Week' },
+          { id: 'THIS_MONTH', label: 'This Month' },
+          { id: 'LAST_3_MONTHS', label: 'Last 3 Months' },
+          { id: 'LAST_6_MONTHS', label: 'Last 6 Months' },
+          { id: 'LAST_12_MONTHS', label: 'Last 12 Months' },
+        ].map((df) => {
+          const isSelected = dateFilter === df.id;
+          return (
+            <button
+              key={df.id}
+              type="button"
+              onClick={() => setDateFilter(df.id as DateRangeFilter)}
+              style={{
+                padding: '0.35rem 0.85rem',
+                borderRadius: '9999px',
+                border: isSelected ? 'none' : '1px solid #f4d3dd',
+                background: isSelected ? '#d61c5d' : '#fff1f4',
+                color: isSelected ? '#ffffff' : '#2b1233',
+                fontSize: '0.75rem',
+                fontWeight: 800,
+                cursor: 'pointer',
+                boxShadow: isSelected ? '0 2px 0 #a3134a' : 'none',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              {df.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Filter Tabs & Search Bar */}

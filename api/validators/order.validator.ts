@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PaymentMethod } from '../../shared/enums/order.enum';
+import { OrderStatus, PaymentMethod } from '../../shared/enums/order.enum';
 
 export const idSchema = z.string().min(1, 'Identifier is required').max(100, 'Identifier too long');
 
@@ -19,6 +19,29 @@ export const createOrderSchema = z.object({
   couponId: z.string().max(100).optional().nullable(),
   couponCode: z.string().max(100).optional().nullable(),
   offerId: z.string().max(100).optional().nullable(),
+});
+
+export const createBranchOrderSchema = createOrderSchema.extend({
+  initialStatus: z
+    .enum([
+      OrderStatus.PENDING,
+      OrderStatus.CONFIRMED,
+      OrderStatus.PREPARING,
+      OrderStatus.READY,
+      OrderStatus.COMPLETED,
+    ])
+    .optional(),
+  paymentMethod: z
+    .enum([
+      PaymentMethod.CASH,
+      PaymentMethod.UPI,
+      PaymentMethod.CARD,
+      PaymentMethod.ONLINE,
+      PaymentMethod.OTHER,
+    ])
+    .optional(),
+  paymentNotes: z.string().max(500).optional(),
+  customerUserId: z.string().max(100).optional(),
 });
 
 export const editOrderSchema = z.object({

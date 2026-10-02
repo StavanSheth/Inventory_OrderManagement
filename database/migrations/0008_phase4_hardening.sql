@@ -91,7 +91,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS trg_enforce_valid_order_confirmation_preconditions
 BEFORE UPDATE OF status ON orders
 FOR EACH ROW
-WHEN NEW.status = 'CONFIRMED' AND (
+WHEN NEW.status = 'CONFIRMED' AND OLD.status NOT IN ('CONFIRMED', 'PREPARING', 'READY') AND (
   OLD.status != 'PENDING'
   OR OLD.payment_status != 'VERIFIED'
 )

@@ -11,8 +11,8 @@ import {
   VerifyPaymentResponseData,
   ConfirmOrderResponseData,
 } from '../../shared/contracts/order.contract';
-import { Order, Product } from '../../shared/types/entities.types';
-import { OrderStatus } from '../../shared/enums/order.enum';
+import { Order, OrderItem, Product } from '../../shared/types/entities.types';
+import { OrderStatus, PaymentMethod } from '../../shared/enums/order.enum';
 import { ApiResponse } from '../../shared/types/common.types';
 
 export interface CatalogCategory {
@@ -84,6 +84,31 @@ export class OrderApiClient {
       {
         authenticated: true,
         requireSession: true,
+      },
+    );
+  }
+
+  /**
+   * Operator/Owner: book counter order directly with selectable starting stage.
+   */
+  async createBranchOrder(
+    branchId: string,
+    req: {
+      items: Array<{ productId: string; quantity: number }>;
+      initialStatus?: OrderStatus;
+      paymentMethod?: PaymentMethod;
+      paymentNotes?: string;
+      customerUserId?: string;
+      couponCode?: string;
+    },
+  ): Promise<ApiResponse<{ order: Order; items: OrderItem[]; expiresAt: string }>> {
+    return apiClient.request<{ order: Order; items: OrderItem[]; expiresAt: string }>(
+      `${API_V1_PREFIX}/branches/${branchId}/orders`,
+      {
+        method: 'POST',
+        authenticated: true,
+        requireSession: true,
+        body: JSON.stringify(req),
       },
     );
   }
@@ -185,6 +210,43 @@ export class OrderApiClient {
         method: 'POST',
         authenticated: true,
         body: JSON.stringify({ code, subtotal }),
+      },
+    );
+  }
+
+  /**
+   * Operator/Owner: cancel order with optional refund and inventory restocking.
+   */
+  async cancelBranchOrder(
+    branchId: string,
+    orderId: string,
+    payload: {
+      refundType?: 'FULL' | 'PARTIAL' | 'NONE';
+      refundAmount?: number;
+      reason?: string;
+      restockInventory?: boolean;
+    } = {},
+  ): Promise<ApiResponse<Order>> {
+    return apiClient.request<Order>(
+      `${API_V1_PREFIX}/branches/${branchId}/orders/${orderId}/cancel`,
+      {
+        method: 'POST',
+        authenticated: true,
+        requireSession: true,
+        body: JSON.stringify(payload),
+      },
+    );
+  }
+
+  /**
+   * Customer: cancel own order before payment.
+   */
+  async cancelCustomerOrder(orderId: string): Promise<ApiResponse<Order>> {
+    return apiClient.request<Order>(
+      `${API_V1_PREFIX}/customer/orders/${orderId}/cancel`,
+      {
+        method: 'POST',
+        authenticated: true,
       },
     );
   }

@@ -76,6 +76,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         memberships: data.memberships,
         activeBranchId: prev.activeBranchId ?? data.memberships[0]?.branchId ?? null,
       }));
+
+      // Subdomain & role-based routing w.r.t Firebase login / branch operator / owner
+      if (typeof window !== 'undefined') {
+        const currentPath = window.location.pathname;
+        const currentHost = window.location.hostname.toLowerCase();
+        const role = data.user.role;
+
+        // If on generic root landing page, route directly to the user's role domain/section
+        if (currentPath === '/' || currentPath === '/login') {
+          if (role === UserRole.OWNER && !currentHost.startsWith('owner.') && !currentHost.startsWith('admin.')) {
+            window.location.href = '/owner';
+          } else if (role === UserRole.BRANCH_OPERATOR && !currentHost.startsWith('operator.') && !currentHost.startsWith('staff.')) {
+            window.location.href = '/operator';
+          } else if (role === UserRole.CUSTOMER && !currentHost.startsWith('order.') && !currentHost.startsWith('app.')) {
+            window.location.href = '/order';
+          }
+        }
+      }
     } catch {
       setState((prev) => ({
         ...prev,

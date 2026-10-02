@@ -316,6 +316,100 @@ describe('Phase 3 — Order API HTTP Endpoints', () => {
       );
       assert.strictEqual(resp.status, 200);
     });
+
+    it('allows operator to directly book order with selectable stages (PENDING, CONFIRMED, PREPARING, READY, COMPLETED)', async () => {
+      // 1. Book with initialStatus: PENDING
+      const respPending = await handleBranchOrdersRoute(
+        new Request('http://x/', {
+          method: 'POST',
+          headers: {
+            Authorization: bearerToken('fb-op', 'op@melt.local', 'Operator'),
+            'x-session-token': operatorSessionToken,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            items: [{ productId: 'prod-a1', quantity: 1 }],
+            initialStatus: 'PENDING',
+          }),
+        }),
+        'branch-alpha',
+        { DB: db },
+      );
+      assert.strictEqual(respPending.status, 201);
+      const jsonPending = (await respPending.json()) as { data: { order: { status: string; payment_status: string } } };
+      assert.strictEqual(jsonPending.data.order.status, 'PENDING');
+      assert.strictEqual(jsonPending.data.order.payment_status, 'PENDING');
+
+      // 2. Book with initialStatus: CONFIRMED (Payment done)
+      const respConfirmed = await handleBranchOrdersRoute(
+        new Request('http://x/', {
+          method: 'POST',
+          headers: {
+            Authorization: bearerToken('fb-op', 'op@melt.local', 'Operator'),
+            'x-session-token': operatorSessionToken,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            items: [{ productId: 'prod-a1', quantity: 1 }],
+            initialStatus: 'CONFIRMED',
+            paymentMethod: 'CASH',
+            paymentNotes: 'Counter Walk-in Cash',
+          }),
+        }),
+        'branch-alpha',
+        { DB: db },
+      );
+      assert.strictEqual(respConfirmed.status, 201);
+      const jsonConfirmed = (await respConfirmed.json()) as { data: { order: { status: string; payment_status: string } } };
+      assert.strictEqual(jsonConfirmed.data.order.status, 'CONFIRMED');
+      assert.strictEqual(jsonConfirmed.data.order.payment_status, 'VERIFIED');
+
+      // 3. Book with initialStatus: READY
+      const respReady = await handleBranchOrdersRoute(
+        new Request('http://x/', {
+          method: 'POST',
+          headers: {
+            Authorization: bearerToken('fb-op', 'op@melt.local', 'Operator'),
+            'x-session-token': operatorSessionToken,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            items: [{ productId: 'prod-a1', quantity: 1 }],
+            initialStatus: 'READY',
+            paymentMethod: 'UPI',
+          }),
+        }),
+        'branch-alpha',
+        { DB: db },
+      );
+      assert.strictEqual(respReady.status, 201);
+      const jsonReady = (await respReady.json()) as { data: { order: { status: string; payment_status: string } } };
+      assert.strictEqual(jsonReady.data.order.status, 'READY');
+      assert.strictEqual(jsonReady.data.order.payment_status, 'VERIFIED');
+
+      // 4. Book with initialStatus: COMPLETED (Collected)
+      const respCompleted = await handleBranchOrdersRoute(
+        new Request('http://x/', {
+          method: 'POST',
+          headers: {
+            Authorization: bearerToken('fb-op', 'op@melt.local', 'Operator'),
+            'x-session-token': operatorSessionToken,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            items: [{ productId: 'prod-a1', quantity: 1 }],
+            initialStatus: 'COMPLETED',
+            paymentMethod: 'CARD',
+          }),
+        }),
+        'branch-alpha',
+        { DB: db },
+      );
+      assert.strictEqual(respCompleted.status, 201);
+      const jsonCompleted = (await respCompleted.json()) as { data: { order: { status: string; payment_status: string } } };
+      assert.strictEqual(jsonCompleted.data.order.status, 'COMPLETED');
+      assert.strictEqual(jsonCompleted.data.order.payment_status, 'VERIFIED');
+    });
   });
 
   // ─── Branch Operator: Full Payment → Confirm Workflow ───────────────────────

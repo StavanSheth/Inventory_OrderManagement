@@ -62,6 +62,12 @@ export interface Category {
   updated_at: IsoDateTimeUtc;
 }
 
+export interface ServingSizeOption {
+  name: string;
+  size: string;
+  price: number;
+}
+
 export interface Product {
   id: Id;
   branch_id: Id;
@@ -74,6 +80,9 @@ export interface Product {
   cgst_rate?: number;
   sgst_rate?: number;
   igst_rate?: number;
+  serving_size?: string;
+  price_rate?: number;
+  serving_sizes_json?: string;
   active: boolean;
   image_url?: string | null;
   created_at: IsoDateTimeUtc;
@@ -111,6 +120,9 @@ export interface Inventory {
   cgst_rate?: number;
   sgst_rate?: number;
   igst_rate?: number;
+  serving_size?: string;
+  price_rate?: number;
+  serving_sizes_json?: string;
   updated_at: IsoDateTimeUtc;
 }
 
@@ -153,6 +165,8 @@ export interface Order {
   cancelled_at?: IsoDateTimeUtc | null;
   expired_at?: IsoDateTimeUtc | null;
   last_edited_at?: IsoDateTimeUtc | null;
+  cancellation_reason?: string | null;
+  refund_amount?: number;
   items?: OrderItem[];
   created_at: IsoDateTimeUtc;
   updated_at: IsoDateTimeUtc;

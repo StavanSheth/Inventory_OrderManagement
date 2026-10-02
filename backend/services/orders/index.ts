@@ -45,6 +45,16 @@ export interface EditOrderOptions {
   items: OrderItemInput[];
 }
 
+export interface CancelOrderOptions {
+  actorUserId: string;
+  orderId: string;
+  branchId: string;
+  reason?: string;
+  refundType?: 'FULL' | 'PARTIAL' | 'NONE';
+  refundAmount?: number;
+  restockInventory?: boolean;
+}
+
 export interface RecordPaymentOptions {
   actorUserId: string;
   orderId: string;
@@ -339,7 +349,7 @@ export class OrdersService implements IOrdersService {
 
     // Target payment status according to financial rules
     let targetPaymentStatus: PaymentStatus = order.payment_status;
-    if (order.status === OrderStatus.CONFIRMED) {
+    if ([OrderStatus.CONFIRMED, OrderStatus.PREPARING, OrderStatus.READY].includes(order.status)) {
       if (newTotal === verifiedPaidAmount) {
         targetPaymentStatus = PaymentStatus.VERIFIED;
       } else if (newTotal > verifiedPaidAmount) {
@@ -355,9 +365,9 @@ export class OrdersService implements IOrdersService {
       }
     }
 
-    // Step 4: If order is CONFIRMED, calculate inventory delta statements!
+    // Step 4: If order was CONFIRMED, PREPARING, or READY, calculate inventory delta statements!
     const extraStatements: D1PreparedStatementLike[] = [];
-    if (order.status === OrderStatus.CONFIRMED && this.inventoryService) {
+    if ([OrderStatus.CONFIRMED, OrderStatus.PREPARING, OrderStatus.READY].includes(order.status) && this.inventoryService) {
       const oldItemsList = previousItems.map((i) => ({ productId: i.product_id, quantity: i.quantity }));
       const newItemsList = newCalcItems.map((i) => ({ productId: i.product_id, quantity: i.quantity }));
 
@@ -499,7 +509,7 @@ export class OrdersService implements IOrdersService {
       },
     });
 
-    if (order.status === OrderStatus.CONFIRMED && this.inventoryService) {
+    if ([OrderStatus.CONFIRMED, OrderStatus.PREPARING, OrderStatus.READY].includes(order.status) && this.inventoryService) {
       await this.auditRepo?.log({
         branch_id: order.branch_id,
         actor_user_id: opts.actorUserId,
@@ -574,6 +584,186 @@ export class OrdersService implements IOrdersService {
         branchId: order.branch_id,
         customerUserId: order.customer_user_id,
         status: nextStatus,
+        paymentStatus: order.payment_status,
+        total: order.total,
+        timestamp: now,
+      },
+    });
+
+    return updated;
+  }
+
+  async cancelOrder(opts: CancelOrderOptions): Promise<Order> {
+    const order = await this.orderRepo.findById(opts.orderId);
+    if (!order) throw new NotFoundError(`Order ${opts.orderId} not found`);
+
+    if (order.branch_id !== opts.branchId) {
+      throw new ForbiddenError('Order belongs to a different branch');
+    }
+
+    if (isTerminalOrderStatus(order.status)) {
+      throw new BadRequestError(`Cannot cancel order in terminal status: ${order.status}`);
+    }
+
+    const now = new Date().toISOString();
+    const payments = this.paymentRepo ? await this.paymentRepo.listByOrder(opts.orderId) : [];
+    const verifiedPaid = payments
+      .filter((p) => p.status === PaymentStatus.VERIFIED || p.status === PaymentStatus.COMPLETED)
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    let refundAmount = 0;
+    if (verifiedPaid > 0) {
+      if (opts.refundType === 'NONE') {
+        refundAmount = 0;
+      } else if (opts.refundType === 'PARTIAL') {
+        refundAmount = Math.min(verifiedPaid, Math.max(0, opts.refundAmount ?? 0));
+      } else {
+        // Default assumption: full refund returned
+        refundAmount = verifiedPaid;
+      }
+    }
+
+    const extraStatements: D1PreparedStatementLike[] = [];
+
+    // If refund is issued, record refund payment entry
+    if (refundAmount > 0 && this.paymentRepo) {
+      const refundPaymentId = `pay-ref-${crypto.randomUUID()}`;
+      extraStatements.push(
+        this.paymentRepo.prepareCreateStatement(
+          {
+            id: refundPaymentId,
+            order_id: opts.orderId,
+            branch_id: opts.branchId,
+            method: order.payment_method ?? PaymentMethod.CASH,
+            amount: refundAmount,
+            status: PaymentStatus.REFUNDED,
+            confirmed_by: opts.actorUserId,
+            confirmed_at: now,
+          },
+          now,
+        ),
+      );
+    }
+
+    // If order was in CONFIRMED, PREPARING, or READY stage, stock was deducted on confirmation
+    const wasConfirmed = [OrderStatus.CONFIRMED, OrderStatus.PREPARING, OrderStatus.READY].includes(order.status);
+    if (wasConfirmed && this.inventoryService && opts.restockInventory !== false) {
+      const orderItems = await this.orderRepo.getOrderItems(opts.orderId);
+      if (orderItems.length > 0) {
+        const restockStmts = this.inventoryService.prepareOrderCancellationRestockStatements({
+          branchId: opts.branchId,
+          orderId: opts.orderId,
+          actorUserId: opts.actorUserId,
+          items: orderItems.map((i) => ({ productId: i.product_id, quantity: i.quantity })),
+          nowIso: now,
+        });
+        extraStatements.push(...restockStmts);
+      }
+    }
+
+    // Compute updated payment status
+    let nextPaymentStatus = order.payment_status;
+    if (refundAmount >= verifiedPaid && verifiedPaid > 0) {
+      nextPaymentStatus = PaymentStatus.REFUNDED;
+    }
+
+    const updated = await this.orderRepo.cancelOrderWithStatements(
+      opts.orderId,
+      {
+        cancelled_at: now,
+        cancellation_reason: opts.reason || 'Cancelled by operator',
+        refund_amount: refundAmount,
+        payment_status: nextPaymentStatus,
+      },
+      extraStatements,
+    );
+
+    await this.auditRepo?.log({
+      branch_id: opts.branchId,
+      actor_user_id: opts.actorUserId,
+      action: AuditAction.ORDER_CANCELLED,
+      entity_type: 'order',
+      entity_id: opts.orderId,
+      metadata: {
+        previousStatus: order.status,
+        reason: opts.reason || 'Cancelled by operator',
+        refundType: opts.refundType ?? 'FULL',
+        refundAmount,
+        restocked: opts.restockInventory !== false,
+      },
+    });
+
+    await this.realtime?.publish({
+      type: 'OrderStatusChanged',
+      payload: {
+        orderId: opts.orderId,
+        orderNumber: order.order_number,
+        branchId: opts.branchId,
+        customerUserId: order.customer_user_id,
+        status: OrderStatus.CANCELLED,
+        paymentStatus: nextPaymentStatus,
+        total: order.total,
+        timestamp: now,
+      },
+    });
+
+    if (refundAmount > 0) {
+      await this.realtime?.publish({
+        type: 'PaymentUpdated',
+        payload: {
+          orderId: opts.orderId,
+          branchId: opts.branchId,
+          paymentId: `refund-${opts.orderId}`,
+          amount: refundAmount,
+          status: PaymentStatus.REFUNDED,
+          timestamp: now,
+        },
+      });
+    }
+
+    return updated;
+  }
+
+  async customerCancelOrder(customerUserId: string, orderId: string, reason?: string): Promise<Order> {
+    const order = await this.orderRepo.findById(orderId);
+    if (!order) throw new NotFoundError(`Order ${orderId} not found`);
+
+    if (order.customer_user_id !== customerUserId) {
+      throw new ForbiddenError('You can only cancel your own order');
+    }
+
+    if (order.status !== OrderStatus.PENDING) {
+      throw new BadRequestError('Orders can only be cancelled by customer when payment is pending. Please contact counter staff.');
+    }
+
+    if (order.payment_status === PaymentStatus.VERIFIED || order.payment_status === PaymentStatus.COMPLETED) {
+      throw new BadRequestError('Payment is already verified. Please contact counter staff to cancel.');
+    }
+
+    const now = new Date().toISOString();
+    const updated = await this.orderRepo.updateStatus(orderId, OrderStatus.CANCELLED, {
+      cancelled_at: now,
+      cancellation_reason: reason || 'Cancelled by customer before payment',
+      refund_amount: 0,
+    });
+
+    await this.auditRepo?.log({
+      branch_id: order.branch_id,
+      actor_user_id: customerUserId,
+      action: AuditAction.ORDER_CANCELLED,
+      entity_type: 'order',
+      entity_id: orderId,
+      metadata: { reason: 'Customer cancelled before payment' },
+    });
+
+    await this.realtime?.publish({
+      type: 'OrderStatusChanged',
+      payload: {
+        orderId,
+        orderNumber: order.order_number,
+        branchId: order.branch_id,
+        customerUserId: order.customer_user_id,
+        status: OrderStatus.CANCELLED,
         paymentStatus: order.payment_status,
         total: order.total,
         timestamp: now,

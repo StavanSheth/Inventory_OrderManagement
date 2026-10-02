@@ -294,7 +294,14 @@ export class OrderRepository extends BaseRepository {
   async updateStatus(
     orderId: string,
     status: OrderStatus,
-    extra: { confirmed_at?: string; completed_at?: string; cancelled_at?: string } = {},
+    extra: {
+      confirmed_at?: string;
+      completed_at?: string;
+      cancelled_at?: string;
+      cancellation_reason?: string | null;
+      refund_amount?: number;
+      payment_status?: PaymentStatus;
+    } = {},
   ): Promise<Order> {
     const now = new Date().toISOString();
     await this.db
@@ -304,6 +311,9 @@ export class OrderRepository extends BaseRepository {
             confirmed_at = COALESCE(?, confirmed_at),
             completed_at = COALESCE(?, completed_at),
             cancelled_at = COALESCE(?, cancelled_at),
+            cancellation_reason = COALESCE(?, cancellation_reason),
+            refund_amount = COALESCE(?, refund_amount),
+            payment_status = COALESCE(?, payment_status),
             updated_at = ?
         WHERE id = ?
       `)
@@ -312,11 +322,53 @@ export class OrderRepository extends BaseRepository {
         extra.confirmed_at ?? null,
         extra.completed_at ?? null,
         extra.cancelled_at ?? null,
+        extra.cancellation_reason ?? null,
+        extra.refund_amount !== undefined ? extra.refund_amount : null,
+        extra.payment_status ?? null,
         now,
         orderId,
       )
       .run();
 
+    const updated = await this.findById(orderId);
+    if (!updated) {
+      throw new Error(`Order ${orderId} not found`);
+    }
+    return updated;
+  }
+
+  async cancelOrderWithStatements(
+    orderId: string,
+    extra: {
+      cancelled_at: string;
+      cancellation_reason?: string | null;
+      refund_amount?: number;
+      payment_status?: PaymentStatus;
+    },
+    extraStatements: D1PreparedStatementLike[] = [],
+  ): Promise<Order> {
+    const now = new Date().toISOString();
+    const cancelStmt = this.db
+      .prepare(`
+        UPDATE orders
+        SET status = 'CANCELLED',
+            cancelled_at = ?,
+            cancellation_reason = COALESCE(?, cancellation_reason),
+            refund_amount = COALESCE(?, refund_amount),
+            payment_status = COALESCE(?, payment_status),
+            updated_at = ?
+        WHERE id = ?
+      `)
+      .bind(
+        extra.cancelled_at,
+        extra.cancellation_reason ?? null,
+        extra.refund_amount !== undefined ? extra.refund_amount : 0,
+        extra.payment_status ?? null,
+        now,
+        orderId,
+      );
+
+    await this.db.batch([cancelStmt, ...extraStatements]);
     const updated = await this.findById(orderId);
     if (!updated) {
       throw new Error(`Order ${orderId} not found`);
@@ -635,11 +687,14 @@ export class OrderRepository extends BaseRepository {
         ),
     );
 
+    const shouldResetStatus = ['PREPARING', 'READY'].includes(current.status);
+
     // 3. Conditional update statement protecting against terminal states, expiry races, and edit window
     const updateOrderStmt = this.db
       .prepare(`
         UPDATE orders
-        SET subtotal = ?,
+        SET ${shouldResetStatus ? "status = 'CONFIRMED'," : ''}
+            subtotal = ?,
             discount = COALESCE(?, discount),
             tax = ?,
             total = ?,

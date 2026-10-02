@@ -12,6 +12,11 @@ export async function onRequestGet(context: PagesFunctionEventContext<Cloudflare
   return handleBranchOrdersRoute(context.request, branchId, context.env);
 }
 
+export async function onRequestPost(context: PagesFunctionEventContext<CloudflareEnv>): Promise<Response> {
+  const branchId = context.params.id;
+  return handleBranchOrdersRoute(context.request, branchId, context.env);
+}
+
 export async function onRequestOptions(context: PagesFunctionEventContext<CloudflareEnv>): Promise<Response> {
   const branchId = context.params.id;
   return handleBranchOrdersRoute(context.request, branchId, context.env);

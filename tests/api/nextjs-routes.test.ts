@@ -246,4 +246,26 @@ describe('Next.js API Routes (app/api/v1) — End-to-End Exposure', () => {
     assert.strictEqual(sseResp.status, 200);
     assert.strictEqual(sseResp.headers.get('Content-Type'), 'text/event-stream');
   });
+
+  it('exposes POST /branches/:id/orders for operator direct counter order booking', async () => {
+    const bookReq = new Request('http://x/api/v1/branches/branch-alpha/orders', {
+      method: 'POST',
+      headers: {
+        Authorization: bearerToken('fb-op', 'op@melt.local', 'Operator'),
+        'x-session-token': operatorSessionToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        items: [{ productId: 'prod-a1', quantity: 1 }],
+        initialStatus: 'READY',
+        paymentMethod: 'CASH',
+        paymentNotes: 'Counter Booking Test',
+      }),
+    });
+    const resp = await BranchOrdersRoute.POST(bookReq, { params: Promise.resolve({ id: 'branch-alpha' }) });
+    assert.strictEqual(resp.status, 201);
+    const json = (await resp.json()) as { data: { order: { status: string; payment_status: string } } };
+    assert.strictEqual(json.data.order.status, 'READY');
+    assert.strictEqual(json.data.order.payment_status, 'VERIFIED');
+  });
 });

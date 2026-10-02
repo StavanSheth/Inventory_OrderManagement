@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { orderApiClient } from '../../services/order-api-client';
 import { Order } from '../../../shared/types/entities.types';
-import { OrderStatus, PaymentStatus } from '../../../shared/enums/order.enum';
+import { OrderStatus } from '../../../shared/enums/order.enum';
 
 interface OrderHistoryViewProps {
   onSelectOrder: (orderId: string) => void;
@@ -42,39 +42,30 @@ export const OrderHistoryView: React.FC<OrderHistoryViewProps> = ({
 
   const filteredOrders = orders.filter((o) => {
     if (statusFilter === 'ALL') return true;
+    if (statusFilter === OrderStatus.EXPIRED) {
+      return o.status === OrderStatus.EXPIRED || o.status === OrderStatus.CANCELLED;
+    }
     return o.status === statusFilter;
   });
 
   const getStatusBadge = (status: OrderStatus) => {
     switch (status) {
       case OrderStatus.PENDING:
-        return { label: 'Pending Payment', bg: '#ffcf4d', text: '#2b1233' };
+        return { label: 'Payment Left', bg: '#fef3c7', text: '#92400e' };
       case OrderStatus.CONFIRMED:
-        return { label: 'Confirmed', bg: '#bfe3a6', text: '#2b1233' };
+        return { label: 'Payment done', bg: '#dcfce7', text: '#166534' };
       case OrderStatus.PREPARING:
-        return { label: 'Preparing', bg: '#ecd3b4', text: '#2b1233' };
+        return { label: 'Preparing', bg: '#fef08a', text: '#854d0e' };
       case OrderStatus.READY:
-        return { label: 'Ready for Pickup', bg: '#a9bfff', text: '#2b1233' };
+        return { label: 'Ready', bg: '#dbeafe', text: '#1e40af' };
       case OrderStatus.COMPLETED:
-        return { label: 'Completed', bg: '#ffc2d4', text: '#2b1233' };
+        return { label: 'Collected', bg: '#fce7f3', text: '#9d174d' };
       case OrderStatus.EXPIRED:
+        return { label: 'Expired', bg: '#fee2e2', text: '#991b1b' };
       case OrderStatus.CANCELLED:
-        return { label: 'Cancelled', bg: '#fecdd3', text: '#9f1239' };
+        return { label: 'Cancelled', bg: '#fee2e2', text: '#991b1b' };
       default:
         return { label: status, bg: '#fff1f4', text: '#6f5569' };
-    }
-  };
-
-  const getPaymentStatusBadge = (status: PaymentStatus) => {
-    switch (status) {
-      case PaymentStatus.VERIFIED:
-        return { label: 'Paid & Verified', bg: '#bfe3a6', text: '#2b1233' };
-      case PaymentStatus.RECORDED:
-        return { label: 'Payment Recorded', bg: '#a9bfff', text: '#2b1233' };
-      case PaymentStatus.FAILED:
-        return { label: 'Payment Failed', bg: '#fecdd3', text: '#9f1239' };
-      default:
-        return { label: 'Pending Payment', bg: '#ffcf4d', text: '#2b1233' };
     }
   };
 
@@ -141,29 +132,61 @@ export const OrderHistoryView: React.FC<OrderHistoryViewProps> = ({
       >
         {[
           { id: 'ALL', label: 'All Orders' },
-          { id: OrderStatus.PENDING, label: 'Pending' },
-          { id: OrderStatus.CONFIRMED, label: 'Confirmed' },
+          { id: OrderStatus.PENDING, label: 'Payment Left' },
+          { id: OrderStatus.CONFIRMED, label: 'Payment done' },
+          { id: OrderStatus.PREPARING, label: 'Preparing' },
+          { id: OrderStatus.READY, label: 'Ready' },
+          { id: OrderStatus.COMPLETED, label: 'Collected' },
           { id: OrderStatus.EXPIRED, label: 'Expired' },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setStatusFilter(tab.id)}
-            style={{
-              padding: '0.45rem 1rem',
-              borderRadius: '9999px',
-              border: statusFilter === tab.id ? 'none' : '1px solid #f4d3dd',
-              background: statusFilter === tab.id ? '#d61c5d' : '#ffffff',
-              color: statusFilter === tab.id ? '#ffffff' : '#2b1233',
-              fontSize: '0.8125rem',
-              fontWeight: 800,
-              cursor: 'pointer',
-              boxShadow: statusFilter === tab.id ? '0 3px 0 #a3134a' : '0 2px 8px -4px rgba(120,20,60,0.08)',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            {tab.label}
-          </button>
-        ))}
+        ].map((tab) => {
+          const count =
+            tab.id === 'ALL'
+              ? orders.length
+              : tab.id === OrderStatus.EXPIRED
+              ? orders.filter(
+                  (o) => o.status === OrderStatus.EXPIRED || o.status === OrderStatus.CANCELLED
+                ).length
+              : orders.filter((o) => o.status === tab.id).length;
+
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setStatusFilter(tab.id)}
+              style={{
+                padding: '0.45rem 1rem',
+                borderRadius: '9999px',
+                border: statusFilter === tab.id ? 'none' : '1px solid #f4d3dd',
+                background: statusFilter === tab.id ? '#d61c5d' : '#ffffff',
+                color: statusFilter === tab.id ? '#ffffff' : '#2b1233',
+                fontSize: '0.8125rem',
+                fontWeight: 800,
+                cursor: 'pointer',
+                boxShadow: statusFilter === tab.id ? '0 3px 0 #a3134a' : '0 2px 8px -4px rgba(120,20,60,0.08)',
+                transition: 'all 0.15s ease',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <span>{tab.label}</span>
+              {count > 0 && (
+                <span
+                  style={{
+                    padding: '0.1rem 0.45rem',
+                    borderRadius: '9999px',
+                    fontSize: '0.7rem',
+                    fontWeight: 900,
+                    background: statusFilter === tab.id ? 'rgba(255,255,255,0.25)' : '#fff1f4',
+                    color: statusFilter === tab.id ? '#ffffff' : '#d61c5d',
+                  }}
+                >
+                  {count}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* Content */}
@@ -232,7 +255,6 @@ export const OrderHistoryView: React.FC<OrderHistoryViewProps> = ({
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
           {filteredOrders.map((order) => {
             const statusBadge = getStatusBadge(order.status);
-            const paymentBadge = getPaymentStatusBadge(order.payment_status);
 
             return (
               <div
@@ -277,18 +299,6 @@ export const OrderHistoryView: React.FC<OrderHistoryViewProps> = ({
                       }}
                     >
                       {statusBadge.label}
-                    </span>
-                    <span
-                      style={{
-                        padding: '0.25rem 0.75rem',
-                        borderRadius: '9999px',
-                        background: paymentBadge.bg,
-                        color: paymentBadge.text,
-                        fontSize: '0.75rem',
-                        fontWeight: 800,
-                      }}
-                    >
-                      {paymentBadge.label}
                     </span>
                   </div>
                   <div style={{ color: '#6f5569', fontSize: '0.8125rem', fontWeight: 600 }}>

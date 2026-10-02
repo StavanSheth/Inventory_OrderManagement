@@ -1,5 +1,5 @@
 import { Inventory, InventoryMovement, RawMaterial, ProductComponent } from '../../../shared/types/entities.types';
-import { InventoryMovementType } from '../../../shared/enums/inventory.enum';
+import { InventoryMovementType, InventoryItemType } from '../../../shared/enums/inventory.enum';
 import { AuditAction } from '../../../shared/enums/audit.enum';
 import { InventoryRepository, CreateRawMaterialInput, UpdateRawMaterialInput } from '../../../database/repositories/inventory.repository';
 import { AuditRepository } from '../../../database/repositories/audit.repository';
@@ -99,6 +99,14 @@ export interface IInventoryService {
     statements: D1PreparedStatementLike[];
     pendingDeltas: Array<{ productId: string; quantity: number }>;
   }>;
+
+  prepareOrderCancellationRestockStatements(opts: {
+    branchId: string;
+    orderId: string;
+    actorUserId?: string | null;
+    items: Array<{ productId: string; quantity: number }>;
+    nowIso?: string;
+  }): D1PreparedStatementLike[];
 }
 
 export const INVENTORY_SERVICE_TOKEN = 'IInventoryService';
@@ -130,6 +138,9 @@ export class InventoryService implements IInventoryService {
       cgst_rate?: number;
       sgst_rate?: number;
       igst_rate?: number;
+      serving_size?: string;
+      price_rate?: number;
+      serving_sizes_json?: string;
     },
     actorUserId?: string,
   ): Promise<Inventory> {
@@ -892,6 +903,42 @@ export class InventoryService implements IInventoryService {
         timestamp: new Date().toISOString(),
       },
     });
+  }
+
+  prepareOrderCancellationRestockStatements(opts: {
+    branchId: string;
+    orderId: string;
+    actorUserId?: string | null;
+    items: Array<{ productId: string; quantity: number }>;
+    nowIso?: string;
+  }): D1PreparedStatementLike[] {
+    const nowIso = opts.nowIso ?? new Date().toISOString();
+    const stmts: D1PreparedStatementLike[] = [];
+
+    for (const item of opts.items) {
+      if (item.quantity <= 0) continue;
+      stmts.push(
+        this.inventoryRepo.prepareRestockStatement(opts.branchId, item.productId, item.quantity, nowIso),
+        this.inventoryRepo.prepareMovementStatement(
+          {
+            id: `mov-${crypto.randomUUID()}`,
+            branch_id: opts.branchId,
+            inventory_item_type: InventoryItemType.FINISHED_PRODUCT,
+            product_id: item.productId,
+            raw_material_id: null,
+            quantity_delta: item.quantity,
+            movement_type: InventoryMovementType.REFILL,
+            reason: `Order cancelled - items restocked`,
+            reference_type: 'ORDER_CANCEL',
+            reference_id: opts.orderId,
+            actor_user_id: opts.actorUserId ?? null,
+          },
+          nowIso,
+        ),
+      );
+    }
+
+    return stmts;
   }
 }
 

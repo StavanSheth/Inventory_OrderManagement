@@ -183,3 +183,33 @@ export async function handleEditOrderRoute(
     responseHeaders,
   );
 }
+
+/**
+ * POST /api/v1/customer/orders/:orderId/cancel
+ * Customer can cancel order only before payment is done.
+ */
+export async function handleCustomerCancelOrderRoute(
+  request: Request,
+  orderId: string,
+  env?: { DB?: D1DatabaseLike },
+  options: AuthFactoryOptions = {},
+): Promise<Response> {
+  const preflight = handleCorsPreflight(request, config.allowedOrigins);
+  if (preflight) return preflight;
+
+  const corsHeaders = getCorsHeaders(request, config.allowedOrigins);
+  const context = extractRequestContext(request);
+  const responseHeaders = { ...corsHeaders, 'x-request-id': context.requestId };
+
+  try {
+    const { db, authMiddleware } = createAuthInfrastructure(env, options);
+    const ordersService = buildOrdersService(db);
+
+    const userContext = await authMiddleware.authenticateRequest(request, { requireSession: false });
+
+    const cancelled = await ordersService.customerCancelOrder(userContext.userId, orderId);
+    return successResponse(cancelled, 200, responseHeaders);
+  } catch (error) {
+    return handleApiError(error, responseHeaders);
+  }
+}
