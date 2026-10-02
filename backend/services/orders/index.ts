@@ -254,6 +254,7 @@ export class OrdersService implements IOrdersService {
     try {
       updatedOrder = await this.orderRepo.atomicEditOrder({
         orderId: opts.orderId,
+        branchId: order.branch_id,
         items: newCalcItems,
         subtotal,
         tax,
@@ -575,6 +576,18 @@ export class OrdersService implements IOrdersService {
     );
 
     const updatedOrder = (await this.orderRepo.findById(opts.orderId))!;
+
+    if (!wasUpdated) {
+      if (updatedPayment.status === PaymentStatus.RECORDED) {
+        if (updatedOrder.status === OrderStatus.EXPIRED || new Date(updatedOrder.expires_at).getTime() <= new Date(now).getTime()) {
+          throw new BadRequestError('Cannot verify payment: order has expired');
+        }
+        if (updatedOrder.status === OrderStatus.CANCELLED) {
+          throw new BadRequestError('Cannot verify payment: order is cancelled');
+        }
+        throw new BadRequestError('Payment verification failed');
+      }
+    }
 
     if (wasUpdated) {
       await this.realtime?.publish({

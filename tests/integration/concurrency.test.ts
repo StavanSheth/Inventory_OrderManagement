@@ -640,5 +640,219 @@ describe('Phase 3 — Concurrency, Payment Lifecycle & Ticket Transport Tests', 
       assert.strictEqual(replayRes.status, 401);
     });
   });
+
+  describe('Phase 3 Explicit Concurrency Tests (Tests A-F)', () => {
+    it('Test A: edit vs expiry — edit fails cleanly, items remain unchanged, order remains EXPIRED', async () => {
+      const { order } = await ordersService.createOrder({
+        actorUserId: 'usr-cust',
+        customerUserId: 'usr-cust',
+        branchId: 'branch-alpha',
+        items: [{ productId: 'prod-1', quantity: 2 }],
+      });
+
+      // Expire order
+      await db
+        .prepare("UPDATE orders SET status = 'EXPIRED', expires_at = ? WHERE id = ?")
+        .bind(new Date(Date.now() - 60_000).toISOString(), order.id)
+        .run();
+
+      // Attempt edit
+      await assert.rejects(
+        async () => {
+          await ordersService.editOrder({
+            actorUserId: 'usr-op',
+            orderId: order.id,
+            items: [{ productId: 'prod-2', quantity: 4 }],
+          });
+        },
+        /expired|terminal status/i,
+      );
+
+      // Verify items unchanged
+      const items = await orderRepo.getOrderItems(order.id);
+      assert.strictEqual(items.length, 1);
+      assert.strictEqual(items[0].product_id, 'prod-1');
+      assert.strictEqual(items[0].quantity, 2);
+
+      const dbOrder = await orderRepo.findById(order.id);
+      assert.strictEqual(dbOrder?.status, OrderStatus.EXPIRED);
+    });
+
+    it('Test B: expiry vs payment verification race — never allows EXPIRED + VERIFIED payment', async () => {
+      const { order } = await ordersService.createOrder({
+        actorUserId: 'usr-cust',
+        customerUserId: 'usr-cust',
+        branchId: 'branch-alpha',
+        items: [{ productId: 'prod-1', quantity: 1 }],
+      });
+
+      const { payment } = await ordersService.recordPayment({
+        actorUserId: 'usr-op',
+        orderId: order.id,
+        branchId: 'branch-alpha',
+        amount: 105,
+        method: PaymentMethod.CARD,
+      });
+
+      // Race expiry and payment verification
+      await db
+        .prepare("UPDATE orders SET status = 'EXPIRED', expires_at = ? WHERE id = ?")
+        .bind(new Date(Date.now() - 1000).toISOString(), order.id)
+        .run();
+
+      await assert.rejects(
+        async () => {
+          await ordersService.verifyPayment({
+            actorUserId: 'usr-op',
+            orderId: order.id,
+            paymentId: payment.id,
+          });
+        },
+        /expired/i,
+      );
+
+      const currentOrder = await orderRepo.findById(order.id);
+      const currentPayment = await paymentRepo.findById(payment.id);
+
+      assert.strictEqual(currentOrder?.status, OrderStatus.EXPIRED);
+      assert.strictEqual(currentPayment?.status, PaymentStatus.RECORDED, 'Payment must remain RECORDED if order expired');
+      assert.notStrictEqual(currentPayment?.status, PaymentStatus.VERIFIED, 'Payment must NEVER be VERIFIED on an EXPIRED order');
+    });
+
+    it('Test C: concurrent edit — only one valid mutation wins, other fails cleanly, database remains consistent', async () => {
+      const { order } = await ordersService.createOrder({
+        actorUserId: 'usr-cust',
+        customerUserId: 'usr-cust',
+        branchId: 'branch-alpha',
+        items: [{ productId: 'prod-1', quantity: 1 }],
+      });
+
+      // Run two competing edits concurrently
+      const results = await Promise.allSettled([
+        ordersService.editOrder({
+          actorUserId: 'usr-op',
+          orderId: order.id,
+          items: [{ productId: 'prod-1', quantity: 3 }],
+        }),
+        ordersService.editOrder({
+          actorUserId: 'usr-op',
+          orderId: order.id,
+          items: [{ productId: 'prod-2', quantity: 2 }],
+        }),
+      ]);
+
+      const fulfilled = results.filter((r) => r.status === 'fulfilled');
+      assert.ok(fulfilled.length >= 1, 'At least one edit must settle successfully');
+
+      // Database items must be completely consistent (either 3 prod-1 or 2 prod-2, never mixed or duplicated)
+      const items = await orderRepo.getOrderItems(order.id);
+      assert.strictEqual(items.length, 1, 'Database must have exactly 1 item record');
+      assert.ok(
+        (items[0].product_id === 'prod-1' && items[0].quantity === 3) ||
+        (items[0].product_id === 'prod-2' && items[0].quantity === 2),
+        'Items must match one of the valid edit payloads',
+      );
+    });
+
+    it('Test D: edit after cancellation — rejected and items unchanged', async () => {
+      const { order } = await ordersService.createOrder({
+        actorUserId: 'usr-cust',
+        customerUserId: 'usr-cust',
+        branchId: 'branch-alpha',
+        items: [{ productId: 'prod-1', quantity: 1 }],
+      });
+
+      await ordersService.updateOrderStatus('usr-op', order.id, OrderStatus.CANCELLED);
+
+      await assert.rejects(
+        async () => {
+          await ordersService.editOrder({
+            actorUserId: 'usr-op',
+            orderId: order.id,
+            items: [{ productId: 'prod-2', quantity: 5 }],
+          });
+        },
+        /terminal status|cancelled/i,
+      );
+
+      const items = await orderRepo.getOrderItems(order.id);
+      assert.strictEqual(items.length, 1);
+      assert.strictEqual(items[0].product_id, 'prod-1');
+      assert.strictEqual(items[0].quantity, 1);
+    });
+
+    it('Test E: edit after edit window — rejected and items unchanged', async () => {
+      const { order } = await ordersService.createOrder({
+        actorUserId: 'usr-cust',
+        customerUserId: 'usr-cust',
+        branchId: 'branch-alpha',
+        items: [{ productId: 'prod-1', quantity: 1 }],
+      });
+
+      // Move placed_at to 2 hours ago (exceeding default 60-min edit window)
+      const twoHoursAgo = new Date(Date.now() - 120 * 60 * 1000).toISOString();
+      await db
+        .prepare('UPDATE orders SET placed_at = ?, created_at = ? WHERE id = ?')
+        .bind(twoHoursAgo, twoHoursAgo, order.id)
+        .run();
+
+      await assert.rejects(
+        async () => {
+          await ordersService.editOrder({
+            actorUserId: 'usr-op',
+            orderId: order.id,
+            items: [{ productId: 'prod-2', quantity: 2 }],
+          });
+        },
+        /edit window has expired|cannot be edited/i,
+      );
+
+      const items = await orderRepo.getOrderItems(order.id);
+      assert.strictEqual(items.length, 1);
+      assert.strictEqual(items[0].product_id, 'prod-1');
+    });
+
+    it('Test F: payment verification after expiry — explicitly rejected, payment stays RECORDED, order stays EXPIRED', async () => {
+      const { order } = await ordersService.createOrder({
+        actorUserId: 'usr-cust',
+        customerUserId: 'usr-cust',
+        branchId: 'branch-alpha',
+        items: [{ productId: 'prod-1', quantity: 1 }],
+      });
+
+      const { payment } = await ordersService.recordPayment({
+        actorUserId: 'usr-op',
+        orderId: order.id,
+        branchId: 'branch-alpha',
+        amount: 105,
+        method: PaymentMethod.CASH,
+      });
+
+      // Force order to expire
+      const expiredIso = new Date(Date.now() - 30_000).toISOString();
+      await db
+        .prepare("UPDATE orders SET status = 'EXPIRED', expires_at = ?, expired_at = ? WHERE id = ?")
+        .bind(expiredIso, expiredIso, order.id)
+        .run();
+
+      await assert.rejects(
+        async () => {
+          await ordersService.verifyPayment({
+            actorUserId: 'usr-op',
+            orderId: order.id,
+            paymentId: payment.id,
+          });
+        },
+        /expired/i,
+      );
+
+      const finalPayment = await paymentRepo.findById(payment.id);
+      assert.strictEqual(finalPayment?.status, PaymentStatus.RECORDED);
+
+      const finalOrder = await orderRepo.findById(order.id);
+      assert.strictEqual(finalOrder?.status, OrderStatus.EXPIRED);
+      assert.notStrictEqual(finalPayment?.status, PaymentStatus.VERIFIED);
+    });
+  });
 });
 

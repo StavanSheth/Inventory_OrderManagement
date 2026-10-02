@@ -77,7 +77,7 @@ export function canConfirmOrder(order: {
 }
 
 export function isOrderEditable(
-  order: { status: OrderStatus; placed_at: string; confirmed_at?: string | null },
+  order: { status: OrderStatus; placed_at: string; confirmed_at?: string | null; expires_at?: string },
   editWindowMinutes: number = ORDER_EDIT_WINDOW_MINUTES,
   now: Date = new Date(),
 ): boolean {
@@ -87,6 +87,11 @@ export function isOrderEditable(
     order.status === OrderStatus.CANCELLED
   ) {
     return false;
+  }
+  if (order.status === OrderStatus.PENDING && order.expires_at) {
+    if (now.getTime() >= new Date(order.expires_at).getTime()) {
+      return false;
+    }
   }
   const referenceDate = new Date(order.confirmed_at ?? order.placed_at);
   return isWithinOrderEditWindow(referenceDate, editWindowMinutes, now);

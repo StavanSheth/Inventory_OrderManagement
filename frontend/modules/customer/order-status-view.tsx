@@ -104,13 +104,13 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onBac
       const remaining = new Date(order.expires_at).getTime() - Date.now();
       setTimeLeftMs(Math.max(0, remaining));
       if (remaining <= 0) {
-        setOrder((prev) => (prev ? { ...prev, status: OrderStatus.EXPIRED } : null));
         clearInterval(interval);
+        refetchOrder();
       }
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [order]);
+  }, [order, refetchOrder]);
 
   const getStatusColor = (status: OrderStatus) => {
     switch (status) {

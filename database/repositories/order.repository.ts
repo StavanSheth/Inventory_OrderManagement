@@ -34,6 +34,7 @@ export interface CreateOrderInput {
 
 export interface AtomicEditOrderOptions {
   orderId: string;
+  branchId?: string;
   items: CreateOrderItemInput[];
   subtotal: number;
   tax: number;
@@ -443,10 +444,30 @@ export class OrderRepository extends BaseRepository {
       throw new Error(`Order ${opts.orderId} cannot be edited because the edit window has elapsed`);
     }
 
-    // 1. Prepare delete previous items statement
-    const deleteStmt = this.db.prepare('DELETE FROM order_items WHERE order_id = ?').bind(opts.orderId);
+    // 1. Prepare delete previous items statement guarded by order edit conditions
+    const deleteStmt = this.db
+      .prepare(`
+        DELETE FROM order_items
+        WHERE order_id = ?
+          AND EXISTS (
+            SELECT 1 FROM orders
+            WHERE id = ?
+              AND (? IS NULL OR branch_id = ?)
+              AND status NOT IN ('CANCELLED', 'EXPIRED', 'COMPLETED')
+              AND (status != 'PENDING' OR expires_at > ?)
+              AND COALESCE(confirmed_at, placed_at, created_at) >= ?
+          )
+      `)
+      .bind(
+        opts.orderId,
+        opts.orderId,
+        opts.branchId ?? null,
+        opts.branchId ?? null,
+        now,
+        opts.editCutoffIso,
+      );
 
-    // 2. Prepare insert new items statements
+    // 2. Prepare insert new items statements guarded by order edit conditions
     const itemStmts = opts.items.map((item) =>
       this.db
         .prepare(`
@@ -454,7 +475,15 @@ export class OrderRepository extends BaseRepository {
             id, order_id, product_id, product_name_snapshot, unit_price_snapshot,
             quantity, line_discount, line_total, created_at, updated_at
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+          WHERE EXISTS (
+            SELECT 1 FROM orders
+            WHERE id = ?
+              AND (? IS NULL OR branch_id = ?)
+              AND status NOT IN ('CANCELLED', 'EXPIRED', 'COMPLETED')
+              AND (status != 'PENDING' OR expires_at > ?)
+              AND COALESCE(confirmed_at, placed_at, created_at) >= ?
+          )
         `)
         .bind(
           item.id,
@@ -467,6 +496,11 @@ export class OrderRepository extends BaseRepository {
           item.line_total,
           now,
           now,
+          opts.orderId,
+          opts.branchId ?? null,
+          opts.branchId ?? null,
+          now,
+          opts.editCutoffIso,
         ),
     );
 
@@ -481,6 +515,7 @@ export class OrderRepository extends BaseRepository {
             last_edited_at = ?,
             updated_at = ?
         WHERE id = ?
+          AND (? IS NULL OR branch_id = ?)
           AND status NOT IN ('CANCELLED', 'EXPIRED', 'COMPLETED')
           AND (status != 'PENDING' OR expires_at > ?)
           AND COALESCE(confirmed_at, placed_at, created_at) >= ?
@@ -493,13 +528,15 @@ export class OrderRepository extends BaseRepository {
         opts.lastEditedAt,
         now,
         opts.orderId,
+        opts.branchId ?? null,
+        opts.branchId ?? null,
         now,
         opts.editCutoffIso,
       );
 
     const stmts: D1PreparedStatementLike[] = [deleteStmt, ...itemStmts, updateOrderStmt];
 
-    // 4. Audit statement if provided (commits in the exact same transaction)
+    // 4. Audit statement if provided (commits in the exact same transaction, guarded by edit conditions)
     if (opts.auditLog) {
       const auditStmt = this.db
         .prepare(`
@@ -507,7 +544,15 @@ export class OrderRepository extends BaseRepository {
             id, branch_id, actor_user_id, action, entity_type, entity_id,
             metadata_json, created_at
           )
-          VALUES (?, ?, ?, ?, 'order', ?, ?, ?)
+          SELECT ?, ?, ?, ?, 'order', ?, ?, ?
+          WHERE EXISTS (
+            SELECT 1 FROM orders
+            WHERE id = ?
+              AND (? IS NULL OR branch_id = ?)
+              AND status NOT IN ('CANCELLED', 'EXPIRED', 'COMPLETED')
+              AND (status != 'PENDING' OR expires_at > ?)
+              AND COALESCE(confirmed_at, placed_at, created_at) >= ?
+          )
         `)
         .bind(
           opts.auditLog.id,
@@ -517,6 +562,11 @@ export class OrderRepository extends BaseRepository {
           opts.orderId,
           JSON.stringify(opts.auditLog.metadata),
           now,
+          opts.orderId,
+          opts.branchId ?? null,
+          opts.branchId ?? null,
+          now,
+          opts.editCutoffIso,
         );
       stmts.push(auditStmt);
     }

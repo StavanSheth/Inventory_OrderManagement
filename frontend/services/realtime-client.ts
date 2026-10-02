@@ -22,6 +22,8 @@ export class RealtimeClient {
     let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
     let backoffDelay = 1000;
 
+    let lastReceivedEventId: string | null = null;
+
     const connect = async () => {
       if (isCancelled) return;
 
@@ -56,6 +58,7 @@ export class RealtimeClient {
         const params = new URLSearchParams();
         if (options.orderId) params.set('orderId', options.orderId);
         if (options.branchId) params.set('branchId', options.branchId);
+        if (lastReceivedEventId) params.set('lastEventId', lastReceivedEventId);
 
         if (ticket) {
           params.set('ticket', ticket);
@@ -72,8 +75,16 @@ export class RealtimeClient {
         };
 
         eventSource.onmessage = (event) => {
+          if (event.lastEventId) {
+            lastReceivedEventId = event.lastEventId;
+          }
           try {
             const parsed = JSON.parse(event.data) as RealtimeDomainEvent;
+            if (event.lastEventId && !parsed.id) {
+              parsed.id = event.lastEventId;
+            } else if (parsed.id) {
+              lastReceivedEventId = parsed.id;
+            }
             options.onEvent(parsed);
           } catch {
             // Ignored comment or non-json message

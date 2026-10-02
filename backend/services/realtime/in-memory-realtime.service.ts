@@ -16,15 +16,17 @@ export class InMemoryRealtimeService implements IRealtimeService {
   private maxHistory: number = 100;
 
   async publish(event: RealtimeDomainEvent): Promise<void> {
-    this.eventHistory.push(event);
+    const eventId = event.id ?? `evt-${crypto.randomUUID()}`;
+    const eventWithId: RealtimeDomainEvent = { ...event, id: eventId };
+    this.eventHistory.push(eventWithId);
     if (this.eventHistory.length > this.maxHistory) {
       this.eventHistory.shift();
     }
 
     for (const sub of this.subscriptions.values()) {
-      if (this.matchesFilter(event, sub.filter)) {
+      if (this.matchesFilter(eventWithId, sub.filter)) {
         try {
-          sub.listener(event);
+          sub.listener(eventWithId);
         } catch {
           // Prevent listener error from disrupting other subscribers
         }
@@ -50,6 +52,16 @@ export class InMemoryRealtimeService implements IRealtimeService {
       }
       return false;
     });
+  }
+
+  getRecentEvents(filter: RealtimeSubscriptionFilter, limit: number = 20): RealtimeDomainEvent[] {
+    return this.eventHistory.filter((e) => this.matchesFilter(e, filter)).slice(-limit);
+  }
+
+  getEventsAfter(afterEventId: string, filter: RealtimeSubscriptionFilter, limit: number = 50): RealtimeDomainEvent[] {
+    const idx = this.eventHistory.findIndex((e) => e.id === afterEventId);
+    const sub = idx >= 0 ? this.eventHistory.slice(idx + 1) : this.eventHistory;
+    return sub.filter((e) => this.matchesFilter(e, filter)).slice(0, limit);
   }
 
   clear(): void {

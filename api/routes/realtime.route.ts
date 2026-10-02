@@ -222,38 +222,77 @@ export async function handleRealtimeEventsRoute(
       }
     }
 
-    // 3. Setup SSE ReadableStream
+    // 3. Setup SSE ReadableStream with stable event ID, replay, and keepalive heartbeat
     let unsubscribe: (() => void) | null = null;
+    let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
     const encoder = new TextEncoder();
+    const lastEventId = request.headers.get('Last-Event-ID') || url.searchParams.get('lastEventId');
+
+    const formatSse = (event: RealtimeDomainEvent): string => {
+      let msg = '';
+      if (event.id) {
+        msg += `id: ${event.id}\n`;
+      }
+      msg += `data: ${JSON.stringify(event)}\n\n`;
+      return msg;
+    };
 
     const stream = new ReadableStream({
       async start(controller) {
-        // Send initial connected comment
-        controller.enqueue(encoder.encode(': connected\n\n'));
+        let initialFrame = ': connected\n\n';
 
-        // Deliver recent events for catch-up on connect/reconnect
+        // Deliver catch-up events on connect/reconnect
         try {
-          if ('getRecentEvents' in service && typeof (service as { getRecentEvents: unknown }).getRecentEvents === 'function') {
-            const recentEvents = await (service as { getRecentEvents: (f: typeof subFilter, limit: number) => Promise<RealtimeDomainEvent[]> }).getRecentEvents(subFilter, 5);
+          if (lastEventId && 'getEventsAfter' in service && typeof (service as { getEventsAfter: unknown }).getEventsAfter === 'function') {
+            const missedEvents = await (service as {
+              getEventsAfter: (afterId: string, f: typeof subFilter, limit: number) => Promise<RealtimeDomainEvent[]>;
+            }).getEventsAfter(lastEventId, subFilter, 50);
+
+            for (const ev of missedEvents) {
+              initialFrame += formatSse(ev);
+            }
+          } else if ('getRecentEvents' in service && typeof (service as { getRecentEvents: unknown }).getRecentEvents === 'function') {
+            const recentEvents = await (service as {
+              getRecentEvents: (f: typeof subFilter, limit: number) => Promise<RealtimeDomainEvent[]>;
+            }).getRecentEvents(subFilter, 5);
+
             for (const ev of recentEvents.reverse()) {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify(ev)}\n\n`));
+              initialFrame += formatSse(ev);
             }
           }
         } catch {
           // Catch-up error shouldn't terminate active stream
         }
 
+        controller.enqueue(encoder.encode(initialFrame));
+
         // Subscribe to realtime bus
         unsubscribe = service.subscribe(subFilter, (event: RealtimeDomainEvent) => {
           try {
-            const data = `data: ${JSON.stringify(event)}\n\n`;
-            controller.enqueue(encoder.encode(data));
+            controller.enqueue(encoder.encode(formatSse(event)));
           } catch {
             // Stream closed or error
           }
         });
+
+        // Periodic heartbeat/keepalive comment (every 25s) to prevent idle connection termination
+        heartbeatTimer = setInterval(() => {
+          try {
+            controller.enqueue(encoder.encode(': keepalive\n\n'));
+          } catch {
+            if (heartbeatTimer) clearInterval(heartbeatTimer);
+          }
+        }, 25_000);
+
+        if (typeof heartbeatTimer.unref === 'function') {
+          heartbeatTimer.unref();
+        }
       },
       cancel() {
+        if (heartbeatTimer) {
+          clearInterval(heartbeatTimer);
+          heartbeatTimer = null;
+        }
         if (unsubscribe) {
           unsubscribe();
           unsubscribe = null;

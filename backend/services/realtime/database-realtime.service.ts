@@ -136,6 +136,7 @@ class CentralRealtimeHub {
         }
 
         const event: RealtimeDomainEvent = {
+          id: row.id,
           type: row.event_type as RealtimeDomainEvent['type'],
           payload: JSON.parse(row.payload_json),
         };
@@ -216,10 +217,11 @@ export class DatabaseRealtimeService implements IRealtimeService {
     const orderId = typeof payload.orderId === 'string' ? payload.orderId : null;
     const customerUserId = typeof payload.customerUserId === 'string' ? payload.customerUserId : null;
     const now = typeof payload.timestamp === 'string' ? payload.timestamp : new Date().toISOString();
-    const eventId = `evt-${crypto.randomUUID()}`;
+    const eventId = event.id ?? `evt-${crypto.randomUUID()}`;
+    const eventWithId: RealtimeDomainEvent = { ...event, id: eventId };
 
     // 1. Broadcast immediately to all active in-process subscribers in the centralized hub
-    centralRealtimeHub.broadcast(event, eventId);
+    centralRealtimeHub.broadcast(eventWithId, eventId);
 
     // 2. Persist event to D1 database for cross-instance and client reconnection catchup
     if (this.db) {
@@ -294,6 +296,59 @@ export class DatabaseRealtimeService implements IRealtimeService {
       const rows = (res.results ?? []) as Array<{ id: string; event_type: string; payload_json: string }>;
 
       return rows.map((row) => ({
+        id: row.id,
+        type: row.event_type as RealtimeDomainEvent['type'],
+        payload: JSON.parse(row.payload_json),
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  async getEventsAfter(
+    afterEventId: string,
+    filter: RealtimeSubscriptionFilter,
+    limit: number = 50,
+  ): Promise<RealtimeDomainEvent[]> {
+    if (!this.db) return [];
+
+    try {
+      const origin = await this.db
+        .prepare('SELECT created_at FROM realtime_events WHERE id = ?')
+        .bind(afterEventId)
+        .first<{ created_at: string }>();
+
+      let query = 'SELECT id, event_type, payload_json FROM realtime_events WHERE ';
+      const params: unknown[] = [];
+
+      if (origin?.created_at) {
+        query += '(created_at > ? OR (created_at = ? AND id > ?))';
+        params.push(origin.created_at, origin.created_at, afterEventId);
+      } else {
+        query += '1=1';
+      }
+
+      if (filter.orderId) {
+        query += ' AND order_id = ?';
+        params.push(filter.orderId);
+      }
+      if (filter.branchId) {
+        query += ' AND branch_id = ?';
+        params.push(filter.branchId);
+      }
+      if (filter.customerUserId) {
+        query += ' AND customer_user_id = ?';
+        params.push(filter.customerUserId);
+      }
+
+      query += ' ORDER BY created_at ASC, id ASC LIMIT ?';
+      params.push(limit);
+
+      const res = await this.db.prepare(query).bind(...params).all<{ id: string; event_type: string; payload_json: string }>();
+      const rows = (res.results ?? []) as Array<{ id: string; event_type: string; payload_json: string }>;
+
+      return rows.map((row) => ({
+        id: row.id,
         type: row.event_type as RealtimeDomainEvent['type'],
         payload: JSON.parse(row.payload_json),
       }));

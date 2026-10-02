@@ -138,6 +138,83 @@ describe('Phase 3 — Database Atomicity & Audit Tests', () => {
       assert.strictEqual(items[0].product_id, 'prod-2');
       assert.strictEqual(items[0].quantity, 3);
     });
+
+    it('failed atomic edit leaves original items, totals, and audit logs completely untouched', async () => {
+      // 1. Create order with Item A (prod-1)
+      const created = await ordersService.createOrder({
+        actorUserId: 'usr-cust',
+        customerUserId: 'usr-cust',
+        branchId: 'branch-alpha',
+        items: [{ productId: 'prod-1', quantity: 2 }],
+      });
+
+      const originalOrder = await orderRepo.findById(created.order.id);
+      assert.ok(originalOrder);
+      const originalSubtotal = originalOrder.subtotal;
+      const originalTotal = originalOrder.total;
+      const originalPaymentStatus = originalOrder.payment_status;
+
+      // Force the order to become non-editable immediately before the mutation
+      await db
+        .prepare("UPDATE orders SET status = 'CANCELLED' WHERE id = ?")
+        .bind(created.order.id)
+        .run();
+
+      // 2. Attempt to edit the order with Item B (prod-2) directly via atomicEditOrder
+      const now = new Date();
+      await assert.rejects(
+        async () => {
+          await orderRepo.atomicEditOrder({
+            orderId: created.order.id,
+            branchId: 'branch-alpha',
+            items: [
+              {
+                id: 'item-b-should-not-exist',
+                product_id: 'prod-2',
+                product_name_snapshot: 'Chocolate',
+                unit_price_snapshot: 150,
+                quantity: 5,
+                line_total: 750,
+              },
+            ],
+            subtotal: 750,
+            tax: 37.5,
+            total: 787.5,
+            paymentStatus: PaymentStatus.RECORDED,
+            lastEditedAt: now.toISOString(),
+            editCutoffIso: new Date(now.getTime() - 60 * 60 * 1000).toISOString(),
+            auditLog: {
+              id: 'aud-should-not-exist',
+              branchId: 'branch-alpha',
+              actorUserId: 'usr-op',
+              action: 'ORDER_EDITED',
+              metadata: { attempt: 'failed_edit' },
+            },
+          });
+        },
+        /cannot be edited/i,
+      );
+
+      // 3. Verify original item A still exists and item B does not exist
+      const items = await orderRepo.getOrderItems(created.order.id);
+      assert.strictEqual(items.length, 1);
+      assert.strictEqual(items[0].product_id, 'prod-1');
+      assert.strictEqual(items[0].quantity, 2);
+
+      const itemB = items.find((i) => i.product_id === 'prod-2');
+      assert.strictEqual(itemB, undefined, 'Item B must not exist');
+
+      // 4. Verify original subtotal, total, and payment status are unchanged
+      const currentOrder = await orderRepo.findById(created.order.id);
+      assert.strictEqual(currentOrder?.subtotal, originalSubtotal);
+      assert.strictEqual(currentOrder?.total, originalTotal);
+      assert.strictEqual(currentOrder?.payment_status, originalPaymentStatus);
+
+      // 5. Verify no ORDER_EDITED success audit exists
+      const audits = await auditRepo.listByEntity('order', created.order.id);
+      const editAudit = audits.find((a) => a.action === 'ORDER_EDITED');
+      assert.strictEqual(editAudit, undefined, 'No ORDER_EDITED success audit record must exist');
+    });
   });
 
   describe('Payment Atomicity', () => {

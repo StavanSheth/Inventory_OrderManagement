@@ -198,6 +198,12 @@ export class PaymentRepository extends BaseRepository {
           AND order_id = ?
           AND status = ?
           AND (? IS NULL OR branch_id = ?)
+          AND EXISTS (
+            SELECT 1 FROM orders
+            WHERE id = ?
+              AND status NOT IN ('CANCELLED', 'EXPIRED')
+              AND (status != 'PENDING' OR expires_at > ?)
+          )
       `)
       .bind(
         PaymentStatus.VERIFIED,
@@ -209,6 +215,8 @@ export class PaymentRepository extends BaseRepository {
         PaymentStatus.RECORDED,
         branchId ?? null,
         branchId ?? null,
+        orderId,
+        nowIso,
       );
 
     const orderStmt = this.db
@@ -218,8 +226,9 @@ export class PaymentRepository extends BaseRepository {
             updated_at = ?
         WHERE id = ?
           AND status NOT IN ('CANCELLED', 'EXPIRED')
+          AND (status != 'PENDING' OR expires_at > ?)
       `)
-      .bind(PaymentStatus.VERIFIED, nowIso, orderId);
+      .bind(PaymentStatus.VERIFIED, nowIso, orderId, nowIso);
 
     const statements: any[] = [paymentStmt, orderStmt];
 
@@ -233,7 +242,12 @@ export class PaymentRepository extends BaseRepository {
           )
           SELECT ?, ?, ?, 'USER', ?, 'payment', ?, ?, ?
           WHERE EXISTS (
-            SELECT 1 FROM payments WHERE id = ? AND status = 'RECORDED'
+            SELECT 1 FROM payments p
+            JOIN orders o ON o.id = p.order_id
+            WHERE p.id = ? 
+              AND p.status = 'RECORDED'
+              AND o.status NOT IN ('CANCELLED', 'EXPIRED')
+              AND (o.status != 'PENDING' OR o.expires_at > ?)
           )
         `)
         .bind(
@@ -245,6 +259,7 @@ export class PaymentRepository extends BaseRepository {
           metadataJson,
           nowIso,
           paymentId,
+          nowIso,
         );
       statements.push(auditStmt);
     }

@@ -32,9 +32,9 @@ export interface PaymentUpdatedPayload {
 }
 
 export type RealtimeDomainEvent =
-  | { type: 'OrderStatusChanged'; payload: OrderStatusChangedPayload }
-  | { type: 'OrderUpdated'; payload: OrderUpdatedPayload }
-  | { type: 'PaymentUpdated'; payload: PaymentUpdatedPayload };
+  | { id?: string; type: 'OrderStatusChanged'; payload: OrderStatusChangedPayload }
+  | { id?: string; type: 'OrderUpdated'; payload: OrderUpdatedPayload }
+  | { id?: string; type: 'PaymentUpdated'; payload: PaymentUpdatedPayload };
 
 export interface RealtimeSubscriptionFilter {
   orderId?: string;

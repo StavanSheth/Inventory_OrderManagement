@@ -267,4 +267,75 @@ describe('Realtime SSE API — Authorization & Streaming', () => {
 
     assert.strictEqual(receivedEvent, false);
   });
+
+  it('emits stable event IDs and replays missed events via Last-Event-ID / lastEventId', async () => {
+    const order = await orderRepo.create({
+      id: 'ord-sse-replay',
+      order_number: 'ALPHA-20261002-7777',
+      branch_id: BRANCH_ALPHA,
+      customer_user_id: CUSTOMER_ID,
+      subtotal: 100,
+      total: 105,
+      expires_at: new Date(Date.now() + 900_000).toISOString(),
+      items: [{
+        id: 'item-sse-1',
+        product_id: 'prod-alpha-pistachio',
+        product_name_snapshot: 'Roasted Pistachio Scoop',
+        unit_price_snapshot: 100,
+        quantity: 1,
+        line_total: 100,
+      }],
+    });
+
+    const { DatabaseRealtimeService } = await import('../../backend/services/realtime/database-realtime.service');
+    const dbRealtime = new DatabaseRealtimeService(db);
+
+    await dbRealtime.publish({
+      id: 'evt-rep-1',
+      type: 'OrderStatusChanged',
+      payload: {
+        orderId: order.id,
+        orderNumber: order.order_number,
+        branchId: BRANCH_ALPHA,
+        customerUserId: CUSTOMER_ID,
+        status: OrderStatus.PENDING,
+        paymentStatus: PaymentStatus.RECORDED,
+        total: 105,
+        timestamp: new Date(Date.now() - 2000).toISOString(),
+      },
+    });
+
+    await dbRealtime.publish({
+      id: 'evt-rep-2',
+      type: 'OrderStatusChanged',
+      payload: {
+        orderId: order.id,
+        orderNumber: order.order_number,
+        branchId: BRANCH_ALPHA,
+        customerUserId: CUSTOMER_ID,
+        status: OrderStatus.CONFIRMED,
+        paymentStatus: PaymentStatus.VERIFIED,
+        total: 105,
+        timestamp: new Date().toISOString(),
+      },
+    });
+
+    const req = new Request(`http://localhost/api/v1/realtime/events?orderId=${order.id}&lastEventId=evt-rep-1`, {
+      headers: {
+        Authorization: bearerToken('fb-cust-rt', 'cust@melt.local', 'Customer'),
+      },
+    });
+    const res = await handleRealtimeEventsRoute(req, { DB: db });
+    assert.strictEqual(res.status, 200);
+
+    const reader = res.body?.getReader();
+    assert.ok(reader);
+    const { value } = await reader.read();
+    const text = new TextDecoder().decode(value);
+    await reader.cancel();
+
+    assert.ok(text.includes(': connected'), 'Must include connected comment');
+    assert.ok(text.includes('id: evt-rep-2'), 'Must replay missed event evt-rep-2 with stable ID');
+    assert.ok(!text.includes('id: evt-rep-1'), 'Must not replay already-acknowledged event evt-rep-1');
+  });
 });
