@@ -6,6 +6,7 @@ import { apiClient } from '../../services/api-client';
 import { Order, InventoryMovement } from '../../../shared/types/entities.types';
 import { OrderStatus } from '../../../shared/enums/order.enum';
 import { InventoryMovementType } from '../../../shared/enums/inventory.enum';
+import { exportToExcel, exportToPdf } from '../../utils/export-helpers';
 
 interface UnifiedLedgerViewProps {
   branchId: string;
@@ -216,31 +217,100 @@ export const UnifiedLedgerView: React.FC<UnifiedLedgerViewProps> = ({ branchId, 
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
           {isOwner && (
-            <button
-              type="button"
-              onClick={() => {
-                const url = new URL('/api/v1/owner/reports', window.location.origin);
-                url.searchParams.set('type', 'ledger');
-                url.searchParams.set('branchId', branchId);
-                window.open(url.toString(), '_blank');
-              }}
-              style={{
-                padding: '0.55rem 1.15rem',
-                background: '#fff1f4',
-                color: '#d61c5d',
-                borderRadius: '9999px',
-                border: '1px solid #f4d3dd',
-                fontWeight: 800,
-                fontSize: '0.8125rem',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-              }}
-            >
-              <span>📥</span>
-              <span>Download Ledger CSV</span>
-            </button>
+            <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  exportToExcel({
+                    filename: `branch-ledger-${branchId}-${filter.toLowerCase()}-${dateFilter.toLowerCase()}`,
+                    title: 'Melt Gelato - Unified Branch Ledger Report',
+                    subtitle: `Branch: ${branchId} • Audit Trail: Orders & Inventory`,
+                    filterSummary: {
+                      Branch: branchId,
+                      'Entry Type': filter,
+                      'Date Range': dateFilter,
+                      Search: searchQuery || undefined,
+                      'Total Entries': filteredEntries.length,
+                    },
+                    columns: [
+                      { header: 'Date & Time', key: 'timestamp' },
+                      { header: 'Category', key: 'type' },
+                      { header: 'Reference', key: 'reference' },
+                      { header: 'Description / Title', key: 'title' },
+                      { header: 'Status / Reason', key: 'statusOrReason' },
+                      { header: 'Classification', key: 'category' },
+                    ],
+                    data: filteredEntries.map((e) => ({
+                      ...e,
+                      timestamp: new Date(e.timestamp).toLocaleString(),
+                    })),
+                  });
+                }}
+                style={{
+                  padding: '0.5rem 0.95rem',
+                  background: '#f1f8ed',
+                  color: '#2d6a1e',
+                  borderRadius: '9999px',
+                  border: '1px solid #c2e0b3',
+                  fontWeight: 800,
+                  fontSize: '0.8125rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                }}
+                title="Download formatted Excel (.xls) report with active filters"
+              >
+                <span>📊</span>
+                <span>Export Excel</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  exportToPdf({
+                    filename: `branch-ledger-${branchId}-${filter.toLowerCase()}-${dateFilter.toLowerCase()}`,
+                    title: 'Unified Branch Ledger Report',
+                    subtitle: `Branch: ${branchId} • Audit Trail`,
+                    filterSummary: {
+                      Branch: branchId,
+                      'Entry Type': filter,
+                      'Date Range': dateFilter,
+                      Search: searchQuery || undefined,
+                      'Total Entries': filteredEntries.length,
+                    },
+                    columns: [
+                      { header: 'Date & Time', key: 'timestamp' },
+                      { header: 'Type', key: 'type' },
+                      { header: 'Reference', key: 'reference' },
+                      { header: 'Title / Item', key: 'title' },
+                      { header: 'Status / Reason', key: 'statusOrReason' },
+                    ],
+                    data: filteredEntries.map((e) => ({
+                      ...e,
+                      timestamp: new Date(e.timestamp).toLocaleString(),
+                    })),
+                  });
+                }}
+                style={{
+                  padding: '0.5rem 0.95rem',
+                  background: '#fff1f4',
+                  color: '#d61c5d',
+                  borderRadius: '9999px',
+                  border: '1px solid #ffd1dc',
+                  fontWeight: 800,
+                  fontSize: '0.8125rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                }}
+                title="Print or Save as PDF with active filters"
+              >
+                <span>📄</span>
+                <span>Export PDF</span>
+              </button>
+            </div>
           )}
 
           <button

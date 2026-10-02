@@ -13,3 +13,4 @@ export * from './owner-branches.route';
 export * from './data-management.route';
 export * from './marketing.route';
 export * from './reports.route';
+export * from './customer-coupons.route';

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Inventory, RawMaterial, InventoryMovement } from '../../../shared/types/entities.types';
 import { apiClient } from '../../services/api-client';
+import { exportToExcel, exportToPdf } from '../../utils/export-helpers';
 
 interface OperatorInventoryViewProps {
   branchId: string;
@@ -531,19 +532,140 @@ export const OperatorInventoryView: React.FC<OperatorInventoryViewProps> = ({ br
 
         <div className="flex items-center gap-3">
           {isOwner && (
-            <button
-              type="button"
-              onClick={() => {
-                const url = new URL('/api/v1/owner/reports', window.location.origin);
-                url.searchParams.set('type', 'inventory');
-                url.searchParams.set('branchId', branchId);
-                window.open(url.toString(), '_blank');
-              }}
-              className="px-3.5 py-1.5 bg-[#fff1f4] hover:bg-white border border-[#f4d3dd] text-[#d61c5d] text-xs font-bold rounded-full transition shadow-xs flex items-center gap-1.5"
-            >
-              <span>📥</span>
-              <span>Download Inventory CSV</span>
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  if (activeTab === 'products') {
+                    exportToExcel({
+                      filename: `inventory-products-${branchId}`,
+                      title: 'Finished Products Stock Report',
+                      subtitle: `Branch: ${branchId}`,
+                      filterSummary: { Branch: branchId, Tab: 'Finished Products', 'Total Items': products.length },
+                      columns: [
+                        { header: 'Product Name', key: 'product_name' },
+                        { header: 'Product ID', key: 'product_id' },
+                        { header: 'In Stock', key: 'quantity_on_hand', format: 'number' },
+                        { header: 'Unit', key: 'unit' },
+                        { header: 'Min Threshold', key: 'min_threshold', format: 'number' },
+                        { header: 'Selling Price (₹)', key: 'selling_price', format: 'currency' },
+                        { header: 'Tax Rate (%)', key: 'tax_rate', format: 'number' },
+                      ],
+                      data: products.map((p) => ({
+                        ...p,
+                        product_name: p.product_name || p.product_id,
+                      })),
+                    });
+                  } else if (activeTab === 'materials') {
+                    exportToExcel({
+                      filename: `inventory-materials-${branchId}`,
+                      title: 'Raw Materials & BOM Stock Report',
+                      subtitle: `Branch: ${branchId}`,
+                      filterSummary: { Branch: branchId, Tab: 'Raw Materials', 'Total Items': rawMaterials.length },
+                      columns: [
+                        { header: 'Material Name', key: 'name' },
+                        { header: 'Material ID', key: 'id' },
+                        { header: 'Current Stock', key: 'current_stock', format: 'number' },
+                        { header: 'Unit', key: 'unit' },
+                        { header: 'Min Threshold', key: 'min_threshold', format: 'number' },
+                        { header: 'Cost per Unit (₹)', key: 'cost_per_unit', format: 'currency' },
+                      ],
+                      data: rawMaterials,
+                    });
+                  } else {
+                    exportToExcel({
+                      filename: `inventory-movements-${branchId}-${movementDateFilter.toLowerCase()}`,
+                      title: 'Inventory Movement Ledger Report',
+                      subtitle: `Branch: ${branchId} • Filter: ${movementDateFilter}`,
+                      filterSummary: { Branch: branchId, 'Date Filter': movementDateFilter, 'Total Movements': filteredMovements.length },
+                      columns: [
+                        { header: 'Movement ID', key: 'id' },
+                        { header: 'Item Name', key: 'item_name' },
+                        { header: 'Type', key: 'movement_type' },
+                        { header: 'Delta', key: 'quantity_delta', format: 'number' },
+                        { header: 'Reason', key: 'reason' },
+                        { header: 'Operator', key: 'operator_id' },
+                        { header: 'Date', key: 'created_at' },
+                      ],
+                      data: filteredMovements.map((m) => ({
+                        ...m,
+                        item_name: m.product_name || m.raw_material_name || m.product_id || m.raw_material_id,
+                      })),
+                    });
+                  }
+                }}
+                className="px-3 py-1.5 bg-[#f1f8ed] hover:bg-[#e4f3de] border border-[#c2e0b3] text-[#2d6a1e] text-xs font-bold rounded-full transition shadow-xs flex items-center gap-1 cursor-pointer"
+                title="Download formatted Excel (.xls) report with active filters"
+              >
+                <span>📊</span>
+                <span>Export Excel</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (activeTab === 'products') {
+                    exportToPdf({
+                      filename: `inventory-products-${branchId}`,
+                      title: 'Finished Products Stock Report',
+                      subtitle: `Branch: ${branchId}`,
+                      filterSummary: { Branch: branchId, Tab: 'Finished Products', 'Total Items': products.length },
+                      columns: [
+                        { header: 'Product Name', key: 'product_name' },
+                        { header: 'In Stock', key: 'quantity_on_hand', format: 'number' },
+                        { header: 'Unit', key: 'unit' },
+                        { header: 'Min Threshold', key: 'min_threshold', format: 'number' },
+                        { header: 'Selling Price (₹)', key: 'selling_price', format: 'currency' },
+                        { header: 'GST (%)', key: 'tax_rate', format: 'number' },
+                      ],
+                      data: products.map((p) => ({
+                        ...p,
+                        product_name: p.product_name || p.product_id,
+                      })),
+                    });
+                  } else if (activeTab === 'materials') {
+                    exportToPdf({
+                      filename: `inventory-materials-${branchId}`,
+                      title: 'Raw Materials & BOM Stock Report',
+                      subtitle: `Branch: ${branchId}`,
+                      filterSummary: { Branch: branchId, Tab: 'Raw Materials', 'Total Items': rawMaterials.length },
+                      columns: [
+                        { header: 'Material Name', key: 'name' },
+                        { header: 'Current Stock', key: 'current_stock', format: 'number' },
+                        { header: 'Unit', key: 'unit' },
+                        { header: 'Min Threshold', key: 'min_threshold', format: 'number' },
+                        { header: 'Cost (₹)', key: 'cost_per_unit', format: 'currency' },
+                      ],
+                      data: rawMaterials,
+                    });
+                  } else {
+                    exportToPdf({
+                      filename: `inventory-movements-${branchId}-${movementDateFilter.toLowerCase()}`,
+                      title: 'Inventory Movement Ledger Report',
+                      subtitle: `Branch: ${branchId} • Filter: ${movementDateFilter}`,
+                      filterSummary: { Branch: branchId, 'Date Filter': movementDateFilter, 'Total Movements': filteredMovements.length },
+                      columns: [
+                        { header: 'Item Name', key: 'item_name' },
+                        { header: 'Type', key: 'movement_type' },
+                        { header: 'Delta', key: 'quantity_delta', format: 'number' },
+                        { header: 'Reason', key: 'reason' },
+                        { header: 'Date', key: 'created_at' },
+                      ],
+                      data: filteredMovements.map((m) => ({
+                        ...m,
+                        item_name: m.product_name || m.raw_material_name || m.product_id || m.raw_material_id,
+                        created_at: new Date(m.created_at).toLocaleString(),
+                      })),
+                    });
+                  }
+                }}
+                className="px-3 py-1.5 bg-[#fff1f4] hover:bg-white border border-[#ffd1dc] text-[#d61c5d] text-xs font-bold rounded-full transition shadow-xs flex items-center gap-1 cursor-pointer"
+                title="Print or Save as PDF with active filters"
+              >
+                <span>📄</span>
+                <span>Export PDF</span>
+              </button>
+            </div>
           )}
 
           <button

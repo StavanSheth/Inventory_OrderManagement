@@ -250,6 +250,34 @@ export class OrderApiClient {
       },
     );
   }
+
+  /**
+   * Customer: fetch private / targeted coupons assigned directly to this customer.
+   */
+  async getCustomerPrivateCoupons(branchId?: string): Promise<
+    ApiResponse<
+      Array<{
+        id: string;
+        coupon_code: string;
+        title: string;
+        discount_type: 'PERCENTAGE' | 'FIXED';
+        discount_value: number;
+        min_order_value: number;
+        max_discount: number | null;
+        branch_id: string | null;
+        expires_at: string;
+      }>
+    >
+  > {
+    const qs = branchId ? `?branchId=${encodeURIComponent(branchId)}` : '';
+    return apiClient.request(
+      `${API_V1_PREFIX}/customer/coupons${qs}`,
+      {
+        authenticated: true,
+      },
+    );
+  }
 }
 
 export const orderApiClient = new OrderApiClient();
+

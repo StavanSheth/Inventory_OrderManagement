@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { orderApiClient } from '../../services/order-api-client';
 import { CartItem } from './catalog-view';
 import { CreateOrderResponseData } from '../../../shared/contracts/order.contract';
@@ -35,6 +35,36 @@ export const CartView: React.FC<CartViewProps> = ({
     discount: number;
   } | null>(null);
 
+  // Private / targeted coupons for this customer
+  const [privateCoupons, setPrivateCoupons] = useState<Array<{
+    id: string;
+    coupon_code: string;
+    title: string;
+    discount_type: 'PERCENTAGE' | 'FIXED';
+    discount_value: number;
+    min_order_value: number;
+    max_discount: number | null;
+    expires_at: string;
+  }>>([]);
+
+  useEffect(() => {
+    let active = true;
+    const fetchPrivateCoupons = async () => {
+      try {
+        const res = await orderApiClient.getCustomerPrivateCoupons(branchId);
+        if (active && res.success && Array.isArray(res.data)) {
+          setPrivateCoupons(res.data);
+        }
+      } catch {
+        // silent fail
+      }
+    };
+    fetchPrivateCoupons();
+    return () => {
+      active = false;
+    };
+  }, [branchId]);
+
   // Display-only totals calculated purely for user preview (Server is authoritative)
   const subtotal = items.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
   const couponDiscount = appliedCoupon ? appliedCoupon.discount : 0;
@@ -42,18 +72,20 @@ export const CartView: React.FC<CartViewProps> = ({
   const tax = Math.round(taxableAmount * DEFAULT_TAX_RATE * 100) / 100;
   const total = Math.round((taxableAmount + tax) * 100) / 100;
 
-  const handleApplyCoupon = async () => {
-    if (!couponCodeInput.trim() || subtotal <= 0) return;
+  const handleApplyCouponDirect = async (codeToApply: string) => {
+    const cleanCode = codeToApply.trim().toUpperCase();
+    if (!cleanCode || subtotal <= 0) return;
     setValidatingCoupon(true);
     setCouponError(null);
 
     try {
-      const res = await orderApiClient.validateCoupon(branchId, couponCodeInput.trim(), subtotal);
+      const res = await orderApiClient.validateCoupon(branchId, cleanCode, subtotal);
       if (res.success && res.data.isValid) {
         setAppliedCoupon({
-          code: couponCodeInput.trim().toUpperCase(),
+          code: cleanCode,
           discount: res.data.discount,
         });
+        setCouponCodeInput(cleanCode);
       } else {
         setAppliedCoupon(null);
         setCouponError(res.success ? (res.data.reason ?? 'Coupon is not valid') : res.error.message);
@@ -64,6 +96,10 @@ export const CartView: React.FC<CartViewProps> = ({
     } finally {
       setValidatingCoupon(false);
     }
+  };
+
+  const handleApplyCoupon = async () => {
+    await handleApplyCouponDirect(couponCodeInput);
   };
 
   const handleRemoveCoupon = () => {
@@ -180,6 +216,55 @@ export const CartView: React.FC<CartViewProps> = ({
 
       {/* Coupon Entry & Validation */}
       <div className="border-t border-[#f4d3dd] pt-4">
+        {/* Targeted Private Offers assigned to this user */}
+        {privateCoupons.length > 0 && !appliedCoupon && (
+          <div className="mb-4 p-4 rounded-2xl bg-gradient-to-r from-[#fff0f5] via-[#ffe5ee] to-[#ffdce7] border-2 border-[#d61c5d]/30 shadow-sm space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <span className="text-base">🎁</span>
+                <span className="text-[11px] font-black uppercase tracking-wider text-[#d61c5d] bg-white px-2.5 py-0.5 rounded-full shadow-xs">
+                  Exclusive Offer For You
+                </span>
+              </div>
+              <span className="text-[11px] text-[#6f5569] font-bold">
+                {privateCoupons.length} {privateCoupons.length === 1 ? 'deal available' : 'deals available'}
+              </span>
+            </div>
+
+            {privateCoupons.map((coupon) => (
+              <div
+                key={coupon.id}
+                className="flex items-center justify-between p-3 bg-white/90 rounded-xl border border-[#f4d3dd] shadow-2xs"
+              >
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <span className="font-display font-black text-sm text-[#2b1233] uppercase tracking-wide">
+                      {coupon.coupon_code}
+                    </span>
+                    <span className="text-xs font-black text-[#d61c5d] bg-[#fff1f4] px-2 py-0.5 rounded-full border border-[#f4d3dd]">
+                      {coupon.discount_type === 'PERCENTAGE'
+                        ? `${coupon.discount_value}% OFF`
+                        : `₹${coupon.discount_value} OFF`}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-[#6f5569] font-medium mt-0.5">
+                    {coupon.min_order_value > 0 ? `Min order ₹${coupon.min_order_value} • ` : ''}
+                    {coupon.title || 'Personalized offer from Melt'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleApplyCouponDirect(coupon.coupon_code)}
+                  disabled={validatingCoupon}
+                  className="px-3.5 py-1.5 bg-[#d61c5d] hover:bg-[#a3134a] disabled:opacity-50 text-white text-xs font-black rounded-full transition shadow-xs cursor-pointer"
+                >
+                  {validatingCoupon && couponCodeInput === coupon.coupon_code ? 'Applying...' : 'Apply Code'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <label className="block text-xs font-bold text-[#6f5569] uppercase tracking-wider mb-2">Have a Coupon?</label>
         {appliedCoupon ? (
           <div className="flex items-center justify-between p-3 bg-[#bfe3a6]/30 border border-[#bfe3a6] rounded-2xl">

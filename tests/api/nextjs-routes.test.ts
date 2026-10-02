@@ -28,6 +28,7 @@ import * as CronExpireRoute from '../../app/api/v1/cron/expire-orders/route';
 import * as OwnerMarketingCustomersRoute from '../../app/api/v1/owner/marketing/customers/route';
 import * as OwnerMarketingBroadcastRoute from '../../app/api/v1/owner/marketing/broadcast/route';
 import * as OwnerReportsRoute from '../../app/api/v1/owner/reports/route';
+import * as CustomerCouponsRoute from '../../app/api/v1/customer/coupons/route';
 
 function bearerToken(uid: string, email: string, name: string): string {
   return `Bearer mock-user:${uid}:${email}:${name}`;
@@ -298,19 +299,48 @@ describe('Next.js API Routes (app/api/v1) — End-to-End Exposure', () => {
             userId: 'usr-cust',
             name: 'Customer',
             phone: '919876543210',
-            message: 'Hello Customer! 20% off gelato this weekend.',
+            message: 'Hello Customer! Use code PRIVATE25 for 25% off.',
+            imageUrl: 'https://example.com/custom-customer-pic.jpg',
           },
         ],
-        messageTemplate: 'Hello {{name}}! 20% off gelato this weekend.',
+        messageTemplate: 'Hello {{name}}! Use code {{coupon_code}} for {{discount}}.',
         imageUrl: 'https://example.com/banner.jpg',
+        promoCoupon: {
+          enabled: true,
+          code: 'PRIVATE25',
+          title: 'Special 25% Off Treat',
+          discountType: 'PERCENTAGE',
+          discountValue: 25,
+          minOrderValue: 150,
+          expiryDays: 14,
+        },
       }),
     });
     const broadResp = await OwnerMarketingBroadcastRoute.POST(broadReq as any);
     assert.strictEqual(broadResp.status, 201);
-    const broadJson = (await broadResp.json()) as { data: { campaignId: string; dispatchedCount: number; previews: Array<{ actionUrl: string }> } };
+    const broadJson = (await broadResp.json()) as {
+      data: {
+        campaignId: string;
+        dispatchedCount: number;
+        promoAssigned: { assignedCount: number };
+        previews: Array<{ actionUrl: string; imageUrl?: string }>;
+      };
+    };
     assert.strictEqual(broadJson.data.dispatchedCount, 1);
     assert.ok(broadJson.data.campaignId.startsWith('camp-'));
+    assert.strictEqual(broadJson.data.promoAssigned?.assignedCount, 1);
     assert.ok(broadJson.data.previews[0].actionUrl.includes('https://wa.me/919876543210'));
+    assert.strictEqual(broadJson.data.previews[0].imageUrl, 'https://example.com/custom-customer-pic.jpg');
+
+    // Verify Customer can query their private coupons via GET /api/v1/customer/coupons
+    const coupReq = new Request('http://x/api/v1/customer/coupons?branchId=branch-alpha', {
+      headers: { Authorization: bearerToken('fb-cust', 'cust@melt.local', 'Customer') },
+    });
+    const coupResp = await CustomerCouponsRoute.GET(coupReq as any);
+    assert.strictEqual(coupResp.status, 200);
+    const coupJson = (await coupResp.json()) as { data: Array<{ coupon_code: string; discount_value: number }> };
+    assert.ok(Array.isArray(coupJson.data));
+    assert.ok(coupJson.data.some((c) => c.coupon_code === 'PRIVATE25'));
   });
 
   it('exposes GET /owner/reports for CSV reports export across history, inventory, branches, ledger, and customers', async () => {

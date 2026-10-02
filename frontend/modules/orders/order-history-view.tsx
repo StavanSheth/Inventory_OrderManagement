@@ -5,6 +5,7 @@ import { ownerApiClient } from '../../services/owner-api-client';
 import { Order, OrderItem } from '../../../shared/types/entities.types';
 import { OrderStatus } from '../../../shared/enums/order.enum';
 import { OrderDetailModal } from './order-detail-modal';
+import { exportToExcel, exportToPdf } from '../../utils/export-helpers';
 
 type OrderWithItems = Order & { items?: OrderItem[] };
 
@@ -342,35 +343,116 @@ export const UnifiedOrderHistoryView: React.FC<UnifiedOrderHistoryViewProps> = (
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
           {isOwner && (
-            <button
-              type="button"
-              onClick={() => {
-                const url = new URL('/api/v1/owner/reports', window.location.origin);
-                url.searchParams.set('type', 'history');
-                url.searchParams.set('branchId', selectedBranchId);
-                if (startDate) url.searchParams.set('startDate', startDate);
-                if (endDate) url.searchParams.set('endDate', endDate);
-                window.open(url.toString(), '_blank');
-              }}
-              style={{
-                padding: '0.45rem 1rem',
-                borderRadius: '9999px',
-                border: '1px solid #f4d3dd',
-                background: '#fff1f4',
-                color: '#d61c5d',
-                fontWeight: 800,
-                fontSize: '0.8125rem',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-              }}
-            >
-              <span>📥</span>
-              <span>Download History CSV</span>
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  const activeBranchName = branches.find((b) => b.id === selectedBranchId)?.name || 'All Branches';
+                  exportToExcel({
+                    filename: `order-history-${selectedBranchId}-${selectedStatus.toLowerCase()}`,
+                    title: 'Melt Gelato - Order History Report',
+                    subtitle: `Enterprise Report • ${activeBranchName}`,
+                    filterSummary: {
+                      Branch: activeBranchName,
+                      Status: selectedStatus,
+                      'Date Preset': activeDatePreset,
+                      'From Date': startDate || undefined,
+                      'To Date': endDate || undefined,
+                      Customer: customerFilter || undefined,
+                    },
+                    columns: [
+                      { header: 'Order #', key: 'order_number' },
+                      { header: 'Branch', key: 'branch_name' },
+                      { header: 'Status', key: 'status' },
+                      { header: 'Customer ID', key: 'customer_user_id' },
+                      { header: 'Placed At', key: 'placed_at' },
+                      { header: 'Subtotal', key: 'subtotal', format: 'currency' },
+                      { header: 'Discount', key: 'discount', format: 'currency' },
+                      { header: 'Tax', key: 'tax', format: 'currency' },
+                      { header: 'Total (₹)', key: 'total', format: 'currency' },
+                      { header: 'Payment Status', key: 'payment_status' },
+                      { header: 'Payment Method', key: 'payment_method' },
+                    ],
+                    data: orders.map((o) => ({
+                      ...o,
+                      branch_name: branches.find((b) => b.id === o.branch_id)?.name || o.branch_id,
+                    })),
+                  });
+                }}
+                style={{
+                  padding: '0.45rem 0.85rem',
+                  borderRadius: '9999px',
+                  border: '1px solid #c2e0b3',
+                  background: '#f1f8ed',
+                  color: '#2d6a1e',
+                  fontWeight: 800,
+                  fontSize: '0.8125rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                }}
+                title="Download formatted Excel (.xls) report with active filters"
+              >
+                <span>📊</span>
+                <span>Export Excel</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const activeBranchName = branches.find((b) => b.id === selectedBranchId)?.name || 'All Branches';
+                  exportToPdf({
+                    filename: `order-history-${selectedBranchId}-${selectedStatus.toLowerCase()}`,
+                    title: 'Order History Report',
+                    subtitle: `Enterprise Report • ${activeBranchName}`,
+                    filterSummary: {
+                      Branch: activeBranchName,
+                      Status: selectedStatus,
+                      'Date Preset': activeDatePreset,
+                      'From Date': startDate || undefined,
+                      'To Date': endDate || undefined,
+                      Customer: customerFilter || undefined,
+                    },
+                    columns: [
+                      { header: 'Order #', key: 'order_number' },
+                      { header: 'Branch', key: 'branch_name' },
+                      { header: 'Status', key: 'status' },
+                      { header: 'Placed At', key: 'placed_at' },
+                      { header: 'Subtotal', key: 'subtotal', format: 'currency' },
+                      { header: 'Discount', key: 'discount', format: 'currency' },
+                      { header: 'Tax', key: 'tax', format: 'currency' },
+                      { header: 'Total (₹)', key: 'total', format: 'currency' },
+                      { header: 'Payment', key: 'payment_status' },
+                    ],
+                    data: orders.map((o) => ({
+                      ...o,
+                      branch_name: branches.find((b) => b.id === o.branch_id)?.name || o.branch_id,
+                      placed_at: new Date(o.placed_at).toLocaleDateString(),
+                    })),
+                  });
+                }}
+                style={{
+                  padding: '0.45rem 0.85rem',
+                  borderRadius: '9999px',
+                  border: '1px solid #ffd1dc',
+                  background: '#fff1f4',
+                  color: '#d61c5d',
+                  fontWeight: 800,
+                  fontSize: '0.8125rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                }}
+                title="Print or Save as PDF with active filters"
+              >
+                <span>📄</span>
+                <span>Export PDF</span>
+              </button>
+            </>
           )}
 
           <button

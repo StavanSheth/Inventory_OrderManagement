@@ -366,4 +366,132 @@ export class PromotionRepository extends BaseRepository {
       `)
       .bind(nowIso, offerId);
   }
+
+  // ==========================================
+  // Private / Targeted Coupons
+  // ==========================================
+
+  async assignPrivateCouponToUsers(input: {
+    userIds: string[];
+    couponCode: string;
+    title: string;
+    discountType: DiscountType;
+    discountValue: number;
+    minOrderValue?: number;
+    maxDiscount?: number | null;
+    branchId?: string;
+    expiresAt?: string;
+    campaignId?: string | null;
+  }): Promise<{ createdCouponCount: number; assignedCount: number }> {
+    const nowIso = new Date().toISOString();
+    const expiryIso = input.expiresAt || new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+    const normalizedCode = input.couponCode.trim().toUpperCase();
+
+    // 1. Ensure the coupon exists in `coupons` table for the target branch (or all branches if branchId is omitted/ALL)
+    let branchIds: string[] = [];
+    if (input.branchId && input.branchId !== 'ALL') {
+      branchIds = [input.branchId];
+    } else {
+      const branchesRes = await this.db.prepare('SELECT id FROM branches').all<{ id: string }>();
+      branchIds = (branchesRes.results || []).map((b) => b.id);
+      if (branchIds.length === 0) branchIds = ['branch-alpha'];
+    }
+
+    let createdCouponCount = 0;
+    for (const bId of branchIds) {
+      const existing = await this.findCouponByCode(bId, normalizedCode);
+      if (!existing) {
+        await this.createCoupon({
+          branch_id: bId,
+          code: normalizedCode,
+          name: input.title || `Special Offer ${normalizedCode}`,
+          discount_type: input.discountType,
+          discount_value: input.discountValue,
+          max_discount: input.maxDiscount ?? null,
+          minimum_order_value: input.minOrderValue ?? 0,
+          per_user_usage_limit: 1,
+          start_at: nowIso,
+          end_at: expiryIso,
+          active: true,
+        });
+        createdCouponCount++;
+      }
+    }
+
+    // 2. Insert record for each targeted user in user_private_coupons
+    let assignedCount = 0;
+    for (const uId of input.userIds) {
+      const recordId = `upc_${crypto.randomUUID().replace(/-/g, '')}`;
+      await this.db
+        .prepare(`
+          INSERT INTO user_private_coupons (
+            id, user_id, coupon_code, title, discount_type, discount_value,
+            min_order_value, max_discount, branch_id, expires_at, is_claimed, campaign_id, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+        `)
+        .bind(
+          recordId,
+          uId,
+          normalizedCode,
+          input.title || `Special Offer ${normalizedCode}`,
+          input.discountType,
+          input.discountValue,
+          input.minOrderValue ?? 0,
+          input.maxDiscount ?? null,
+          input.branchId && input.branchId !== 'ALL' ? input.branchId : null,
+          expiryIso,
+          input.campaignId ?? null,
+          nowIso,
+        )
+        .run();
+      assignedCount++;
+    }
+
+    return { createdCouponCount, assignedCount };
+  }
+
+  async getPrivateCouponsForUser(
+    userId: string,
+    branchId?: string,
+  ): Promise<
+    Array<{
+      id: string;
+      user_id: string;
+      coupon_code: string;
+      title: string;
+      discount_type: DiscountType;
+      discount_value: number;
+      min_order_value: number;
+      max_discount: number | null;
+      branch_id: string | null;
+      expires_at: string;
+      is_claimed: number;
+    }>
+  > {
+    const res = await this.db
+      .prepare(`
+        SELECT * FROM user_private_coupons
+        WHERE user_id = ?
+          AND is_claimed = 0
+          AND datetime(expires_at) > datetime('now')
+          AND (branch_id IS NULL OR branch_id = ? OR ? IS NULL)
+        ORDER BY created_at DESC
+      `)
+      .bind(userId, branchId || null, branchId || null)
+      .all<any>();
+
+    return res.results || [];
+  }
+
+  async markPrivateCouponClaimed(userId: string, couponCode: string): Promise<void> {
+    await this.db
+      .prepare(`
+        UPDATE user_private_coupons
+        SET is_claimed = 1
+        WHERE user_id = ? AND UPPER(coupon_code) = UPPER(?)
+      `)
+      .bind(userId, couponCode.trim())
+      .run();
+  }
 }
+

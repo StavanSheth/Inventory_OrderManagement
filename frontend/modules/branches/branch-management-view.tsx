@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { ownerApiClient } from '../../services/owner-api-client';
 import { Branch } from '../../../shared/types/entities.types';
 import { CreateBranchRequest, UpdateBranchRequest } from '../../../shared/contracts/branch.contract';
+import { exportToExcel, exportToPdf } from '../../utils/export-helpers';
 
 interface BranchManagementViewProps {
   branches: Branch[];
@@ -159,20 +160,38 @@ export const BranchManagementView: React.FC<BranchManagementViewProps> = ({
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
           <button
             type="button"
             onClick={() => {
-              const url = new URL('/api/v1/owner/reports', window.location.origin);
-              url.searchParams.set('type', 'branches');
-              window.open(url.toString(), '_blank');
+              const activeCount = branches.filter((b) => b.status === 'ACTIVE').length;
+              exportToExcel({
+                filename: 'melt-branches-report',
+                title: 'Melt Gelato - Branches Directory Report',
+                subtitle: `Total Branches: ${branches.length} (${activeCount} Active)`,
+                filterSummary: { 'Total Branches': branches.length, 'Active Branches': activeCount },
+                columns: [
+                  { header: 'Branch Name', key: 'name' },
+                  { header: 'Code', key: 'code' },
+                  { header: 'Status', key: 'status' },
+                  { header: 'Phone', key: 'phone' },
+                  { header: 'Address', key: 'address' },
+                  { header: 'Created Date', key: 'created_at' },
+                ],
+                data: branches.map((b) => ({
+                  ...b,
+                  phone: b.phone || 'N/A',
+                  address: b.address || 'N/A',
+                  created_at: new Date(b.created_at).toLocaleDateString(),
+                })),
+              });
             }}
             style={{
-              padding: '0.55rem 1.15rem',
-              background: '#fff1f4',
-              color: '#d61c5d',
+              padding: '0.5rem 0.95rem',
+              background: '#f1f8ed',
+              color: '#2d6a1e',
               borderRadius: '9999px',
-              border: '1px solid #f4d3dd',
+              border: '1px solid #c2e0b3',
               fontWeight: 800,
               fontSize: '0.8125rem',
               cursor: 'pointer',
@@ -180,9 +199,52 @@ export const BranchManagementView: React.FC<BranchManagementViewProps> = ({
               alignItems: 'center',
               gap: '0.35rem',
             }}
+            title="Download formatted Excel (.xls) report"
           >
-            <span>📥</span>
-            <span>Download Branches CSV</span>
+            <span>📊</span>
+            <span>Export Excel</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              const activeCount = branches.filter((b) => b.status === 'ACTIVE').length;
+              exportToPdf({
+                filename: 'melt-branches-report',
+                title: 'Branches Directory Report',
+                subtitle: `Total Branches: ${branches.length} (${activeCount} Active)`,
+                filterSummary: { 'Total Branches': branches.length, 'Active Branches': activeCount },
+                columns: [
+                  { header: 'Branch Name', key: 'name' },
+                  { header: 'Code', key: 'code' },
+                  { header: 'Status', key: 'status' },
+                  { header: 'Phone', key: 'phone' },
+                  { header: 'Address', key: 'address' },
+                ],
+                data: branches.map((b) => ({
+                  ...b,
+                  phone: b.phone || 'N/A',
+                  address: b.address || 'N/A',
+                })),
+              });
+            }}
+            style={{
+              padding: '0.5rem 0.95rem',
+              background: '#fff1f4',
+              color: '#d61c5d',
+              borderRadius: '9999px',
+              border: '1px solid #ffd1dc',
+              fontWeight: 800,
+              fontSize: '0.8125rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+            }}
+            title="Print or Save as PDF"
+          >
+            <span>📄</span>
+            <span>Export PDF</span>
           </button>
 
           <button

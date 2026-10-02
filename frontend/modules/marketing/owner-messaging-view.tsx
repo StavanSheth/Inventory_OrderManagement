@@ -67,12 +67,24 @@ export default function OwnerMessagingView({ branches, selectedBranchId = 'ALL' 
   const [sendMode, setSendMode] = useState<SendMode>('SAME_ALL');
   const [channel, setChannel] = useState<MessageChannel>('WHATSAPP');
   const [templateMessage, setTemplateMessage] = useState<string>(
-    'Hello {{name}}! 🍨 Treat yourself today at IceCream Melt. You have placed {{order_count}} delicious orders with us! Use code SWEET15 for 15% off your next visit.'
+    'Hello {{name}}! 🍨 Treat yourself today at IceCream Melt. You have placed {{order_count}} delicious orders with us! Use code {{coupon_code}} for {{discount}} on your next visit.'
   );
   const [customMessages, setCustomMessages] = useState<Record<string, string>>({});
   const [includeImage, setIncludeImage] = useState<boolean>(true);
   const [selectedImageUrl, setSelectedImageUrl] = useState<string>(PROMO_IMAGE_PRESETS[0].url);
   const [customImageUrl, setCustomImageUrl] = useState<string>('');
+
+  // Per-recipient custom image overrides: { [userId]: dataUrlOrUrl }
+  const [customImages, setCustomImages] = useState<Record<string, string>>({});
+
+  // Promo / Coupon Attachment States (Targeted to customer carts)
+  const [attachPromoCode, setAttachPromoCode] = useState<boolean>(true);
+  const [promoCode, setPromoCode] = useState<string>('MELT20');
+  const [promoTitle, setPromoTitle] = useState<string>('20% Off Artisanal Gelato');
+  const [promoDiscountType, setPromoDiscountType] = useState<'PERCENTAGE' | 'FIXED'>('PERCENTAGE');
+  const [promoDiscountValue, setPromoDiscountValue] = useState<number>(20);
+  const [promoMinOrder, setPromoMinOrder] = useState<number>(150);
+  const [promoExpiryDays, setPromoExpiryDays] = useState<number>(14);
 
   // Broadcast execution states
   const [sending, setSending] = useState<boolean>(false);
@@ -80,8 +92,40 @@ export default function OwnerMessagingView({ branches, selectedBranchId = 'ALL' 
     campaignId: string;
     dispatchedCount: number;
     channel: string;
-    previews?: Array<{ name: string; phone?: string | null; actionUrl: string }>;
+    promoAssigned?: { createdCouponCount: number; assignedCount: number } | null;
+    previews?: Array<{ name: string; phone?: string | null; actionUrl: string; imageUrl?: string | null }>;
   } | null>(null);
+
+  const handleCustomerImageUpload = (userId: string, file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (e.target?.result) {
+        setCustomImages((prev) => ({
+          ...prev,
+          [userId]: e.target!.result as string,
+        }));
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleGlobalImageUpload = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (e.target?.result) {
+        setCustomImageUrl(e.target!.result as string);
+        setIncludeImage(true);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const generateRandomPromoCode = () => {
+    const prefixes = ['MELT', 'SWEET', 'SCOOP', 'GELATO', 'TREAT', 'VIP'];
+    const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+    const val = promoDiscountValue || 20;
+    setPromoCode(`${prefix}${val}`);
+  };
 
   // Fetch customers with metrics
   const fetchCustomers = useCallback(async () => {
@@ -177,14 +221,20 @@ export default function OwnerMessagingView({ branches, selectedBranchId = 'ALL' 
 
   // Helper to compile final message per user
   const resolveUserMessage = (c: CustomerMarketingRecord) => {
-    if (sendMode === 'CUSTOM_PER_USER' && customMessages[c.id]) {
-      return customMessages[c.id];
-    }
-    return templateMessage
+    let msg = sendMode === 'CUSTOM_PER_USER' && customMessages[c.id]
+      ? customMessages[c.id]
+      : templateMessage;
+
+    const discountText =
+      promoDiscountType === 'PERCENTAGE' ? `${promoDiscountValue}% OFF` : `₹${promoDiscountValue} OFF`;
+
+    return msg
       .replace(/\{\{name\}\}/gi, c.displayName)
       .replace(/\{\{total_spent\}\}/gi, `₹${c.totalSpent.toFixed(2)}`)
       .replace(/\{\{order_count\}\}/gi, c.totalOrders.toString())
-      .replace(/\{\{category\}\}/gi, c.category);
+      .replace(/\{\{category\}\}/gi, c.category)
+      .replace(/\{\{coupon_code\}\}/gi, promoCode.toUpperCase())
+      .replace(/\{\{discount\}\}/gi, discountText);
   };
 
   // Broadcast trigger
@@ -205,6 +255,7 @@ export default function OwnerMessagingView({ branches, selectedBranchId = 'ALL' 
         phone: c.phone,
         email: c.email,
         message: resolveUserMessage(c),
+        imageUrl: customImages[c.id] || activeImg || null,
       }));
 
       const res = await fetch('/api/v1/owner/marketing/broadcast', {
@@ -223,6 +274,15 @@ export default function OwnerMessagingView({ branches, selectedBranchId = 'ALL' 
             orderFreqFilter,
           },
           branchId: selectedBranchId,
+          promoCoupon: attachPromoCode ? {
+            enabled: true,
+            code: promoCode.trim().toUpperCase(),
+            title: promoTitle.trim(),
+            discountType: promoDiscountType,
+            discountValue: promoDiscountValue,
+            minOrderValue: promoMinOrder,
+            expiryDays: promoExpiryDays,
+          } : undefined,
         }),
       });
 
@@ -637,6 +697,38 @@ export default function OwnerMessagingView({ branches, selectedBranchId = 'ALL' 
                           <div style={{ fontSize: '0.7rem', color: '#6f5569' }}>
                             {c.phone || c.email || 'No phone recorded'} &bull; {c.estimatedAgeGroup} yrs
                           </div>
+                          {/* Separate Image for this Customer */}
+                          <div style={{ marginTop: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            {customImages[c.id] ? (
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', background: '#fdf2f4', border: '1px solid #ffd1dc', borderRadius: '4px', padding: '1px 4px' }}>
+                                <img src={customImages[c.id]} alt="" style={{ width: '20px', height: '20px', borderRadius: '3px', objectFit: 'cover' }} />
+                                <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#d61c5d' }}>Custom Pic</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const next = { ...customImages };
+                                    delete next[c.id];
+                                    setCustomImages(next);
+                                  }}
+                                  style={{ background: 'none', border: 'none', color: '#d61c5d', cursor: 'pointer', fontSize: '0.65rem', fontWeight: 900, padding: 0 }}
+                                  title="Remove custom photo"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ) : (
+                              <label style={{ cursor: 'pointer', fontSize: '0.68rem', color: '#d61c5d', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                                <span>📷</span>
+                                <span>Add Custom Pic</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  style={{ display: 'none' }}
+                                  onChange={(e) => e.target.files?.[0] && handleCustomerImageUpload(c.id, e.target.files[0])}
+                                />
+                              </label>
+                            )}
+                          </div>
                         </td>
                         <td style={{ padding: '0.85rem 0.75rem', fontWeight: 700, color: '#2b1233' }}>
                           {c.totalOrders}
@@ -654,20 +746,20 @@ export default function OwnerMessagingView({ branches, selectedBranchId = 'ALL' 
                               fontWeight: 900,
                               background:
                                 c.category === 'VIP'
-                                  ? '#fef3c7'
-                                  : c.category === 'FREQUENT'
-                                  ? '#dcfce7'
-                                  : c.category === 'DORMANT'
-                                  ? '#fee2e2'
-                                  : '#eff6ff',
+                                    ? '#fef3c7'
+                                    : c.category === 'FREQUENT'
+                                    ? '#dcfce7'
+                                    : c.category === 'DORMANT'
+                                    ? '#fee2e2'
+                                    : '#eff6ff',
                               color:
                                 c.category === 'VIP'
-                                  ? '#92400e'
-                                  : c.category === 'FREQUENT'
-                                  ? '#166534'
-                                  : c.category === 'DORMANT'
-                                  ? '#991b1b'
-                                  : '#1e40af',
+                                    ? '#92400e'
+                                    : c.category === 'FREQUENT'
+                                    ? '#166534'
+                                    : c.category === 'DORMANT'
+                                    ? '#991b1b'
+                                    : '#1e40af',
                             }}
                           >
                             {c.category}
@@ -679,8 +771,10 @@ export default function OwnerMessagingView({ branches, selectedBranchId = 'ALL' 
                             title="Direct WhatsApp link"
                             onClick={() => {
                               const phone = (c.phone || '919876543210').replace(/[^0-9]/g, '');
-                              const msg = encodeURIComponent(resolveUserMessage(c));
-                              window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
+                              const userImg = customImages[c.id] || (includeImage ? (customImageUrl.trim() || selectedImageUrl) : null);
+                              const baseMsg = resolveUserMessage(c);
+                              const fullMsg = userImg ? `${baseMsg}\n\n[Promo Banner: ${userImg}]` : baseMsg;
+                              window.open(`https://wa.me/${phone}?text=${encodeURIComponent(fullMsg)}`, '_blank');
                             }}
                             style={{
                               padding: '0.25rem 0.5rem',
@@ -700,8 +794,10 @@ export default function OwnerMessagingView({ branches, selectedBranchId = 'ALL' 
                             type="button"
                             title="Direct Email link"
                             onClick={() => {
-                              const msg = encodeURIComponent(resolveUserMessage(c));
-                              window.location.href = `mailto:${c.email}?subject=${encodeURIComponent('Special Treat from IceCream Melt!')}&body=${msg}`;
+                              const userImg = customImages[c.id] || (includeImage ? (customImageUrl.trim() || selectedImageUrl) : null);
+                              const baseMsg = resolveUserMessage(c);
+                              const fullMsg = userImg ? `${baseMsg}\n\n[Promo Banner: ${userImg}]` : baseMsg;
+                              window.location.href = `mailto:${c.email}?subject=${encodeURIComponent('Special Treat from IceCream Melt!')}&body=${encodeURIComponent(fullMsg)}`;
                             }}
                             style={{
                               padding: '0.25rem 0.5rem',
@@ -841,6 +937,8 @@ export default function OwnerMessagingView({ branches, selectedBranchId = 'ALL' 
                   { tag: '{{total_spent}}', label: 'Total Spent' },
                   { tag: '{{order_count}}', label: 'Order Count' },
                   { tag: '{{category}}', label: 'Tier/Category' },
+                  { tag: '{{coupon_code}}', label: 'Promo Code' },
+                  { tag: '{{discount}}', label: 'Discount Val' },
                 ].map((token) => (
                   <button
                     key={token.tag}
@@ -914,6 +1012,160 @@ export default function OwnerMessagingView({ branches, selectedBranchId = 'ALL' 
             </div>
           )}
 
+          {/* Targeted Promo / Coupon Code Section */}
+          <div
+            style={{
+              background: attachPromoCode ? '#fff9fa' : '#ffffff',
+              borderRadius: '1rem',
+              border: attachPromoCode ? '2px solid #ffd1dc' : '1px solid #f4d3dd',
+              padding: '1rem',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: attachPromoCode ? '0.75rem' : 0 }}>
+              <label style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#2b1233', display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={attachPromoCode}
+                  onChange={(e) => setAttachPromoCode(e.target.checked)}
+                  style={{ accentColor: '#d61c5d' }}
+                />
+                <span>🎁 Attach Private Promo Code (Synced to Customer Cart)</span>
+              </label>
+              {attachPromoCode && (
+                <button
+                  type="button"
+                  onClick={generateRandomPromoCode}
+                  style={{
+                    padding: '0.2rem 0.55rem',
+                    borderRadius: '9999px',
+                    border: '1px solid #ffd1dc',
+                    background: '#fff1f4',
+                    color: '#d61c5d',
+                    fontSize: '0.6875rem',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                  }}
+                >
+                  🎲 Randomize Code
+                </button>
+              )}
+            </div>
+
+            {attachPromoCode && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '0.5rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 800, color: '#6f5569', marginBottom: '0.2rem' }}>
+                      Promo Code
+                    </label>
+                    <input
+                      type="text"
+                      value={promoCode}
+                      onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                      style={{
+                        width: '100%',
+                        padding: '0.4rem 0.6rem',
+                        borderRadius: '0.5rem',
+                        border: '1px solid #f4d3dd',
+                        fontSize: '0.8125rem',
+                        fontWeight: 900,
+                        color: '#d61c5d',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 800, color: '#6f5569', marginBottom: '0.2rem' }}>
+                      Discount Type & Val
+                    </label>
+                    <div style={{ display: 'flex', gap: '0.25rem' }}>
+                      <select
+                        value={promoDiscountType}
+                        onChange={(e) => setPromoDiscountType(e.target.value as any)}
+                        style={{
+                          padding: '0.4rem 0.35rem',
+                          borderRadius: '0.5rem',
+                          border: '1px solid #f4d3dd',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                        }}
+                      >
+                        <option value="PERCENTAGE">% Off</option>
+                        <option value="FIXED">₹ Off</option>
+                      </select>
+                      <input
+                        type="number"
+                        min="1"
+                        value={promoDiscountValue}
+                        onChange={(e) => setPromoDiscountValue(Number(e.target.value))}
+                        style={{
+                          width: '100%',
+                          padding: '0.4rem 0.5rem',
+                          borderRadius: '0.5rem',
+                          border: '1px solid #f4d3dd',
+                          fontSize: '0.8125rem',
+                          fontWeight: 800,
+                          boxSizing: 'border-box',
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 800, color: '#6f5569', marginBottom: '0.2rem' }}>
+                      Min Order Value (₹)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={promoMinOrder}
+                      onChange={(e) => setPromoMinOrder(Number(e.target.value))}
+                      style={{
+                        width: '100%',
+                        padding: '0.4rem 0.6rem',
+                        borderRadius: '0.5rem',
+                        border: '1px solid #f4d3dd',
+                        fontSize: '0.75rem',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: 800, color: '#6f5569', marginBottom: '0.2rem' }}>
+                      Validity (Days)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="365"
+                      value={promoExpiryDays}
+                      onChange={(e) => setPromoExpiryDays(Number(e.target.value))}
+                      style={{
+                        width: '100%',
+                        padding: '0.4rem 0.6rem',
+                        borderRadius: '0.5rem',
+                        border: '1px solid #f4d3dd',
+                        fontSize: '0.75rem',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ fontSize: '0.6875rem', color: '#166534', background: '#dcfce7', padding: '0.35rem 0.6rem', borderRadius: '0.4rem', fontWeight: 700 }}>
+                  ⚡ Synced: When sent, this code automatically appears in the recipient&apos;s Cart view with an instant &ldquo;Apply Code&rdquo; button.
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Image & Banner Media Attachment */}
           <div style={{ borderTop: '1px dashed #f4d3dd', paddingTop: '0.75rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
@@ -928,13 +1180,45 @@ export default function OwnerMessagingView({ branches, selectedBranchId = 'ALL' 
               </label>
               {includeImage && (
                 <span style={{ fontSize: '0.6875rem', color: '#166534', fontWeight: 800 }}>
-                  ✓ Media Attached
+                  ✓ Media Active
                 </span>
               )}
             </div>
 
             {includeImage && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {/* Upload Global Image File */}
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <label
+                    style={{
+                      padding: '0.45rem 0.85rem',
+                      background: '#fff1f4',
+                      border: '1px solid #f4d3dd',
+                      borderRadius: '0.5rem',
+                      fontSize: '0.75rem',
+                      fontWeight: 800,
+                      color: '#d61c5d',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                    }}
+                  >
+                    <span>📁 Upload Image from Computer</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={(e) => e.target.files?.[0] && handleGlobalImageUpload(e.target.files[0])}
+                    />
+                  </label>
+                  {customImageUrl && (
+                    <span style={{ fontSize: '0.7rem', color: '#166534', fontWeight: 800 }}>
+                      ✓ Local Image Loaded
+                    </span>
+                  )}
+                </div>
+
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.45rem' }}>
                   {PROMO_IMAGE_PRESETS.map((preset, idx) => (
                     <button
@@ -981,6 +1265,10 @@ export default function OwnerMessagingView({ branches, selectedBranchId = 'ALL' 
                     boxSizing: 'border-box',
                   }}
                 />
+
+                <p style={{ margin: '0.15rem 0 0', fontSize: '0.6875rem', color: '#6f5569' }}>
+                  💡 Tip: You can also upload different/unique images for each recipient using the &ldquo;📷 Add Custom Pic&rdquo; button on their row in the table!
+                </p>
               </div>
             )}
           </div>
@@ -1034,6 +1322,11 @@ export default function OwnerMessagingView({ branches, selectedBranchId = 'ALL' 
               <p style={{ margin: 0, fontSize: '0.75rem' }}>
                 Dispatched {broadcastResult.dispatchedCount} messages via {broadcastResult.channel}. Campaign ID: <code style={{ fontWeight: 700 }}>{broadcastResult.campaignId.slice(0, 14)}...</code>
               </p>
+              {broadcastResult.promoAssigned && (
+                <div style={{ marginTop: '0.4rem', padding: '0.35rem 0.6rem', background: '#dcfce7', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 800, color: '#14532d' }}>
+                  🎁 Private Promo Code [{promoCode.toUpperCase()}] successfully saved &amp; linked to {broadcastResult.promoAssigned.assignedCount} customer cart(s)!
+                </div>
+              )}
               {broadcastResult.previews && broadcastResult.previews.length > 0 && (
                 <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
                   {broadcastResult.previews.slice(0, 3).map((p, idx) => (

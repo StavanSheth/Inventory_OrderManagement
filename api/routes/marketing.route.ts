@@ -2,6 +2,8 @@ import { createAuthInfrastructure, AuthFactoryOptions } from '../factories/auth.
 import { UserRepository } from '../../database/repositories/user.repository';
 import { AuditRepository } from '../../database/repositories/audit.repository';
 import { BranchRepository } from '../../database/repositories/branch.repository';
+import { PromotionRepository } from '../../database/repositories/promotion.repository';
+import { DiscountType } from '../../shared/enums/promotions.enum';
 import { successResponse } from '../serializers/response';
 import { handleApiError } from '../middleware/error-handler';
 import { requireOwner } from '../../backend/policies/role.policy';
@@ -167,11 +169,22 @@ export async function handleOwnerMarketingBroadcastRoute(
         phone?: string | null;
         email?: string | null;
         message: string;
+        imageUrl?: string | null;
       }>;
       messageTemplate?: string;
       imageUrl?: string | null;
       filtersApplied?: Record<string, unknown>;
       branchId?: string;
+      promoCoupon?: {
+        enabled: boolean;
+        code: string;
+        title?: string;
+        discountType: 'PERCENTAGE' | 'FIXED';
+        discountValue: number;
+        minOrderValue?: number;
+        maxDiscount?: number | null;
+        expiryDays?: number;
+      };
     };
 
     if (!body.channel || !Array.isArray(body.recipients) || body.recipients.length === 0) {
@@ -187,7 +200,7 @@ export async function handleOwnerMarketingBroadcastRoute(
     const campaignId = `camp-${crypto.randomUUID()}`;
     const nowIso = new Date().toISOString();
 
-    // Insert campaign into messaging_campaigns table
+    // 1. Insert campaign into messaging_campaigns table
     await db
       .prepare(`
         INSERT INTO messaging_campaigns (
@@ -206,7 +219,30 @@ export async function handleOwnerMarketingBroadcastRoute(
       )
       .run();
 
-    // Log to audit repository
+    // 2. Assign private coupons if requested
+    let promoResult: { createdCouponCount: number; assignedCount: number } | null = null;
+    if (body.promoCoupon?.enabled && body.promoCoupon?.code?.trim()) {
+      const promoRepo = new PromotionRepository(db);
+      const recipientUserIds = body.recipients.map((r) => r.userId);
+      const expiryIso = new Date(
+        Date.now() + (body.promoCoupon.expiryDays || 14) * 24 * 60 * 60 * 1000
+      ).toISOString();
+
+      promoResult = await promoRepo.assignPrivateCouponToUsers({
+        userIds: recipientUserIds,
+        couponCode: body.promoCoupon.code.trim().toUpperCase(),
+        title: body.promoCoupon.title || `Special Deal ${body.promoCoupon.code.trim().toUpperCase()}`,
+        discountType: (body.promoCoupon.discountType as DiscountType) || DiscountType.PERCENTAGE,
+        discountValue: body.promoCoupon.discountValue || 10,
+        minOrderValue: body.promoCoupon.minOrderValue || 0,
+        maxDiscount: body.promoCoupon.maxDiscount ?? null,
+        branchId: effectiveBranchId,
+        expiresAt: expiryIso,
+        campaignId,
+      });
+    }
+
+    // 3. Log to audit repository
     const auditRepo = new AuditRepository(db);
     await auditRepo.log({
       branch_id: effectiveBranchId,
@@ -218,19 +254,21 @@ export async function handleOwnerMarketingBroadcastRoute(
       metadata: {
         channel: body.channel,
         recipientCount: body.recipients.length,
-        hasImage: Boolean(body.imageUrl),
+        hasImage: Boolean(body.imageUrl || body.recipients.some((r) => Boolean(r.imageUrl))),
         imageUrl: body.imageUrl ?? null,
+        promoAttached: Boolean(promoResult),
+        couponCode: body.promoCoupon?.code ?? null,
       },
     });
 
-    // Generate clickable action previews
+    // 4. Generate clickable action previews with recipient-specific images
     const previews = body.recipients.slice(0, 10).map((r) => {
       const cleanPhone = (r.phone || '919876543210').replace(/[^0-9]/g, '');
-      const encodedMsg = encodeURIComponent(
-        body.imageUrl
-          ? `${r.message}\n\n[Promo Banner: ${body.imageUrl}]`
-          : r.message
-      );
+      const recipientImage = r.imageUrl || body.imageUrl;
+      const formattedMessage = recipientImage
+        ? `${r.message}\n\n[Promo Banner: ${recipientImage}]`
+        : r.message;
+      const encodedMsg = encodeURIComponent(formattedMessage);
 
       let actionUrl = '';
       if (body.channel === 'WHATSAPP') {
@@ -246,6 +284,7 @@ export async function handleOwnerMarketingBroadcastRoute(
         name: r.name,
         phone: r.phone,
         email: r.email,
+        imageUrl: recipientImage || null,
         actionUrl,
       };
     });
@@ -255,8 +294,9 @@ export async function handleOwnerMarketingBroadcastRoute(
         campaignId,
         channel: body.channel,
         dispatchedCount: body.recipients.length,
-        hasImage: Boolean(body.imageUrl),
+        hasImage: Boolean(body.imageUrl || body.recipients.some((r) => Boolean(r.imageUrl))),
         imageUrl: body.imageUrl ?? null,
+        promoAssigned: promoResult,
         previews,
         timestamp: nowIso,
         status: 'SUCCESS',
