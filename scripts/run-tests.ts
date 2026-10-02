@@ -19,6 +19,7 @@ const testFiles = [
   'tests/unit/responsive-ui-components.test.ts',
   'tests/integration/schema-migrations.test.ts',
   'tests/integration/seed-data.test.ts',
+  'tests/integration/comprehensive-seed.test.ts',
   'tests/integration/repositories.test.ts',
   'tests/integration/backend-services.test.ts',
   'tests/integration/d1-abstraction.test.ts',

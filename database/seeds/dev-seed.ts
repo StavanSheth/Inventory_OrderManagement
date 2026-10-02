@@ -1,13 +1,27 @@
 import { D1DatabaseLike } from '../types';
 import { seedData } from '../fixtures';
+import { runComprehensiveSeed, ComprehensiveSeedResult } from './comprehensive-seed';
 
-export async function runDevSeed(db: D1DatabaseLike): Promise<{
+export interface DevSeedOptions {
+  comprehensive?: boolean;
+}
+
+export type DevSeedResult = {
   branches: number;
   categories: number;
   products: number;
   rawMaterials: number;
   inventory: number;
-}> {
+} & Partial<ComprehensiveSeedResult>;
+
+export async function runDevSeed(
+  db: D1DatabaseLike,
+  options?: DevSeedOptions,
+): Promise<DevSeedResult> {
+  if (options?.comprehensive) {
+    return await runComprehensiveSeed(db);
+  }
+
   await db.exec('PRAGMA foreign_keys = ON;');
   const now = new Date().toISOString();
 
