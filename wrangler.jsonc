@@ -11,7 +11,7 @@
     {
       "binding": "DB",
       "database_name": "inventory_ordermanagement_db",
-      "database_id": "<D1_DATABASE_ID>",
+      "database_id": "00000000-0000-0000-0000-000000000000",
       "migrations_dir": "database/migrations"
     }
   ],
@@ -33,7 +33,7 @@
         {
           "binding": "DB",
           "database_name": "inventory_ordermanagement_prod_db",
-          "database_id": "<PROD_D1_DATABASE_ID>",
+          "database_id": "a0000000-0000-4000-8000-000000000001",
           "migrations_dir": "database/migrations"
         }
       ]
@@ -48,7 +48,7 @@
         {
           "binding": "DB",
           "database_name": "inventory_ordermanagement_staging_db",
-          "database_id": "<STAGING_D1_DATABASE_ID>",
+          "database_id": "a0000000-0000-4000-8000-000000000002",
           "migrations_dir": "database/migrations"
         }
       ]

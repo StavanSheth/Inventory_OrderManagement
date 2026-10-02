@@ -396,6 +396,57 @@ describe('Phase 4 — Concurrency, Inventory Ledger, BOM & Promotion Remediation
       assert.ok(reversalMoves.length >= 1, 'Reversal movement must be recorded on order reduction');
       assert.strictEqual(reversalMoves[0].quantity_delta, 4);
     });
+
+    it('handles product deletion (N -> 0) as immediate reversal and product addition (0 -> N) deferred until payment', async () => {
+      // Stock both products
+      await inventoryService.refillProductStock(branchId, 'prod-pistachio', 20, operatorId, 'Stocked');
+      await inventoryService.refillProductStock(branchId, 'prod-belgian', 20, operatorId, 'Stocked');
+
+      // Create order with 3 Pistachio
+      const { order } = await ordersService.createOrder({
+        actorUserId: customerId,
+        customerUserId: customerId,
+        branchId,
+        items: [{ productId: 'prod-pistachio', quantity: 3 }],
+      });
+
+      const { payment } = await ordersService.recordPayment({
+        actorUserId: operatorId,
+        orderId: order.id,
+        branchId,
+        amount: order.total,
+        method: PaymentMethod.CASH,
+      });
+      await ordersService.verifyPayment({ actorUserId: operatorId, orderId: order.id, paymentId: payment.id });
+      await ordersService.confirmOrder(operatorId, order.id);
+
+      // Stock: Pistachio = 20 - 3 = 17, Belgian = 20
+      let pStock = await inventoryRepo.findByProduct(branchId, 'prod-pistachio');
+      let bStock = await inventoryRepo.findByProduct(branchId, 'prod-belgian');
+      assert.strictEqual(pStock?.quantity, 17);
+      assert.strictEqual(bStock?.quantity, 20);
+
+      // Edit: Delete Pistachio (3 -> 0) and Add Belgian (0 -> 2)
+      // Pistachio price = 100, Belgian price = 150
+      // Old subtotal: 300, New subtotal: 300 -> additional payment = 0!
+      // Since additional payment = 0, Belgian delta (+2) is consumed and Pistachio (+3) is restored immediately!
+      await ordersService.editOrder({
+        actorUserId: operatorId,
+        orderId: order.id,
+        items: [{ productId: 'prod-belgian', quantity: 2 }],
+      });
+
+      pStock = await inventoryRepo.findByProduct(branchId, 'prod-pistachio');
+      bStock = await inventoryRepo.findByProduct(branchId, 'prod-belgian');
+      assert.strictEqual(pStock?.quantity, 20, 'Pistachio stock restored to 20 upon deletion');
+      assert.strictEqual(bStock?.quantity, 18, 'Belgian stock deducted to 18 upon addition');
+
+      const movements = await inventoryRepo.listMovements(branchId, 20);
+      const rev = movements.find((m) => m.product_id === 'prod-pistachio' && m.movement_type === 'ORDER_REVERSAL');
+      const cons = movements.find((m) => m.product_id === 'prod-belgian' && m.movement_type === 'ORDER_CONSUMPTION');
+      assert.ok(rev, 'Pistachio reversal logged');
+      assert.ok(cons, 'Belgian consumption logged');
+    });
   });
 
   describe('5. Coupon Concurrency and Limits', () => {
@@ -470,6 +521,102 @@ describe('Phase 4 — Concurrency, Inventory Ledger, BOM & Promotion Remediation
         .bind(coupon.id, customerId)
         .first<{ count: number }>();
       assert.strictEqual(usages?.count, 1);
+    });
+  });
+
+  describe('6. Non-Negative Database Trigger Invariants', () => {
+    it('database trigger aborts any mutation that would make inventory quantity negative', async () => {
+      await inventoryService.refillProductStock(branchId, 'prod-pistachio', 5, operatorId, 'Stocked');
+
+      // Attempting to set quantity to -1 directly via SQL must be blocked by trigger
+      await assert.rejects(
+        async () => {
+          await db.prepare('UPDATE inventory SET quantity = -1 WHERE branch_id = ? AND product_id = ?')
+            .bind(branchId, 'prod-pistachio')
+            .run();
+        },
+        (err: any) => err.message.includes('Inventory stock cannot be negative'),
+      );
+    });
+
+    it('database trigger aborts any mutation that would make raw material quantity negative', async () => {
+      const mat = await inventoryService.createRawMaterial(branchId, operatorId, {
+        name: 'Cocoa',
+        unit: 'kg',
+        current_quantity: 5,
+      });
+
+      // Attempting to set current_quantity to -1 directly via SQL must be blocked by trigger
+      await assert.rejects(
+        async () => {
+          await db.prepare('UPDATE raw_materials SET current_quantity = -1 WHERE id = ?')
+            .bind(mat.id)
+            .run();
+        },
+        (err: any) => err.message.includes('Raw material stock cannot be negative'),
+      );
+    });
+  });
+
+  describe('7. Realtime Consistency Under Confirmation', () => {
+    it('publishes OrderStatusChanged event strictly after DB confirmation and emits nothing on failed confirmation', async () => {
+      const eventsEmitted: any[] = [];
+      const sub = centralRealtimeHub.subscribe({}, (evt) => {
+        if (evt.type === 'OrderStatusChanged') {
+          eventsEmitted.push(evt);
+        }
+      });
+
+      // 1. Successful confirmation flow
+      await inventoryService.refillProductStock(branchId, 'prod-pistachio', 10, operatorId, 'Stock');
+      const { order } = await ordersService.createOrder({
+        actorUserId: customerId,
+        customerUserId: customerId,
+        branchId,
+        items: [{ productId: 'prod-pistachio', quantity: 1 }],
+      });
+
+      const { payment } = await ordersService.recordPayment({
+        actorUserId: operatorId,
+        orderId: order.id,
+        branchId,
+        amount: order.total,
+        method: PaymentMethod.CASH,
+      });
+      await ordersService.verifyPayment({ actorUserId: operatorId, orderId: order.id, paymentId: payment.id });
+
+      eventsEmitted.length = 0; // reset
+      await ordersService.confirmOrder(operatorId, order.id);
+
+      const confirmedEvt = eventsEmitted.find((e) => e.payload.status === OrderStatus.CONFIRMED);
+      assert.ok(confirmedEvt, 'OrderStatusChanged event emitted on confirmed order');
+      assert.strictEqual(confirmedEvt.payload.orderId, order.id);
+
+      // 2. Failed confirmation flow (insufficient stock)
+      const { order: oFail } = await ordersService.createOrder({
+        actorUserId: customerId,
+        customerUserId: customerId,
+        branchId,
+        items: [{ productId: 'prod-pistachio', quantity: 50 }], // exceeds available stock (9)
+      });
+      const { payment: pFail } = await ordersService.recordPayment({
+        actorUserId: operatorId,
+        orderId: oFail.id,
+        branchId,
+        amount: oFail.total,
+        method: PaymentMethod.CASH,
+      });
+      await ordersService.verifyPayment({ actorUserId: operatorId, orderId: oFail.id, paymentId: pFail.id });
+
+      eventsEmitted.length = 0; // reset
+      await assert.rejects(async () => {
+        await ordersService.confirmOrder(operatorId, oFail.id);
+      });
+
+      const noEvt = eventsEmitted.find((e) => e.payload.orderId === oFail.id && e.payload.status === OrderStatus.CONFIRMED);
+      assert.strictEqual(noEvt, undefined, 'No confirmed event must be emitted when confirmation fails');
+
+      sub();
     });
   });
 });
