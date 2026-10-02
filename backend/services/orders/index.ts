@@ -781,6 +781,11 @@ export class OrdersService implements IOrdersService {
       throw new BadRequestError(`Cannot confirm order in status ${order.status}. Must be PENDING.`);
     }
 
+    const now = new Date();
+    if (now >= new Date(order.expires_at)) {
+      throw new BadRequestError('Cannot confirm expired order');
+    }
+
     if (order.payment_status !== PaymentStatus.VERIFIED && order.payment_status !== PaymentStatus.COMPLETED) {
       throw new BadRequestError(
         `Order cannot be confirmed. Payment status is ${order.payment_status}. Payment must be VERIFIED first.`,
@@ -796,11 +801,6 @@ export class OrdersService implements IOrdersService {
       throw new BadRequestError(
         `Cannot confirm order: verified payment amount (₹${verifiedPaid.toFixed(2)}) is less than order total (₹${order.total.toFixed(2)}).`,
       );
-    }
-
-    const now = new Date();
-    if (now >= new Date(order.expires_at)) {
-      throw new BadRequestError('Cannot confirm expired order');
     }
 
     const nowIso = now.toISOString();

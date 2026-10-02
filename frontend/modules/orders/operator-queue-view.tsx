@@ -276,6 +276,11 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId, 
     };
   }, [branchId, fetchOrders]);
 
+  // Determine if order is expired based on either explicit status or elapsed expiry timestamp
+  const isOrderExpired = (o: Order) =>
+    o.status === OrderStatus.EXPIRED ||
+    (o.status === OrderStatus.PENDING && new Date(o.expires_at).getTime() <= Date.now());
+
   // Move order through its lifecycle stages
   const handleAdvanceStage = async (order: Order, targetStatus: OrderStatus) => {
     if (advancingOrderId) return;
@@ -283,6 +288,11 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId, 
     setError(null);
 
     try {
+      if (isOrderExpired(order)) {
+        setError('Cannot process expired order. Please ask the customer to place a new order.');
+        return;
+      }
+
       if (targetStatus === OrderStatus.CONFIRMED) {
         // If payment is pending at reception, record and verify cash atomically
         if (
@@ -295,13 +305,21 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId, 
             notes: 'Counter reception payment',
           });
 
-          if (recRes.success) {
-            await orderApiClient.verifyPayment(
-              branchId,
-              order.id,
-              recRes.data.payment.id,
-              'Counter verified'
-            );
+          if (!recRes.success) {
+            setError(recRes.error?.message || 'Failed to record payment');
+            return;
+          }
+
+          const verRes = await orderApiClient.verifyPayment(
+            branchId,
+            order.id,
+            recRes.data.payment.id,
+            'Counter verified'
+          );
+
+          if (!verRes.success) {
+            setError(verRes.error?.message || 'Failed to verify payment');
+            return;
           }
         }
 
@@ -355,8 +373,11 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId, 
     if (tabId === 'ALL') return orders.length;
     if (tabId === OrderStatus.EXPIRED) {
       return orders.filter(
-        (o) => o.status === OrderStatus.EXPIRED || o.status === OrderStatus.CANCELLED
+        (o) => isOrderExpired(o) || o.status === OrderStatus.CANCELLED
       ).length;
+    }
+    if (tabId === OrderStatus.PENDING) {
+      return orders.filter((o) => o.status === OrderStatus.PENDING && !isOrderExpired(o)).length;
     }
     return orders.filter((o) => o.status === tabId).length;
   };
@@ -364,22 +385,28 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId, 
   const filteredOrders = orders.filter((o) => {
     if (activeTab === 'ALL') return true;
     if (activeTab === OrderStatus.EXPIRED) {
-      return o.status === OrderStatus.EXPIRED || o.status === OrderStatus.CANCELLED;
+      return isOrderExpired(o) || o.status === OrderStatus.CANCELLED;
+    }
+    if (activeTab === OrderStatus.PENDING) {
+      return o.status === OrderStatus.PENDING && !isOrderExpired(o);
     }
     return o.status === activeTab;
   });
 
   // Sort: Latest orders on top, Expired/Cancelled at bottom
   const sortedOrders = [...filteredOrders].sort((a, b) => {
-    const aTerminal = a.status === OrderStatus.EXPIRED || a.status === OrderStatus.CANCELLED;
-    const bTerminal = b.status === OrderStatus.EXPIRED || b.status === OrderStatus.CANCELLED;
+    const aTerminal = isOrderExpired(a) || a.status === OrderStatus.CANCELLED;
+    const bTerminal = isOrderExpired(b) || b.status === OrderStatus.CANCELLED;
     if (aTerminal && !bTerminal) return 1;
     if (!aTerminal && bTerminal) return -1;
     return new Date(b.placed_at).getTime() - new Date(a.placed_at).getTime();
   });
 
-  const getStatusBadge = (status: OrderStatus) => {
-    switch (status) {
+  const getStatusBadge = (order: Order) => {
+    if (isOrderExpired(order)) {
+      return { label: 'Expired', bg: '#fee2e2', text: '#991b1b' };
+    }
+    switch (order.status) {
       case OrderStatus.PENDING:
         return { label: 'Payment Left', bg: '#fef3c7', text: '#92400e' };
       case OrderStatus.CONFIRMED:
@@ -390,12 +417,10 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId, 
         return { label: 'Ready', bg: '#dbeafe', text: '#1e40af' };
       case OrderStatus.COMPLETED:
         return { label: 'Collected', bg: '#fce7f3', text: '#9d174d' };
-      case OrderStatus.EXPIRED:
-        return { label: 'Expired', bg: '#fee2e2', text: '#991b1b' };
       case OrderStatus.CANCELLED:
         return { label: 'Cancelled', bg: '#fee2e2', text: '#991b1b' };
       default:
-        return { label: status, bg: '#fff1f4', text: '#6f5569' };
+        return { label: order.status, bg: '#fff1f4', text: '#6f5569' };
     }
   };
 
@@ -1050,12 +1075,12 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId, 
           }}
         >
           {sortedOrders.map((order) => {
-            const badge = getStatusBadge(order.status);
-            const isPending = order.status === OrderStatus.PENDING;
+            const badge = getStatusBadge(order);
+            const isPending = order.status === OrderStatus.PENDING && !isOrderExpired(order);
             const isConfirmed = order.status === OrderStatus.CONFIRMED;
             const isCompleted = order.status === OrderStatus.COMPLETED;
             const isTerminalExpired =
-              order.status === OrderStatus.EXPIRED || order.status === OrderStatus.CANCELLED;
+              isOrderExpired(order) || order.status === OrderStatus.CANCELLED;
             const isAdvancing = advancingOrderId === order.id;
             const isPaymentVerified =
               order.payment_status === PaymentStatus.VERIFIED ||
@@ -1294,7 +1319,7 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId, 
                           fontSize: '0.75rem',
                         }}
                       >
-                        {order.status === OrderStatus.EXPIRED ? (
+                        {isOrderExpired(order) ? (
                           '⚠️ Expired Order'
                         ) : (
                           <div>

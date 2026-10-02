@@ -111,38 +111,50 @@ export const UnifiedOrderHistoryView: React.FC<UnifiedOrderHistoryViewProps> = (
     fetchOrders();
   }, [fetchOrders]);
 
-  const getStatusBadge = (status: OrderStatus) => {
+  const isOrderExpired = (o: Order) =>
+    o.status === OrderStatus.EXPIRED ||
+    (o.status === OrderStatus.PENDING && new Date(o.expires_at).getTime() <= Date.now());
+
+  const getStatusBadge = (order: Order) => {
     let bg = '#eee';
     let text = '#333';
-    switch (status) {
-      case OrderStatus.PENDING:
-        bg = '#fff3cd';
-        text = '#856404';
-        break;
-      case OrderStatus.CONFIRMED:
-        bg = '#cce5ff';
-        text = '#004085';
-        break;
-      case OrderStatus.PREPARING:
-        bg = '#d1ecf1';
-        text = '#0c5460';
-        break;
-      case OrderStatus.READY:
-        bg = '#d4edda';
-        text = '#155724';
-        break;
-      case OrderStatus.COMPLETED:
-        bg = '#28a745';
-        text = '#ffffff';
-        break;
-      case OrderStatus.CANCELLED:
-        bg = '#f8d7da';
-        text = '#721c24';
-        break;
-      case OrderStatus.EXPIRED:
-        bg = '#e2e3e5';
-        text = '#383d41';
-        break;
+    let label = order.status;
+
+    if (isOrderExpired(order)) {
+      bg = '#fee2e2';
+      text = '#991b1b';
+      label = OrderStatus.EXPIRED;
+    } else {
+      switch (order.status) {
+        case OrderStatus.PENDING:
+          bg = '#fff3cd';
+          text = '#856404';
+          break;
+        case OrderStatus.CONFIRMED:
+          bg = '#cce5ff';
+          text = '#004085';
+          break;
+        case OrderStatus.PREPARING:
+          bg = '#d1ecf1';
+          text = '#0c5460';
+          break;
+        case OrderStatus.READY:
+          bg = '#d4edda';
+          text = '#155724';
+          break;
+        case OrderStatus.COMPLETED:
+          bg = '#28a745';
+          text = '#ffffff';
+          break;
+        case OrderStatus.CANCELLED:
+          bg = '#f8d7da';
+          text = '#721c24';
+          break;
+        case OrderStatus.EXPIRED:
+          bg = '#fee2e2';
+          text = '#991b1b';
+          break;
+      }
     }
     return (
       <span
@@ -157,7 +169,7 @@ export const UnifiedOrderHistoryView: React.FC<UnifiedOrderHistoryViewProps> = (
           letterSpacing: '0.04em',
         }}
       >
-        {status.replace(/_/g, ' ')}
+        {label.replace(/_/g, ' ')}
       </span>
     );
   };
@@ -407,7 +419,7 @@ export const UnifiedOrderHistoryView: React.FC<UnifiedOrderHistoryViewProps> = (
                       ₹{o.total.toFixed(2)}
                     </td>
                     <td style={{ padding: '0.85rem 1.25rem' }}>
-                      {getStatusBadge(o.status)}
+                      {getStatusBadge(o)}
                     </td>
                     <td style={{ padding: '0.85rem 1.25rem', textAlign: 'right' }}>
                       <button

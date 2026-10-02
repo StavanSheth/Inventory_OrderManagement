@@ -40,16 +40,26 @@ export const OrderHistoryView: React.FC<OrderHistoryViewProps> = ({
     fetchOrders();
   }, []);
 
+  const isOrderExpired = (o: Order) =>
+    o.status === OrderStatus.EXPIRED ||
+    (o.status === OrderStatus.PENDING && new Date(o.expires_at).getTime() <= Date.now());
+
   const filteredOrders = orders.filter((o) => {
     if (statusFilter === 'ALL') return true;
     if (statusFilter === OrderStatus.EXPIRED) {
-      return o.status === OrderStatus.EXPIRED || o.status === OrderStatus.CANCELLED;
+      return isOrderExpired(o) || o.status === OrderStatus.CANCELLED;
+    }
+    if (statusFilter === OrderStatus.PENDING) {
+      return o.status === OrderStatus.PENDING && !isOrderExpired(o);
     }
     return o.status === statusFilter;
   });
 
-  const getStatusBadge = (status: OrderStatus) => {
-    switch (status) {
+  const getStatusBadge = (order: Order) => {
+    if (isOrderExpired(order)) {
+      return { label: 'Expired', bg: '#fee2e2', text: '#991b1b' };
+    }
+    switch (order.status) {
       case OrderStatus.PENDING:
         return { label: 'Payment Left', bg: '#fef3c7', text: '#92400e' };
       case OrderStatus.CONFIRMED:
@@ -60,12 +70,10 @@ export const OrderHistoryView: React.FC<OrderHistoryViewProps> = ({
         return { label: 'Ready', bg: '#dbeafe', text: '#1e40af' };
       case OrderStatus.COMPLETED:
         return { label: 'Collected', bg: '#fce7f3', text: '#9d174d' };
-      case OrderStatus.EXPIRED:
-        return { label: 'Expired', bg: '#fee2e2', text: '#991b1b' };
       case OrderStatus.CANCELLED:
         return { label: 'Cancelled', bg: '#fee2e2', text: '#991b1b' };
       default:
-        return { label: status, bg: '#fff1f4', text: '#6f5569' };
+        return { label: order.status, bg: '#fff1f4', text: '#6f5569' };
     }
   };
 
@@ -144,8 +152,10 @@ export const OrderHistoryView: React.FC<OrderHistoryViewProps> = ({
               ? orders.length
               : tab.id === OrderStatus.EXPIRED
               ? orders.filter(
-                  (o) => o.status === OrderStatus.EXPIRED || o.status === OrderStatus.CANCELLED
+                  (o) => isOrderExpired(o) || o.status === OrderStatus.CANCELLED
                 ).length
+              : tab.id === OrderStatus.PENDING
+              ? orders.filter((o) => o.status === OrderStatus.PENDING && !isOrderExpired(o)).length
               : orders.filter((o) => o.status === tab.id).length;
 
           return (
@@ -254,7 +264,7 @@ export const OrderHistoryView: React.FC<OrderHistoryViewProps> = ({
       {!loading && !error && filteredOrders.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
           {filteredOrders.map((order) => {
-            const statusBadge = getStatusBadge(order.status);
+            const statusBadge = getStatusBadge(order);
 
             return (
               <div
