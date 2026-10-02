@@ -14,7 +14,7 @@ import { extractRequestContext } from '../middleware/request-context';
 import { handleCorsPreflight, getCorsHeaders } from '../middleware/cors';
 import { config } from '../../config/runtime';
 import { D1DatabaseLike } from '../../database/types';
-import { realtimeService } from '../../backend/services/realtime';
+import { createRealtimeService } from '../../backend/services/realtime';
 import { ForbiddenError } from '../../backend/errors/app-error';
 
 function buildOrdersService(db: D1DatabaseLike): OrdersService {
@@ -24,7 +24,7 @@ function buildOrdersService(db: D1DatabaseLike): OrdersService {
     new ProductRepository(db),
     new AuditRepository(db),
     new BranchRepository(db),
-    realtimeService,
+    createRealtimeService(db),
   );
 }
 

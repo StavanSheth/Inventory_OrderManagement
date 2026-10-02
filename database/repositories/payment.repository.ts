@@ -148,9 +148,10 @@ export class PaymentRepository extends BaseRepository {
             confirmed_at = ?,
             updated_at = ?
         WHERE id = ?
+          AND order_id = ?
           AND status = ?
       `)
-      .bind(PaymentStatus.VERIFIED, confirmedByUserId, nowIso, nowIso, paymentId, PaymentStatus.RECORDED);
+      .bind(PaymentStatus.VERIFIED, confirmedByUserId, nowIso, nowIso, paymentId, orderId, PaymentStatus.RECORDED);
 
     const orderStmt = this.db
       .prepare(`
@@ -158,11 +159,12 @@ export class PaymentRepository extends BaseRepository {
         SET payment_status = ?,
             updated_at = ?
         WHERE id = ?
+          AND status NOT IN ('CANCELLED', 'EXPIRED')
       `)
       .bind(PaymentStatus.VERIFIED, nowIso, orderId);
 
     const results = await this.db.batch([paymentStmt, orderStmt]);
-    const changes = Number((results[0]?.meta as { changes?: number })?.changes ?? 0);
+    const changes = Number((results[0]?.meta as { changes?: number })?.changes ?? (results[0] as { changes?: number })?.changes ?? 0);
 
     const payment = await this.findById(paymentId);
     if (!payment) {

@@ -213,9 +213,30 @@ export class OrdersService implements IOrdersService {
 
     const editDiff = this.calc.calculateEditDifference(previousTotal, newTotal, verifiedPaidAmount);
 
-    // If new total exceeds verified paid amount, order is no longer fully verified
-    if (newTotal > verifiedPaidAmount && order.payment_status === PaymentStatus.VERIFIED) {
-      updatedOrder = await this.orderRepo.updatePaymentStatus(opts.orderId, PaymentStatus.PENDING);
+    // Financial & payment lifecycle rules for edited order (Sections 7, 8, 9)
+    if (order.status === OrderStatus.CONFIRMED) {
+      if (newTotal === verifiedPaidAmount) {
+        // Fully verified match - remains operationally CONFIRMED and VERIFIED
+        if (order.payment_status !== PaymentStatus.VERIFIED) {
+          updatedOrder = await this.orderRepo.updatePaymentStatus(opts.orderId, PaymentStatus.VERIFIED);
+        }
+      } else if (newTotal > verifiedPaidAmount) {
+        // Order remains operationally CONFIRMED with additional payment balance pending
+        if (order.payment_status !== PaymentStatus.PENDING) {
+          updatedOrder = await this.orderRepo.updatePaymentStatus(opts.orderId, PaymentStatus.PENDING);
+        }
+      } else {
+        // newTotal < verifiedPaidAmount: overpayment/credit due, order remains CONFIRMED and VERIFIED
+        if (order.payment_status !== PaymentStatus.VERIFIED) {
+          updatedOrder = await this.orderRepo.updatePaymentStatus(opts.orderId, PaymentStatus.VERIFIED);
+        }
+      }
+    } else {
+      if (verifiedPaidAmount >= newTotal && newTotal > 0) {
+        updatedOrder = await this.orderRepo.updatePaymentStatus(opts.orderId, PaymentStatus.VERIFIED);
+      } else if (verifiedPaidAmount > 0) {
+        updatedOrder = await this.orderRepo.updatePaymentStatus(opts.orderId, PaymentStatus.RECORDED);
+      }
     }
 
     await this.auditRepo?.log({
@@ -258,6 +279,20 @@ export class OrdersService implements IOrdersService {
         customerUserId: order.customer_user_id,
         itemsCount: newCalcItems.length,
         newTotal,
+        timestamp: lastEditedAt,
+      },
+    });
+
+    await this.realtime?.publish({
+      type: 'OrderStatusChanged',
+      payload: {
+        orderId: opts.orderId,
+        orderNumber: order.order_number,
+        branchId: order.branch_id,
+        customerUserId: order.customer_user_id,
+        status: updatedOrder.status,
+        paymentStatus: updatedOrder.payment_status,
+        total: newTotal,
         timestamp: lastEditedAt,
       },
     });

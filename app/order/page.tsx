@@ -11,10 +11,23 @@ import {
 import { Product } from '@/shared/types/entities.types';
 
 export default function CustomerOrderPage() {
+  const [branches, setBranches] = useState<Array<{ id: string; name: string; code: string }>>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<string>('branch-alpha');
   const [cartItems, setCartItems] = useState<Array<{ product: Product; quantity: number }>>([]);
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'catalog' | 'cart' | 'status' | 'history'>('catalog');
+
+  React.useEffect(() => {
+    fetch('/api/v1/branches')
+      .then((res) => res.json() as Promise<{ success?: boolean; data?: Array<{ id: string; name: string; code: string }> }>)
+      .then((json) => {
+        if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+          setBranches(json.data);
+          setSelectedBranchId((prev) => (json.data?.some((b) => b.id === prev) ? prev : json.data![0].id));
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const handleAddToCart = (product: Product, quantity: number = 1) => {
     setCartItems((prev) => {
@@ -90,8 +103,17 @@ export default function CustomerOrderPage() {
                   outline: 'none',
                 }}
               >
-                <option value="branch-alpha" style={{ background: '#1e293b', color: '#fff' }}>Branch Alpha (Main)</option>
-                <option value="branch-beta" style={{ background: '#1e293b', color: '#fff' }}>Branch Beta (Downtown)</option>
+                {branches.length > 0 ? (
+                  branches.map((b) => (
+                    <option key={b.id} value={b.id} style={{ background: '#1e293b', color: '#fff' }}>
+                      {b.name} ({b.code})
+                    </option>
+                  ))
+                ) : (
+                  <option value={selectedBranchId} style={{ background: '#1e293b', color: '#fff' }}>
+                    Select Branch
+                  </option>
+                )}
               </select>
             </div>
           </div>

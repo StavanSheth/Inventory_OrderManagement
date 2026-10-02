@@ -407,7 +407,7 @@ export class OrderRepository extends BaseRepository {
         ),
     );
 
-    // 3. Prepare update order totals statement
+    // 3. Prepare update order totals statement (conditional on active/editable status)
     const updateOrderStmt = this.db
       .prepare(`
         UPDATE orders
@@ -417,11 +417,18 @@ export class OrderRepository extends BaseRepository {
             last_edited_at = ?,
             updated_at = ?
         WHERE id = ?
+          AND status NOT IN ('CANCELLED', 'EXPIRED', 'COMPLETED')
       `)
       .bind(subtotal, tax, total, lastEditedAt, now, orderId);
 
     // Atomically execute deletion, item insertions, and order update in a single transaction
-    await this.db.batch([deleteStmt, ...itemStmts, updateOrderStmt]);
+    const results = await this.db.batch([deleteStmt, ...itemStmts, updateOrderStmt]);
+    const updateResult = results[results.length - 1];
+    const changes = Number((updateResult?.meta as { changes?: number })?.changes ?? (updateResult as { changes?: number })?.changes ?? 0);
+
+    if (changes === 0) {
+      throw new Error(`Order ${orderId} cannot be edited because it is in a terminal status or no longer exists`);
+    }
 
     const updated = await this.findById(orderId);
     if (!updated) {

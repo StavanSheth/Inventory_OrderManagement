@@ -57,6 +57,9 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
     realtimeClient
       .subscribe({
         branchId,
+        onConnected: () => {
+          fetchOrders();
+        },
         onEvent: (event) => {
           // Refresh list or update in place when orders update
           if (

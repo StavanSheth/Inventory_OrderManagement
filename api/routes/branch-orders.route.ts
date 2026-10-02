@@ -16,7 +16,7 @@ import { handleCorsPreflight, getCorsHeaders } from '../middleware/cors';
 import { config } from '../../config/runtime';
 import { D1DatabaseLike } from '../../database/types';
 import { OrderStatus, PaymentMethod } from '../../shared/enums/order.enum';
-import { realtimeService } from '../../backend/services/realtime';
+import { createRealtimeService } from '../../backend/services/realtime';
 
 function buildOrdersService(db: D1DatabaseLike): OrdersService {
   return new OrdersService(
@@ -25,7 +25,7 @@ function buildOrdersService(db: D1DatabaseLike): OrdersService {
     new ProductRepository(db),
     new AuditRepository(db),
     new BranchRepository(db),
-    realtimeService,
+    createRealtimeService(db),
   );
 }
 

@@ -1,11 +1,47 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { OperatorQueueView } from '@/frontend/modules/orders';
+import { useAuth } from '@/frontend/modules/auth/auth-hooks';
+import { UserRole } from '@/shared/enums/roles.enum';
 
 export default function OperatorPortalPage() {
-  const [branchId, setBranchId] = useState<string>('branch-alpha');
+  const [branches, setBranches] = useState<Array<{ id: string; name: string; code: string }>>([]);
+  const [branchId, setBranchId] = useState<string>('');
+
+  let authContext: ReturnType<typeof useAuth> | null = null;
+  try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    authContext = useAuth();
+  } catch {
+    // Safe fallback if rendered outside AuthProvider
+  }
+
+  // Load available active branches from backend API
+  useEffect(() => {
+    fetch('/api/v1/branches')
+      .then((res) => res.json() as Promise<{ success?: boolean; data?: Array<{ id: string; name: string; code: string }> }>)
+      .then((json) => {
+        if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+          setBranches(json.data);
+
+          // If operator has specific branch membership, derive authoritative branch
+          if (authContext?.user?.role === UserRole.BRANCH_OPERATOR) {
+            const opBranch = authContext.memberships.find((m) => m.role === UserRole.BRANCH_OPERATOR)?.branchId
+              ?? authContext.activeBranchId;
+            if (opBranch) {
+              setBranchId(opBranch);
+              return;
+            }
+          }
+
+          // Otherwise default to first available branch
+          setBranchId((prev) => (prev ? prev : json.data![0].id));
+        }
+      })
+      .catch(() => {});
+  }, [authContext]);
 
   return (
     <div style={{ minHeight: '100vh', background: '#0b1120', color: '#f8fafc', fontFamily: 'system-ui, sans-serif' }}>
@@ -47,12 +83,13 @@ export default function OperatorPortalPage() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            {/* Branch Switcher */}
+            {/* Branch Switcher (Authoritative for Operator/Owner) */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#1e293b', padding: '0.35rem 0.75rem', borderRadius: '8px' }}>
               <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Branch:</span>
               <select
                 value={branchId}
                 onChange={(e) => setBranchId(e.target.value)}
+                disabled={authContext?.user?.role === UserRole.BRANCH_OPERATOR && authContext.memberships.length === 1}
                 style={{
                   background: 'transparent',
                   color: '#f8fafc',
@@ -63,8 +100,17 @@ export default function OperatorPortalPage() {
                   outline: 'none',
                 }}
               >
-                <option value="branch-alpha" style={{ background: '#1e293b', color: '#fff' }}>Branch Alpha (Main)</option>
-                <option value="branch-beta" style={{ background: '#1e293b', color: '#fff' }}>Branch Beta (Downtown)</option>
+                {branches.length > 0 ? (
+                  branches.map((b) => (
+                    <option key={b.id} value={b.id} style={{ background: '#1e293b', color: '#fff' }}>
+                      {b.name} ({b.code})
+                    </option>
+                  ))
+                ) : (
+                  <option value={branchId} style={{ background: '#1e293b', color: '#fff' }}>
+                    Select Branch
+                  </option>
+                )}
               </select>
             </div>
 
@@ -88,7 +134,11 @@ export default function OperatorPortalPage() {
 
       {/* Main Content Area */}
       <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '1.5rem' }}>
-        <OperatorQueueView branchId={branchId} />
+        {branchId ? (
+          <OperatorQueueView branchId={branchId} />
+        ) : (
+          <div style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>Loading branch context...</div>
+        )}
       </main>
     </div>
   );

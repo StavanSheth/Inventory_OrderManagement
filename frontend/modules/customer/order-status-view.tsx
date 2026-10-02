@@ -20,6 +20,19 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onBac
   const [error, setError] = useState<string | null>(null);
   const [timeLeftMs, setTimeLeftMs] = useState<number>(0);
 
+  const refetchOrder = React.useCallback(() => {
+    orderApiClient
+      .getCustomerOrderDetail(orderId)
+      .then((res) => {
+        if (res.success) {
+          setOrder(res.data.order);
+          setItems(res.data.items);
+          setPayments(res.data.payments);
+        }
+      })
+      .catch(() => {});
+  }, [orderId]);
+
   // Fetch initial details
   useEffect(() => {
     let isMounted = true;
@@ -50,13 +63,16 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onBac
     };
   }, [orderId]);
 
-  // Connect to authorized Realtime SSE channel
+  // Connect to authorized Realtime SSE channel with authoritative refetch on reconnect
   useEffect(() => {
     let unsubscribe: (() => void) | null = null;
 
     realtimeClient
       .subscribe({
         orderId,
+        onConnected: () => {
+          refetchOrder();
+        },
         onEvent: (event) => {
           if (event.type === 'OrderStatusChanged') {
             setOrder((prev) => (prev ? { ...prev, status: event.payload.status, payment_status: event.payload.paymentStatus } : null));
@@ -64,6 +80,7 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onBac
             setOrder((prev) => (prev ? { ...prev, payment_status: event.payload.status } : null));
           } else if (event.type === 'OrderUpdated') {
             setOrder((prev) => (prev ? { ...prev, total: event.payload.newTotal } : null));
+            refetchOrder();
           }
         },
       })
@@ -77,7 +94,7 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onBac
     return () => {
       if (unsubscribe) unsubscribe();
     };
-  }, [orderId]);
+  }, [orderId, refetchOrder]);
 
   // Expiry countdown timer
   useEffect(() => {
