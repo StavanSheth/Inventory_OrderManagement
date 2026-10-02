@@ -25,6 +25,7 @@ const testFiles = [
   'tests/integration/auth-rbac.test.ts',
   'tests/integration/order-lifecycle.test.ts',
   'tests/integration/phase4-inventory-promotions.test.ts',
+  'tests/integration/phase4-concurrency-remediation.test.ts',
   'tests/integration/atomicity.test.ts',
   'tests/integration/concurrency.test.ts',
   'tests/api/health.test.ts',

@@ -402,6 +402,13 @@ export class InventoryRepository extends BaseRepository {
   // Product BOM / Recipes
   // ==========================================
 
+  async findProductById(productId: string): Promise<{ id: string; branch_id: string; name: string; active: number } | null> {
+    return this.db
+      .prepare('SELECT id, branch_id, name, active FROM products WHERE id = ?')
+      .bind(productId)
+      .first<{ id: string; branch_id: string; name: string; active: number }>();
+  }
+
   async listComponentsByProduct(productId: string): Promise<ProductComponent[]> {
     const res = await this.db
       .prepare('SELECT * FROM product_components WHERE product_id = ?')

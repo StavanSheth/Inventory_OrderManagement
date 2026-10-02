@@ -203,6 +203,13 @@ export class PaymentRepository extends BaseRepository {
             WHERE id = ?
               AND status NOT IN ('CANCELLED', 'EXPIRED')
               AND (status != 'PENDING' OR expires_at > ?)
+              AND (
+                SELECT COALESCE(SUM(p.amount), 0)
+                FROM payments p
+                WHERE p.order_id = payments.order_id
+                  AND p.status IN ('VERIFIED', 'COMPLETED')
+                  AND p.id != payments.id
+              ) + payments.amount <= orders.total
           )
       `)
       .bind(

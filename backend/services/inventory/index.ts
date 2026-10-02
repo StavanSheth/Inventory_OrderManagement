@@ -41,8 +41,8 @@ export interface IInventoryService {
   adjustRawMaterialStock(materialId: string, delta: number, actorUserId: string, reason: string): Promise<RawMaterial>;
 
   // BOM / Recipes
-  getProductComponents(productId: string): Promise<ProductComponent[]>;
-  setProductComponents(productId: string, components: Array<{ rawMaterialId: string; quantityRequired: number }>, actorUserId: string): Promise<ProductComponent[]>;
+  getProductComponents(productId: string, branchId?: string): Promise<ProductComponent[]>;
+  setProductComponents(productId: string, components: Array<{ rawMaterialId: string; quantityRequired: number }>, actorUserId: string, branchId?: string): Promise<ProductComponent[]>;
   calculateBOMRequirements(branchId: string, items: Array<{ productId: string; quantity: number }>): Promise<BOMRequirement[]>;
 
   // Low stock
@@ -310,7 +310,16 @@ export class InventoryService implements IInventoryService {
   // Product BOM / Recipes
   // ==========================================
 
-  async getProductComponents(productId: string): Promise<ProductComponent[]> {
+  async getProductComponents(productId: string, branchId?: string): Promise<ProductComponent[]> {
+    if (branchId) {
+      const product = await this.inventoryRepo.findProductById(productId);
+      if (!product) {
+        throw new NotFoundError(`Product ${productId} not found`);
+      }
+      if (product.branch_id !== branchId) {
+        throw new ForbiddenError('Product belongs to a different branch');
+      }
+    }
     return this.inventoryRepo.listComponentsByProduct(productId);
   }
 
@@ -318,30 +327,55 @@ export class InventoryService implements IInventoryService {
     productId: string,
     components: Array<{ rawMaterialId: string; quantityRequired: number }>,
     actorUserId: string,
+    branchId?: string,
   ): Promise<ProductComponent[]> {
+    const product = await this.inventoryRepo.findProductById(productId);
+    if (!product) {
+      throw new NotFoundError(`Product ${productId} not found`);
+    }
+    if (branchId && product.branch_id !== branchId) {
+      throw new ForbiddenError('Product belongs to a different branch');
+    }
+
+    const seenMaterials = new Set<string>();
     const formatted = [];
     for (const c of components) {
-      if (!c.quantityRequired || c.quantityRequired <= 0) {
-        throw new BadRequestError(`Component quantity requirement must be positive`);
+      if (!c.quantityRequired || c.quantityRequired <= 0 || !Number.isFinite(c.quantityRequired)) {
+        throw new BadRequestError(`Component quantity requirement must be a positive number`);
       }
+      if (seenMaterials.has(c.rawMaterialId)) {
+        throw new BadRequestError(`Duplicate raw material component ${c.rawMaterialId} in recipe`);
+      }
+      seenMaterials.add(c.rawMaterialId);
+
       const mat = await this.inventoryRepo.findRawMaterialById(c.rawMaterialId);
+      if (!mat) {
+        throw new NotFoundError(`Raw material ${c.rawMaterialId} not found`);
+      }
+      if (!mat.active) {
+        throw new BadRequestError(`Cannot use inactive raw material "${mat.name}" in recipe`);
+      }
+      if (mat.branch_id !== product.branch_id) {
+        throw new BadRequestError(`Raw material "${mat.name}" belongs to a different branch`);
+      }
+
       formatted.push({
         id: `pc_${crypto.randomUUID().replace(/-/g, '')}`,
         raw_material_id: c.rawMaterialId,
         quantity_required: c.quantityRequired,
-        unit: mat?.unit ?? 'units',
+        unit: mat.unit,
       });
     }
 
     const res = await this.inventoryRepo.setProductComponents(productId, formatted);
 
     await this.auditRepo?.log({
-      branch_id: null,
+      branch_id: product.branch_id,
       actor_user_id: actorUserId,
       action: AuditAction.INVENTORY_ADJUSTED,
       entity_type: 'product_components',
       entity_id: productId,
-      metadata: { componentCount: components.length },
+      metadata: { componentCount: components.length, branchId: product.branch_id },
     });
 
     return res;
@@ -412,7 +446,7 @@ export class InventoryService implements IInventoryService {
     const insufficientProducts: Array<{ productId: string; requested: number; available: number }> = [];
     const insufficientMaterials: Array<{ rawMaterialId: string; name: string; requested: number; available: number }> = [];
 
-    // 1. Check finished products
+    // 1. Check finished products (for tracked products)
     for (const item of items) {
       const inv = await this.inventoryRepo.findByProduct(branchId, item.productId);
       if (inv !== null) {

@@ -19,6 +19,7 @@ export const OperatorPromotionsView: React.FC<OperatorPromotionsViewProps> = ({ 
 
   // Coupon modal
   const [showCouponModal, setShowCouponModal] = useState<boolean>(false);
+  const [editingCouponId, setEditingCouponId] = useState<string | null>(null);
   const [couponCode, setCouponCode] = useState<string>('');
   const [couponName, setCouponName] = useState<string>('');
   const [couponDiscountType, setCouponDiscountType] = useState<DiscountType>(DiscountType.PERCENTAGE);
@@ -37,6 +38,7 @@ export const OperatorPromotionsView: React.FC<OperatorPromotionsViewProps> = ({ 
 
   // Offer modal
   const [showOfferModal, setShowOfferModal] = useState<boolean>(false);
+  const [editingOfferId, setEditingOfferId] = useState<string | null>(null);
   const [offerName, setOfferName] = useState<string>('');
   const [offerType, setOfferType] = useState<OfferType>(OfferType.FLAT);
   const [offerDescription, setOfferDescription] = useState<string>('');
@@ -71,7 +73,41 @@ export const OperatorPromotionsView: React.FC<OperatorPromotionsViewProps> = ({ 
     fetchPromotions();
   }, [fetchPromotions]);
 
-  const handleCreateCoupon = async (e: React.FormEvent) => {
+  const handleOpenCreateCoupon = () => {
+    setEditingCouponId(null);
+    setCouponCode('');
+    setCouponName('');
+    setCouponDiscountType(DiscountType.PERCENTAGE);
+    setCouponDiscountValue('');
+    setCouponMaxDiscount('');
+    setCouponMinOrder('0');
+    setCouponTotalLimit('');
+    setCouponUserLimit('');
+    setCouponDailyLimit('');
+    setCouponStartAt(new Date().toISOString().slice(0, 10));
+    setCouponEndAt(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10));
+    setModalError(null);
+    setShowCouponModal(true);
+  };
+
+  const handleOpenEditCoupon = (c: Coupon) => {
+    setEditingCouponId(c.id);
+    setCouponCode(c.code);
+    setCouponName(c.name);
+    setCouponDiscountType(c.discount_type as DiscountType);
+    setCouponDiscountValue(c.discount_value.toString());
+    setCouponMaxDiscount(c.max_discount != null ? c.max_discount.toString() : '');
+    setCouponMinOrder(c.minimum_order_value ? c.minimum_order_value.toString() : '0');
+    setCouponTotalLimit(c.total_usage_limit != null ? c.total_usage_limit.toString() : '');
+    setCouponUserLimit(c.per_user_usage_limit != null ? c.per_user_usage_limit.toString() : '');
+    setCouponDailyLimit(c.per_user_daily_limit != null ? c.per_user_daily_limit.toString() : '');
+    setCouponStartAt(c.start_at ? c.start_at.slice(0, 10) : new Date().toISOString().slice(0, 10));
+    setCouponEndAt(c.end_at ? c.end_at.slice(0, 10) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10));
+    setModalError(null);
+    setShowCouponModal(true);
+  };
+
+  const handleSaveCoupon = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!couponCode.trim() || !couponName.trim()) return;
 
@@ -94,44 +130,84 @@ export const OperatorPromotionsView: React.FC<OperatorPromotionsViewProps> = ({ 
         active: true,
       };
 
-      const res = await apiClient.request(`/api/v1/branches/${branchId}/promotions/coupons`, {
-        method: 'POST',
+      const endpoint = editingCouponId
+        ? `/api/v1/branches/${branchId}/promotions/coupons/${editingCouponId}`
+        : `/api/v1/branches/${branchId}/promotions/coupons`;
+      const method = editingCouponId ? 'PATCH' : 'POST';
+
+      const res = await apiClient.request(endpoint, {
+        method,
         authenticated: true,
         requireSession: true,
         body: JSON.stringify(body),
       });
 
       if (!res.success) {
-        throw new Error(res.error.message || 'Failed to create coupon');
+        throw new Error(res.error.message || 'Failed to save coupon');
       }
 
       setShowCouponModal(false);
-      setCouponCode('');
-      setCouponName('');
-      setCouponDiscountValue('');
+      setEditingCouponId(null);
       await fetchPromotions();
     } catch (err) {
-      setModalError(err instanceof Error ? err.message : 'Failed to create coupon');
+      setModalError(err instanceof Error ? err.message : 'Failed to save coupon');
     } finally {
       setModalSubmitting(false);
     }
   };
 
-  const handleDeactivateCoupon = async (couponId: string) => {
-    if (!confirm('Are you sure you want to deactivate this coupon?')) return;
+  const handleToggleCouponActive = async (c: Coupon) => {
     try {
-      await apiClient.request(`/api/v1/branches/${branchId}/promotions/coupons/${couponId}`, {
-        method: 'DELETE',
-        authenticated: true,
-        requireSession: true,
-      });
+      if (c.active) {
+        if (!confirm('Are you sure you want to deactivate this coupon?')) return;
+        await apiClient.request(`/api/v1/branches/${branchId}/promotions/coupons/${c.id}`, {
+          method: 'DELETE',
+          authenticated: true,
+          requireSession: true,
+        });
+      } else {
+        await apiClient.request(`/api/v1/branches/${branchId}/promotions/coupons/${c.id}`, {
+          method: 'PATCH',
+          authenticated: true,
+          requireSession: true,
+          body: JSON.stringify({ active: true }),
+        });
+      }
       await fetchPromotions();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to deactivate coupon');
+      alert(err instanceof Error ? err.message : 'Failed to update coupon status');
     }
   };
 
-  const handleCreateOffer = async (e: React.FormEvent) => {
+  const handleOpenCreateOffer = () => {
+    setEditingOfferId(null);
+    setOfferName('');
+    setOfferType(OfferType.FLAT);
+    setOfferDescription('');
+    setOfferConfigVal('10');
+    setOfferConfigType('PERCENTAGE');
+    setModalError(null);
+    setShowOfferModal(true);
+  };
+
+  const handleOpenEditOffer = (o: Offer) => {
+    setEditingOfferId(o.id);
+    setOfferName(o.name);
+    setOfferType(o.offer_type as OfferType);
+    setOfferDescription(o.description ?? '');
+    try {
+      const cfg = JSON.parse(o.configuration_json || '{}');
+      setOfferConfigVal(cfg.discount_value ? cfg.discount_value.toString() : '10');
+      setOfferConfigType(cfg.discount_type === 'FIXED' ? 'FIXED' : 'PERCENTAGE');
+    } catch {
+      setOfferConfigVal('10');
+      setOfferConfigType('PERCENTAGE');
+    }
+    setModalError(null);
+    setShowOfferModal(true);
+  };
+
+  const handleSaveOffer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!offerName.trim()) return;
 
@@ -153,39 +229,52 @@ export const OperatorPromotionsView: React.FC<OperatorPromotionsViewProps> = ({ 
         active: true,
       };
 
-      const res = await apiClient.request(`/api/v1/branches/${branchId}/promotions/offers`, {
-        method: 'POST',
+      const endpoint = editingOfferId
+        ? `/api/v1/branches/${branchId}/promotions/offers/${editingOfferId}`
+        : `/api/v1/branches/${branchId}/promotions/offers`;
+      const method = editingOfferId ? 'PATCH' : 'POST';
+
+      const res = await apiClient.request(endpoint, {
+        method,
         authenticated: true,
         requireSession: true,
         body: JSON.stringify(body),
       });
 
       if (!res.success) {
-        throw new Error(res.error.message || 'Failed to create offer');
+        throw new Error(res.error.message || 'Failed to save offer');
       }
 
       setShowOfferModal(false);
-      setOfferName('');
-      setOfferDescription('');
+      setEditingOfferId(null);
       await fetchPromotions();
     } catch (err) {
-      setModalError(err instanceof Error ? err.message : 'Failed to create offer');
+      setModalError(err instanceof Error ? err.message : 'Failed to save offer');
     } finally {
       setModalSubmitting(false);
     }
   };
 
-  const handleDeactivateOffer = async (offerId: string) => {
-    if (!confirm('Are you sure you want to deactivate this offer?')) return;
+  const handleToggleOfferActive = async (o: Offer) => {
     try {
-      await apiClient.request(`/api/v1/branches/${branchId}/promotions/offers/${offerId}`, {
-        method: 'DELETE',
-        authenticated: true,
-        requireSession: true,
-      });
+      if (o.active) {
+        if (!confirm('Are you sure you want to deactivate this offer?')) return;
+        await apiClient.request(`/api/v1/branches/${branchId}/promotions/offers/${o.id}`, {
+          method: 'DELETE',
+          authenticated: true,
+          requireSession: true,
+        });
+      } else {
+        await apiClient.request(`/api/v1/branches/${branchId}/promotions/offers/${o.id}`, {
+          method: 'PATCH',
+          authenticated: true,
+          requireSession: true,
+          body: JSON.stringify({ active: true }),
+        });
+      }
       await fetchPromotions();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to deactivate offer');
+      alert(err instanceof Error ? err.message : 'Failed to update offer status');
     }
   };
 
@@ -219,20 +308,14 @@ export const OperatorPromotionsView: React.FC<OperatorPromotionsViewProps> = ({ 
         <div className="flex items-center gap-2.5">
           {activeTab === 'coupons' ? (
             <button
-              onClick={() => {
-                setShowCouponModal(true);
-                setModalError(null);
-              }}
+              onClick={handleOpenCreateCoupon}
               className="px-4 py-2 bg-[#d61c5d] hover:bg-[#b8144e] active:translate-y-0.5 text-white font-bold text-xs rounded-full transition shadow-[0_3px_0_#a3134a]"
             >
               + Create Coupon
             </button>
           ) : (
             <button
-              onClick={() => {
-                setShowOfferModal(true);
-                setModalError(null);
-              }}
+              onClick={handleOpenCreateOffer}
               className="px-4 py-2 bg-[#d61c5d] hover:bg-[#b8144e] active:translate-y-0.5 text-white font-bold text-xs rounded-full transition shadow-[0_3px_0_#a3134a]"
             >
               + Create Offer
@@ -307,15 +390,23 @@ export const OperatorPromotionsView: React.FC<OperatorPromotionsViewProps> = ({ 
                         </span>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-right">
-                      {c.active && (
-                        <button
-                          onClick={() => handleDeactivateCoupon(c.id)}
-                          className="px-3 py-1 bg-white hover:bg-rose-50 border border-rose-200 text-rose-600 text-xs font-bold rounded-full transition"
-                        >
-                          Deactivate
-                        </button>
-                      )}
+                    <td className="px-6 py-4 text-right space-x-1.5">
+                      <button
+                        onClick={() => handleOpenEditCoupon(c)}
+                        className="px-3 py-1 bg-white hover:bg-[#fff1f4] border border-[#f4d3dd] text-[#2b1233] text-xs font-bold rounded-full transition"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleToggleCouponActive(c)}
+                        className={`px-3 py-1 bg-white border text-xs font-bold rounded-full transition ${
+                          c.active
+                            ? 'hover:bg-rose-50 border-rose-200 text-rose-600'
+                            : 'hover:bg-emerald-50 border-emerald-200 text-emerald-600'
+                        }`}
+                      >
+                        {c.active ? 'Deactivate' : 'Activate'}
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -371,15 +462,23 @@ export const OperatorPromotionsView: React.FC<OperatorPromotionsViewProps> = ({ 
                         </span>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-right">
-                      {o.active && (
-                        <button
-                          onClick={() => handleDeactivateOffer(o.id)}
-                          className="px-3 py-1 bg-white hover:bg-rose-50 border border-rose-200 text-rose-600 text-xs font-bold rounded-full transition"
-                        >
-                          Deactivate
-                        </button>
-                      )}
+                    <td className="px-6 py-4 text-right space-x-1.5">
+                      <button
+                        onClick={() => handleOpenEditOffer(o)}
+                        className="px-3 py-1 bg-white hover:bg-[#fff1f4] border border-[#f4d3dd] text-[#2b1233] text-xs font-bold rounded-full transition"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleToggleOfferActive(o)}
+                        className={`px-3 py-1 bg-white border text-xs font-bold rounded-full transition ${
+                          o.active
+                            ? 'hover:bg-rose-50 border-rose-200 text-rose-600'
+                            : 'hover:bg-emerald-50 border-emerald-200 text-emerald-600'
+                        }`}
+                      >
+                        {o.active ? 'Deactivate' : 'Activate'}
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -389,11 +488,13 @@ export const OperatorPromotionsView: React.FC<OperatorPromotionsViewProps> = ({ 
         </div>
       )}
 
-      {/* Create Coupon Modal */}
+      {/* Create / Edit Coupon Modal */}
       {showCouponModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#2b1233]/45 backdrop-blur-sm p-4">
           <div className="bg-white border border-[#f4d3dd] rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-bold font-display text-[#2b1233]">Create Branch Coupon</h3>
+            <h3 className="text-lg font-bold font-display text-[#2b1233]">
+              {editingCouponId ? 'Edit Branch Coupon' : 'Create Branch Coupon'}
+            </h3>
 
             {modalError && (
               <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-700">
@@ -401,7 +502,7 @@ export const OperatorPromotionsView: React.FC<OperatorPromotionsViewProps> = ({ 
               </div>
             )}
 
-            <form onSubmit={handleCreateCoupon} className="space-y-4">
+            <form onSubmit={handleSaveCoupon} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-[#6f5569] mb-1">Coupon Code *</label>
@@ -529,7 +630,10 @@ export const OperatorPromotionsView: React.FC<OperatorPromotionsViewProps> = ({ 
               <div className="flex justify-end space-x-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setShowCouponModal(false)}
+                  onClick={() => {
+                    setShowCouponModal(false);
+                    setEditingCouponId(null);
+                  }}
                   disabled={modalSubmitting}
                   className="px-4 py-2 bg-white border border-[#f4d3dd] hover:bg-[#fff1f4] text-[#6f5569] text-xs font-bold rounded-full transition"
                 >
@@ -540,7 +644,7 @@ export const OperatorPromotionsView: React.FC<OperatorPromotionsViewProps> = ({ 
                   disabled={modalSubmitting}
                   className="px-5 py-2 bg-[#d61c5d] hover:bg-[#b8144e] disabled:opacity-50 text-white text-xs font-bold rounded-full transition shadow-[0_3px_0_#a3134a]"
                 >
-                  {modalSubmitting ? 'Creating...' : 'Create Coupon'}
+                  {modalSubmitting ? 'Saving...' : editingCouponId ? 'Save Changes' : 'Create Coupon'}
                 </button>
               </div>
             </form>
@@ -548,11 +652,13 @@ export const OperatorPromotionsView: React.FC<OperatorPromotionsViewProps> = ({ 
         </div>
       )}
 
-      {/* Create Offer Modal */}
+      {/* Create / Edit Offer Modal */}
       {showOfferModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#2b1233]/45 backdrop-blur-sm p-4">
           <div className="bg-white border border-[#f4d3dd] rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold font-display text-[#2b1233]">Create Branch Offer</h3>
+            <h3 className="text-lg font-bold font-display text-[#2b1233]">
+              {editingOfferId ? 'Edit Branch Offer' : 'Create Branch Offer'}
+            </h3>
 
             {modalError && (
               <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-700">
@@ -560,7 +666,7 @@ export const OperatorPromotionsView: React.FC<OperatorPromotionsViewProps> = ({ 
               </div>
             )}
 
-            <form onSubmit={handleCreateOffer} className="space-y-4">
+            <form onSubmit={handleSaveOffer} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-[#6f5569] mb-1">Offer Name *</label>
                 <input
@@ -623,7 +729,10 @@ export const OperatorPromotionsView: React.FC<OperatorPromotionsViewProps> = ({ 
               <div className="flex justify-end space-x-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setShowOfferModal(false)}
+                  onClick={() => {
+                    setShowOfferModal(false);
+                    setEditingOfferId(null);
+                  }}
                   disabled={modalSubmitting}
                   className="px-4 py-2 bg-white border border-[#f4d3dd] hover:bg-[#fff1f4] text-[#6f5569] text-xs font-bold rounded-full transition"
                 >
@@ -634,7 +743,7 @@ export const OperatorPromotionsView: React.FC<OperatorPromotionsViewProps> = ({ 
                   disabled={modalSubmitting}
                   className="px-5 py-2 bg-[#d61c5d] hover:bg-[#b8144e] disabled:opacity-50 text-white text-xs font-bold rounded-full transition shadow-[0_3px_0_#a3134a]"
                 >
-                  {modalSubmitting ? 'Creating...' : 'Create Offer'}
+                  {modalSubmitting ? 'Saving...' : editingOfferId ? 'Save Changes' : 'Create Offer'}
                 </button>
               </div>
             </form>

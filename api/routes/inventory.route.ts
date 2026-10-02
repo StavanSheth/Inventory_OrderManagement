@@ -324,14 +324,14 @@ export async function handleProductBOMRoute(
     requireBranchAccess(userContext, branchId);
 
     if (request.method === 'GET') {
-      const components = await inventoryService.getProductComponents(productId);
+      const components = await inventoryService.getProductComponents(productId, branchId);
       return successResponse(components, 200, responseHeaders);
     }
 
     if (request.method === 'PUT') {
       const rawBody = await request.json();
       const body = validateRequest(setBOMSchema, rawBody);
-      const updated = await inventoryService.setProductComponents(productId, body.components, userContext.userId);
+      const updated = await inventoryService.setProductComponents(productId, body.components, userContext.userId, branchId);
       return successResponse(updated, 200, responseHeaders);
     }
 

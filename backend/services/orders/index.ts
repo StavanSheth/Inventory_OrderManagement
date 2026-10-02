@@ -477,6 +477,22 @@ export class OrdersService implements IOrdersService {
       },
     });
 
+    if (order.status === OrderStatus.CONFIRMED && this.inventoryService) {
+      await this.auditRepo?.log({
+        branch_id: order.branch_id,
+        actor_user_id: opts.actorUserId,
+        action: AuditAction.INVENTORY_ADJUSTED,
+        entity_type: 'inventory',
+        entity_id: opts.orderId,
+        metadata: {
+          orderId: opts.orderId,
+          deltaType: 'order_edit',
+          previousTotal,
+          newTotal,
+        },
+      });
+    }
+
     return {
       order: updatedOrder,
       items: updatedItems,
@@ -601,10 +617,17 @@ export class OrdersService implements IOrdersService {
       if (!coupon || !coupon.active) {
         throw new BadRequestError('Coupon is no longer active');
       }
-      if (coupon.total_usage_limit !== null && coupon.total_usage_limit !== undefined) {
-        if (coupon.usage_count >= coupon.total_usage_limit) {
-          throw new BadRequestError('Coupon usage limit reached');
-        }
+
+      // Revalidate all coupon usage constraints (total, per-user, daily) at confirmation time
+      const val = await this.promotionsService.validateCoupon({
+        branchId: order.branch_id,
+        code: coupon.code,
+        subtotal: order.subtotal,
+        userId: order.customer_user_id,
+        now,
+      });
+      if (!val.isValid) {
+        throw new BadRequestError(`Cannot confirm order: Coupon usage limit reached (${val.reason})`);
       }
 
       const promoRepo = (this.promotionsService as PromotionsService).getPromotionRepo?.();
@@ -642,6 +665,29 @@ export class OrdersService implements IOrdersService {
       );
     } catch (err) {
       throw new BadRequestError(err instanceof Error ? err.message : 'Confirmation failed');
+    }
+
+    // Audit logging for Phase 4 coupon application and inventory consumption
+    if (order.coupon_id) {
+      await this.auditRepo?.log({
+        branch_id: order.branch_id,
+        actor_user_id: actorUserId,
+        action: AuditAction.COUPON_APPLIED,
+        entity_type: 'coupon',
+        entity_id: order.coupon_id,
+        metadata: { orderId, discountAmount: order.coupon_discount_snapshot ?? order.discount },
+      });
+    }
+
+    if (this.inventoryService && orderItems.length > 0) {
+      await this.auditRepo?.log({
+        branch_id: order.branch_id,
+        actor_user_id: actorUserId,
+        action: AuditAction.INVENTORY_CONSUMED,
+        entity_type: 'inventory',
+        entity_id: orderId,
+        metadata: { orderId, itemCount: orderItems.length },
+      });
     }
 
     // Step 4: Publish realtime events strictly after authoritative commit
