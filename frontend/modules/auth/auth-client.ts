@@ -10,29 +10,84 @@ import { getCurrentFirebaseIdToken } from './firebase-provider';
 
 export class AuthClient {
   private activeSessionToken: string | null = null;
+  private devIdToken: string | null = null;
 
   constructor(private baseUrl: string = '') {}
 
   /**
-   * Sets the active application session token.
+   * Sets the active application session token with localStorage persistence.
    */
   setSessionToken(token: string | null): void {
     this.activeSessionToken = token;
+    if (typeof window !== 'undefined') {
+      if (token) {
+        localStorage.setItem('melt_session_token', token);
+      } else {
+        localStorage.removeItem('melt_session_token');
+      }
+    }
+  }
+
+  getSessionToken(): string | null {
+    if (this.activeSessionToken) return this.activeSessionToken;
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('melt_session_token');
+    }
+    return null;
+  }
+
+  setDevIdToken(token: string | null): void {
+    this.devIdToken = token;
+    if (typeof window !== 'undefined') {
+      if (token) {
+        localStorage.setItem('melt_dev_token', token);
+      } else {
+        localStorage.removeItem('melt_dev_token');
+      }
+    }
+  }
+
+  getDevIdToken(): string | null {
+    if (this.devIdToken) return this.devIdToken;
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('melt_dev_token');
+    }
+    return null;
   }
 
   /**
-   * Retrieves the current user's Firebase ID token if authenticated.
+   * Retrieves the current user's Firebase ID token or dev token.
    */
   async getIdToken(): Promise<string | null> {
-    return getCurrentFirebaseIdToken();
+    return (await getCurrentFirebaseIdToken()) ?? this.getDevIdToken();
   }
 
   /**
    * Centralized helper to build authorized headers with a fresh Firebase ID token
    * and optional application session token.
+   * On localhost dev, automatically resolves appropriate demo credentials.
    */
   async getAuthorizedHeaders(options: { requireSession?: boolean } = {}): Promise<Record<string, string>> {
-    const idToken = await getCurrentFirebaseIdToken();
+    let idToken = await getCurrentFirebaseIdToken();
+    if (!idToken) {
+      idToken = this.getDevIdToken();
+    }
+
+    // Auto-fallback in local development mode
+    if (!idToken && typeof window !== 'undefined') {
+      const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      if (isLocalHost) {
+        if (window.location.pathname.startsWith('/owner')) {
+          idToken = 'mock-user:fb-owner-master:owner@melt.example.com:Stavan Sheth (Owner)';
+        } else if (window.location.pathname.startsWith('/operator')) {
+          idToken = 'mock-user:fb-op-alpha:operator.alpha@melt.example.com:Raj Patel (Alpha Lead)';
+        } else {
+          idToken = 'mock-user:fb-cust-alice:alice@example.com:Alice Walker';
+        }
+        this.setDevIdToken(idToken);
+      }
+    }
+
     if (!idToken) {
       throw new Error('User is not authenticated with Firebase');
     }
@@ -42,13 +97,45 @@ export class AuthClient {
       Authorization: `Bearer ${idToken}`,
     };
 
+    let sessionToken = this.getSessionToken();
+
+    // Auto-verify PIN in localhost dev if session is required but not yet established
+    if (options.requireSession && !sessionToken && typeof window !== 'undefined') {
+      const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      if (isLocalHost) {
+        try {
+          const isOwner = window.location.pathname.startsWith('/owner');
+          const verifyPayload: VerifyPinRequest = {
+            pin: '123456',
+            scope: isOwner ? 'GLOBAL' : 'BRANCH',
+            branchId: isOwner ? undefined : 'branch-alpha',
+          };
+          const res = await fetch(`${this.baseUrl}${API_V1_PREFIX}/auth/verify-pin`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${idToken}`,
+            },
+            body: JSON.stringify(verifyPayload),
+          });
+          const json = (await res.json()) as ApiResponseContract<VerifyPinResponseData>;
+          if (json.success && json.data.sessionToken) {
+            sessionToken = json.data.sessionToken;
+            this.setSessionToken(sessionToken);
+          }
+        } catch {
+          // Fall through
+        }
+      }
+    }
+
     if (options.requireSession) {
-      if (!this.activeSessionToken) {
+      if (!sessionToken) {
         throw new Error('Application PIN session is required');
       }
-      headers['x-session-token'] = this.activeSessionToken;
-    } else if (this.activeSessionToken) {
-      headers['x-session-token'] = this.activeSessionToken;
+      headers['x-session-token'] = sessionToken;
+    } else if (sessionToken) {
+      headers['x-session-token'] = sessionToken;
     }
 
     return headers;

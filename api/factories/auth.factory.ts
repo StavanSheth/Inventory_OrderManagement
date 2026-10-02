@@ -56,9 +56,13 @@ export function createAuthInfrastructure(
   } else {
     const projectId = config.firebase.projectId ?? process.env.FIREBASE_PROJECT_ID;
     if (!projectId || projectId.trim().length === 0) {
-      throw new Error('Firebase projectId is required in production and staging environments');
+      if (isProductionLike) {
+        throw new Error('Firebase projectId is required in production and staging environments');
+      }
+      verifier = new TestFirebaseVerifier();
+    } else {
+      verifier = new FirebaseProductionVerifier(projectId);
     }
-    verifier = new FirebaseProductionVerifier(projectId);
   }
 
   const userSyncService = new UserSyncService(userRepo, db);

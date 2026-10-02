@@ -2,6 +2,7 @@ import { D1DatabaseLike, CloudflareEnv } from './types';
 import { createProductionDatabase } from './adapter';
 
 let fallbackProvider: (() => D1DatabaseLike) | null = null;
+let cachedLocalDb: D1DatabaseLike | null = null;
 
 /**
  * Registers a fallback database provider for local testing or dev emulation.
@@ -15,12 +16,13 @@ export function setFallbackDatabaseProvider(provider: () => D1DatabaseLike): voi
  */
 export function resetDatabaseProvider(): void {
   fallbackProvider = null;
+  cachedLocalDb = null;
 }
 
 /**
  * Resolves the active D1Database instance.
  * In Cloudflare production, extracts env.DB from the request/execution context.
- * In testing/local development, uses the registered provider or throws.
+ * In testing/local development, uses the registered provider, local SQLite file, or throws.
  */
 export function getDatabase(context?: { env?: CloudflareEnv } | CloudflareEnv): D1DatabaseLike {
   const directDb = (context as CloudflareEnv)?.DB;
@@ -39,6 +41,31 @@ export function getDatabase(context?: { env?: CloudflareEnv } | CloudflareEnv): 
 
   if (fallbackProvider) {
     return fallbackProvider();
+  }
+
+  // In local Node environment (e.g. Next.js development server), fallback to local persistent SQLite file
+  if (process.env.NODE_ENV !== 'test' && typeof process !== 'undefined' && process.versions?.node) {
+    try {
+      if (cachedLocalDb) {
+        return cachedLocalDb;
+      }
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const fs = require('node:fs');
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const path = require('node:path');
+      const defaultDbPath = path.resolve(process.cwd(), '.data', 'local.sqlite');
+      const dbPath = process.env.DB_PATH ? path.resolve(process.env.DB_PATH) : defaultDbPath;
+
+      if (fs.existsSync(dbPath)) {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { createFileD1Database } = require('./adapter.sqlite');
+        const localDb: D1DatabaseLike = createFileD1Database(dbPath);
+        cachedLocalDb = localDb;
+        return localDb;
+      }
+    } catch {
+      // Ignore if node:sqlite or path resolution is not available
+    }
   }
 
   throw new Error(
