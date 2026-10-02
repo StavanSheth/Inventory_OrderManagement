@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Branch } from '@/shared/types/entities.types';
+import { apiClient } from '@/frontend/services/api-client';
 
 export interface CustomerMarketingRecord {
   id: string;
@@ -132,20 +133,29 @@ export default function OwnerMessagingView({ branches, selectedBranchId = 'ALL' 
     setLoading(true);
     setError(null);
     try {
-      const url = new URL('/api/v1/owner/marketing/customers', window.location.origin);
-      url.searchParams.set('range', timeRange);
-      url.searchParams.set('category', selectedCategory);
-      url.searchParams.set('branchId', selectedBranchId);
+      const queryParams = new URLSearchParams({
+        range: timeRange,
+        category: selectedCategory,
+        branchId: selectedBranchId,
+      });
 
-      const res = await fetch(url.toString());
-      const json = (await res.json()) as { success?: boolean; data?: { customers?: CustomerMarketingRecord[] }; error?: { message?: string } };
-      if (json.success && Array.isArray(json.data?.customers)) {
-        setCustomers(json.data.customers);
-        // Pre-select all matching users by default
-        const allIds = new Set<string>(json.data.customers.map((c: CustomerMarketingRecord) => c.id));
-        setSelectedUserIds(allIds);
+      const res = await apiClient.request<{ customers?: CustomerMarketingRecord[] }>(
+        `/api/v1/owner/marketing/customers?${queryParams.toString()}`,
+        {
+          authenticated: true,
+        }
+      );
+
+      if (res.success) {
+        if (Array.isArray(res.data?.customers)) {
+          setCustomers(res.data.customers);
+          const allIds = new Set<string>(res.data.customers.map((c: CustomerMarketingRecord) => c.id));
+          setSelectedUserIds(allIds);
+        } else {
+          setCustomers([]);
+        }
       } else {
-        setError(json.error?.message || 'Failed to load marketing customer data');
+        setError(res.error.message || 'Failed to load marketing customer data');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Network error loading customer data');
@@ -258,9 +268,15 @@ export default function OwnerMessagingView({ branches, selectedBranchId = 'ALL' 
         imageUrl: customImages[c.id] || activeImg || null,
       }));
 
-      const res = await fetch('/api/v1/owner/marketing/broadcast', {
+      const res = await apiClient.request<{
+        campaignId: string;
+        dispatchedCount: number;
+        channel: string;
+        promoAssigned?: { createdCouponCount: number; assignedCount: number } | null;
+        previews?: Array<{ name: string; phone?: string | null; actionUrl: string; imageUrl?: string | null }>;
+      }>('/api/v1/owner/marketing/broadcast', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        authenticated: true,
         body: JSON.stringify({
           channel,
           recipients,
@@ -286,11 +302,10 @@ export default function OwnerMessagingView({ branches, selectedBranchId = 'ALL' 
         }),
       });
 
-      const json = (await res.json()) as { success?: boolean; data?: any; error?: { message?: string } };
-      if (json.success) {
-        setBroadcastResult(json.data);
+      if (res.success) {
+        setBroadcastResult(res.data);
       } else {
-        alert(json.error?.message || 'Failed to dispatch broadcast');
+        alert(res.error.message || 'Failed to dispatch broadcast');
       }
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Network error during broadcast');

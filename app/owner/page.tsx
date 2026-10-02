@@ -116,16 +116,18 @@ export default function OwnerPortalPage() {
         }}
       >
         <div
-          className="app-container"
+          className="app-container no-scrollbar"
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             gap: '0.75rem',
             overflowX: 'auto',
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none',
           }}
         >
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <div className="no-scrollbar" style={{ display: 'flex', gap: '0.4rem', overflowX: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             {tabItems.map((tab) => {
               const isActive = activeTab === tab.id;
               return (
@@ -134,20 +136,21 @@ export default function OwnerPortalPage() {
                   type="button"
                   onClick={() => setActiveTab(tab.id as OwnerTab)}
                   style={{
-                    padding: '0.45rem 1.15rem',
+                    padding: '0.4rem 0.95rem',
                     background: isActive ? '#d61c5d' : 'transparent',
                     border: 'none',
                     borderRadius: '9999px',
                     color: isActive ? '#ffffff' : '#6f5569',
                     fontWeight: 800,
-                    fontSize: '0.875rem',
+                    fontSize: '0.825rem',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '0.45rem',
-                    boxShadow: isActive ? '0 3px 0 #a3134a' : 'none',
+                    gap: '0.35rem',
+                    boxShadow: isActive ? '0 2px 0 #a3134a' : 'none',
                     transition: 'all 0.15s ease',
                     whiteSpace: 'nowrap',
+                    flexShrink: 0,
                   }}
                 >
                   <span>{tab.icon}</span>
