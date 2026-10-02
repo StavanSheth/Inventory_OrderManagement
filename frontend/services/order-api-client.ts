@@ -62,16 +62,6 @@ export class OrderApiClient {
     });
   }
 
-  /**
-   * Customer: edit own order within 60-minute window.
-   */
-  async editCustomerOrder(orderId: string, req: EditOrderRequest): Promise<ApiResponse<EditOrderResponseData>> {
-    return apiClient.request<EditOrderResponseData>(`${API_V1_PREFIX}/customer/orders/${orderId}`, {
-      method: 'PATCH',
-      authenticated: true,
-      body: JSON.stringify(req),
-    });
-  }
 
   /**
    * Operator/Owner: list branch order queue.

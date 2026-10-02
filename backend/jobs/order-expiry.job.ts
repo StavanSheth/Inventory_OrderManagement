@@ -1,4 +1,5 @@
 import { OrderRepository } from '../../database/repositories/order.repository';
+import { AuditRepository } from '../../database/repositories/audit.repository';
 import { IRealtimeService } from '../services/realtime/realtime.interface';
 import { IOrderExpiryJob } from './order-expiry.job.interface';
 import { OrderStatus, PaymentStatus } from '../../shared/enums/order.enum';
@@ -7,6 +8,7 @@ export class OrderExpiryJob implements IOrderExpiryJob {
   constructor(
     private orderRepo: OrderRepository,
     private realtime?: IRealtimeService,
+    private auditRepo?: AuditRepository,
   ) {}
 
   async processExpiredOrders(): Promise<{ expiredCount: number }> {
@@ -18,6 +20,23 @@ export class OrderExpiryJob implements IOrderExpiryJob {
       // Atomic conditional update ensures idempotency and avoids races with confirmation
       const didExpire = await this.orderRepo.expireOrderConditionally(order.id, now);
       if (didExpire) {
+        await this.auditRepo?.log({
+          branch_id: order.branch_id,
+          actor_user_id: order.customer_user_id,
+          action: 'ORDER_EXPIRED',
+          entity_type: 'order',
+          entity_id: order.id,
+          metadata: {
+            orderNumber: order.order_number,
+            branchId: order.branch_id,
+            previousStatus: order.status,
+            newStatus: OrderStatus.EXPIRED,
+            expiryTimestamp: now,
+            actor: 'system',
+            systemSource: 'cron_expiry',
+          },
+        });
+
         await this.realtime?.publish({
           type: 'OrderStatusChanged',
           payload: {

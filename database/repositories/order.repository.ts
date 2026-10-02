@@ -83,8 +83,8 @@ export class OrderRepository extends BaseRepository {
     const paymentStatus = input.payment_status ?? PaymentStatus.PENDING;
     const placedAt = input.placed_at ?? now;
 
-    // Insert order header
-    await this.db
+    // Prepare order header statement
+    const orderStmt = this.db
       .prepare(`
         INSERT INTO orders (
           id, order_number, branch_id, customer_user_id, status, subtotal,
@@ -111,12 +111,11 @@ export class OrderRepository extends BaseRepository {
         input.expires_at,
         now,
         now,
-      )
-      .run();
+      );
 
-    // Insert order items with snapshots
-    for (const item of input.items) {
-      await this.db
+    // Prepare order item statements
+    const itemStmts = input.items.map((item) =>
+      this.db
         .prepare(`
           INSERT INTO order_items (
             id, order_id, product_id, product_name_snapshot, unit_price_snapshot,
@@ -135,9 +134,11 @@ export class OrderRepository extends BaseRepository {
           item.line_total,
           now,
           now,
-        )
-        .run();
-    }
+        ),
+    );
+
+    // Atomically insert order header and all order items
+    await this.db.batch([orderStmt, ...itemStmts]);
 
     const created = await this.findById(input.id);
     if (!created) {
@@ -379,12 +380,12 @@ export class OrderRepository extends BaseRepository {
   ): Promise<Order> {
     const now = new Date().toISOString();
 
-    // 1. Delete previous items
-    await this.db.prepare('DELETE FROM order_items WHERE order_id = ?').bind(orderId).run();
+    // 1. Prepare delete previous items statement
+    const deleteStmt = this.db.prepare('DELETE FROM order_items WHERE order_id = ?').bind(orderId);
 
-    // 2. Insert new items
-    for (const item of items) {
-      await this.db
+    // 2. Prepare insert new items statements
+    const itemStmts = items.map((item) =>
+      this.db
         .prepare(`
           INSERT INTO order_items (
             id, order_id, product_id, product_name_snapshot, unit_price_snapshot,
@@ -403,12 +404,11 @@ export class OrderRepository extends BaseRepository {
           item.line_total,
           now,
           now,
-        )
-        .run();
-    }
+        ),
+    );
 
-    // 3. Update order totals
-    await this.db
+    // 3. Prepare update order totals statement
+    const updateOrderStmt = this.db
       .prepare(`
         UPDATE orders
         SET subtotal = ?,
@@ -418,8 +418,10 @@ export class OrderRepository extends BaseRepository {
             updated_at = ?
         WHERE id = ?
       `)
-      .bind(subtotal, tax, total, lastEditedAt, now, orderId)
-      .run();
+      .bind(subtotal, tax, total, lastEditedAt, now, orderId);
+
+    // Atomically execute deletion, item insertions, and order update in a single transaction
+    await this.db.batch([deleteStmt, ...itemStmts, updateOrderStmt]);
 
     const updated = await this.findById(orderId);
     if (!updated) {

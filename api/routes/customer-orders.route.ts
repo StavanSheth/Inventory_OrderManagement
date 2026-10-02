@@ -7,7 +7,7 @@ import { BranchRepository } from '../../database/repositories/branch.repository'
 import { OrdersService } from '../../backend/services/orders';
 import { requireCustomerData } from '../../backend/policies/branch-access.policy';
 import { validateRequest } from '../validators/request.validator';
-import { createOrderSchema, editOrderSchema } from '../validators/order.validator';
+import { createOrderSchema } from '../validators/order.validator';
 import { successResponse } from '../serializers/response';
 import { handleApiError } from '../middleware/error-handler';
 import { extractRequestContext } from '../middleware/request-context';
@@ -15,6 +15,7 @@ import { handleCorsPreflight, getCorsHeaders } from '../middleware/cors';
 import { config } from '../../config/runtime';
 import { D1DatabaseLike } from '../../database/types';
 import { realtimeService } from '../../backend/services/realtime';
+import { ForbiddenError } from '../../backend/errors/app-error';
 
 function buildOrdersService(db: D1DatabaseLike): OrdersService {
   return new OrdersService(
@@ -147,13 +148,14 @@ export async function handleCreateOrderRoute(
 
 /**
  * PATCH /api/v1/customer/orders/:orderId
- * Customer edits their own order (within 1-hour window).
+ * Customer editing is strictly disabled per Phase 3 specifications.
+ * Only BRANCH_OPERATOR and OWNER may edit orders via branch operator endpoints.
  */
 export async function handleEditOrderRoute(
   request: Request,
-  orderId: string,
-  env?: { DB?: D1DatabaseLike },
-  options: AuthFactoryOptions = {},
+  _orderId: string,
+  _env?: { DB?: D1DatabaseLike },
+  _options: AuthFactoryOptions = {},
 ): Promise<Response> {
   const preflight = handleCorsPreflight(request, config.allowedOrigins);
   if (preflight) return preflight;
@@ -162,30 +164,8 @@ export async function handleEditOrderRoute(
   const context = extractRequestContext(request);
   const responseHeaders = { ...corsHeaders, 'x-request-id': context.requestId };
 
-  try {
-    const { db, authMiddleware } = createAuthInfrastructure(env, options);
-    const ordersService = buildOrdersService(db);
-
-    const userContext = await authMiddleware.authenticateRequest(request, { requireSession: false });
-
-    // First fetch to verify ownership
-    const existing = await ordersService.getOrderDetail(orderId);
-    if (!existing) {
-      return handleApiError(new Error('Order not found'), responseHeaders);
-    }
-    requireCustomerData(userContext, existing.order.customer_user_id);
-
-    const rawBody = await request.json();
-    const body = validateRequest(editOrderSchema, rawBody);
-
-    const result = await ordersService.editOrder({
-      actorUserId: userContext.userId,
-      orderId,
-      items: body.items,
-    });
-
-    return successResponse(result, 200, responseHeaders);
-  } catch (error) {
-    return handleApiError(error, responseHeaders);
-  }
+  return handleApiError(
+    new ForbiddenError('Customer order editing is disabled. Orders may only be modified by authorized branch operators.'),
+    responseHeaders,
+  );
 }

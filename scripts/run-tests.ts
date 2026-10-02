@@ -22,9 +22,11 @@ const testFiles = [
   'tests/integration/persistent-db.test.ts',
   'tests/integration/auth-rbac.test.ts',
   'tests/integration/order-lifecycle.test.ts',
+  'tests/integration/atomicity.test.ts',
   'tests/api/health.test.ts',
   'tests/api/auth-endpoints.test.ts',
   'tests/api/order-api.test.ts',
+  'tests/api/nextjs-routes.test.ts',
   'tests/api/realtime-api.test.ts',
   'tests/e2e/e2e-stub.test.ts',
 ].map((rel) => path.resolve(process.cwd(), rel));

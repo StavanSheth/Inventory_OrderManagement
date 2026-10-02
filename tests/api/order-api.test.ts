@@ -230,8 +230,10 @@ describe('Phase 3 — Order API HTTP Endpoints', () => {
 
   // ─── Customer: Edit Order ───────────────────────────────────────────────────
 
+  // ─── Customer: Edit Order ───────────────────────────────────────────────────
+
   describe('Customer: Edit Order', () => {
-    it('edits an order and recalculates totals correctly', async () => {
+    it('strictly forbids customer from editing order — 403 Forbidden', async () => {
       const createResp = await handleCreateOrderRoute(
         new Request('http://x/', {
           method: 'POST',
@@ -252,11 +254,10 @@ describe('Phase 3 — Order API HTTP Endpoints', () => {
         orderId,
         { DB: db },
       );
-      assert.strictEqual(editResp.status, 200);
-      const json = (await editResp.json()) as { data: { newTotal: number; previousTotal: number } };
-      // new: 2×100+1×120=320 + 5%=336
-      assert.strictEqual(json.data.newTotal, 336);
-      assert.strictEqual(json.data.previousTotal, 105); // 1×100 + 5%
+      assert.strictEqual(editResp.status, 403);
+      const json = (await editResp.json()) as { success: boolean; error: { code: string; message: string } };
+      assert.strictEqual(json.success, false);
+      assert.strictEqual(json.error.code, 'FORBIDDEN');
     });
   });
 

@@ -288,10 +288,16 @@ export class OrdersService implements IOrdersService {
 
     const updated = await this.orderRepo.updateStatus(orderId, nextStatus, extra);
 
+    const auditAction = nextStatus === OrderStatus.CANCELLED
+      ? 'ORDER_CANCELLED'
+      : (nextStatus === OrderStatus.CONFIRMED
+        ? 'ORDER_CONFIRMED'
+        : (nextStatus === OrderStatus.COMPLETED ? 'ORDER_COMPLETED' : `ORDER_STATUS_${nextStatus}`));
+
     await this.auditRepo?.log({
       branch_id: order.branch_id,
       actor_user_id: actorUserId,
-      action: `ORDER_STATUS_${nextStatus}`,
+      action: auditAction,
       entity_type: 'order',
       entity_id: orderId,
       metadata: { previousStatus: order.status, nextStatus },
@@ -413,7 +419,7 @@ export class OrdersService implements IOrdersService {
     }
 
     const paymentId = `pay-${crypto.randomUUID()}`;
-    const payment = await this.paymentRepo.create({
+    const { payment } = await this.paymentRepo.recordPaymentAtomically({
       id: paymentId,
       order_id: opts.orderId,
       branch_id: opts.branchId,
@@ -422,7 +428,7 @@ export class OrdersService implements IOrdersService {
       status: PaymentStatus.RECORDED,
     });
 
-    const updatedOrder = await this.orderRepo.updatePaymentStatus(opts.orderId, PaymentStatus.RECORDED, opts.method);
+    const updatedOrder = (await this.orderRepo.findById(opts.orderId))!;
 
     await this.auditRepo?.log({
       branch_id: opts.branchId,
@@ -477,13 +483,14 @@ export class OrdersService implements IOrdersService {
     }
 
     const now = new Date().toISOString();
-    const { payment: updatedPayment, wasUpdated } = await this.paymentRepo.verifyPaymentConditionally(
+    const { payment: updatedPayment, wasUpdated } = await this.paymentRepo.verifyPaymentAtomically(
       opts.paymentId,
+      opts.orderId,
       opts.actorUserId,
       now,
     );
 
-    const updatedOrder = await this.orderRepo.updatePaymentStatus(opts.orderId, PaymentStatus.VERIFIED);
+    const updatedOrder = (await this.orderRepo.findById(opts.orderId))!;
 
     if (wasUpdated) {
       await this.auditRepo?.log({

@@ -63,11 +63,18 @@ export class NodeSqliteD1Adapter implements D1DatabaseLike {
   }
 
   async batch<T = unknown>(statements: D1PreparedStatementLike[]): Promise<D1ResultLike<T>[]> {
-    const results: D1ResultLike<T>[] = [];
-    for (const stmt of statements) {
-      results.push(await stmt.run<T>());
+    this.sqliteDb.exec('BEGIN IMMEDIATE TRANSACTION;');
+    try {
+      const results: D1ResultLike<T>[] = [];
+      for (const stmt of statements) {
+        results.push(await stmt.run<T>());
+      }
+      this.sqliteDb.exec('COMMIT;');
+      return results;
+    } catch (err) {
+      this.sqliteDb.exec('ROLLBACK;');
+      throw err;
     }
-    return results;
   }
 
   getNativeDb(): DatabaseSync {

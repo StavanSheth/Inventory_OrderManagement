@@ -1,4 +1,5 @@
 import { OrderRepository } from '../../database/repositories/order.repository';
+import { AuditRepository } from '../../database/repositories/audit.repository';
 import { OrderExpiryJob } from '../../backend/jobs/order-expiry.job';
 import { realtimeService } from '../../backend/services/realtime';
 import { successResponse } from '../serializers/response';
@@ -20,6 +21,7 @@ export async function handleOrderExpiryRoute(
     const job = new OrderExpiryJob(
       new OrderRepository(db),
       realtimeService,
+      new AuditRepository(db),
     );
     const result = await job.processExpiredOrders();
     return successResponse({ ok: true, ...result }, 200);
