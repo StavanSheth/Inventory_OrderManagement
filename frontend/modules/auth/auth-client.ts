@@ -87,6 +87,9 @@ export class AuthClient {
           host.startsWith('operator.') ||
           host.startsWith('staff.') ||
           host.startsWith('pos.') ||
+          host.startsWith('op-') ||
+          host.startsWith('staff-') ||
+          host.startsWith('desk-') ||
           host.startsWith('alpha.') ||
           host.startsWith('beta.') ||
           window.location.pathname.startsWith('/operator');
@@ -94,7 +97,11 @@ export class AuthClient {
         if (isOwnerContext) {
           idToken = 'mock-user:fb-owner-master:owner@melt.example.com:Stavan Sheth (Owner)';
         } else if (isOperatorContext) {
-          idToken = 'mock-user:fb-op-alpha:operator.alpha@melt.example.com:Raj Patel (Alpha Lead)';
+          if (host.includes('beta')) {
+            idToken = 'mock-user:fb-op-beta:operator.beta@melt.example.com:Anita Desai (Beta Lead)';
+          } else {
+            idToken = 'mock-user:fb-op-alpha:operator.alpha@melt.example.com:Raj Patel (Alpha Lead)';
+          }
         } else {
           idToken = 'mock-user:fb-cust-alice:alice@example.com:Alice Walker';
         }
