@@ -71,6 +71,24 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     }
   };
 
+  const handleConfirmOrder = async () => {
+    setUpdatingStatus(true);
+    setError(null);
+    try {
+      const res = await orderApiClient.confirmOrder(branchId, orderId);
+      if (res.success) {
+        await fetchDetail();
+        onStatusChanged();
+      } else {
+        setError(res.error?.message ?? 'Failed to confirm order');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Network error');
+    } finally {
+      setUpdatingStatus(false);
+    }
+  };
+
   if (loading) {
     return (
       <div
@@ -348,7 +366,40 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           </div>
 
           {/* Lifecycle Transitions for Confirmed/Preparing/Ready */}
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {order.status === OrderStatus.PENDING && (
+              <button
+                type="button"
+                disabled={updatingStatus}
+                onClick={
+                  order.payment_status === PaymentStatus.VERIFIED ||
+                  order.payment_status === PaymentStatus.COMPLETED
+                    ? handleConfirmOrder
+                    : () => onOpenPayment(order, payments)
+                }
+                style={{
+                  padding: '0.55rem 1.25rem',
+                  background:
+                    order.payment_status === PaymentStatus.VERIFIED ||
+                    order.payment_status === PaymentStatus.COMPLETED
+                      ? '#16a34a'
+                      : '#d61c5d',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '9999px',
+                  fontWeight: 800,
+                  fontSize: '0.8125rem',
+                  cursor: updatingStatus ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 3px 0 rgba(0,0,0,0.15)',
+                }}
+              >
+                {order.payment_status === PaymentStatus.VERIFIED ||
+                order.payment_status === PaymentStatus.COMPLETED
+                  ? 'Confirm Order (Payment Done)'
+                  : 'Record Payment to Confirm'}
+              </button>
+            )}
+
             {order.status === OrderStatus.CONFIRMED && (
               <button
                 type="button"
