@@ -14,6 +14,8 @@ const testFiles = [
   'tests/unit/order-rules.test.ts',
   'tests/unit/order-calculation.test.ts',
   'tests/unit/payment-difference.test.ts',
+  'tests/unit/promotions.test.ts',
+  'tests/unit/inventory-bom.test.ts',
   'tests/integration/schema-migrations.test.ts',
   'tests/integration/seed-data.test.ts',
   'tests/integration/repositories.test.ts',
@@ -22,6 +24,7 @@ const testFiles = [
   'tests/integration/persistent-db.test.ts',
   'tests/integration/auth-rbac.test.ts',
   'tests/integration/order-lifecycle.test.ts',
+  'tests/integration/phase4-inventory-promotions.test.ts',
   'tests/integration/atomicity.test.ts',
   'tests/integration/concurrency.test.ts',
   'tests/api/health.test.ts',
@@ -29,6 +32,7 @@ const testFiles = [
   'tests/api/order-api.test.ts',
   'tests/api/nextjs-routes.test.ts',
   'tests/api/realtime-api.test.ts',
+  'tests/api/inventory-promotions-api.test.ts',
   'tests/e2e/e2e-stub.test.ts',
 ].map((rel) => path.resolve(process.cwd(), rel));
 

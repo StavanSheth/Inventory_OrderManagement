@@ -3,12 +3,17 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { OperatorQueueView } from '@/frontend/modules/orders';
+import { OperatorInventoryView } from '@/frontend/modules/inventory';
+import { OperatorPromotionsView } from '@/frontend/modules/promotions';
 import { useAuth } from '@/frontend/modules/auth/auth-hooks';
 import { UserRole } from '@/shared/enums/roles.enum';
+
+type TabType = 'orders' | 'inventory' | 'promotions';
 
 export default function OperatorPortalPage() {
   const [branches, setBranches] = useState<Array<{ id: string; name: string; code: string }>>([]);
   const [branchId, setBranchId] = useState<string>('');
+  const [activeTab, setActiveTab] = useState<TabType>('orders');
 
   let authContext: ReturnType<typeof useAuth> | null = null;
   try {
@@ -132,10 +137,98 @@ export default function OperatorPortalPage() {
         </div>
       </header>
 
+      {/* Navigation Sub-header / Tab Bar */}
+      <nav
+        style={{
+          borderBottom: '1px solid #1e293b',
+          background: '#0f172a',
+          padding: '0 1.5rem',
+        }}
+      >
+        <div
+          style={{
+            maxWidth: '1200px',
+            margin: '0 auto',
+            display: 'flex',
+            gap: '0.5rem',
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setActiveTab('orders')}
+            style={{
+              padding: '0.75rem 1.25rem',
+              background: 'transparent',
+              border: 'none',
+              borderBottom: activeTab === 'orders' ? '2px solid #f59e0b' : '2px solid transparent',
+              color: activeTab === 'orders' ? '#fbbf24' : '#94a3b8',
+              fontWeight: activeTab === 'orders' ? 700 : 500,
+              fontSize: '0.875rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <span>📋</span>
+            <span>Live Orders</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('inventory')}
+            style={{
+              padding: '0.75rem 1.25rem',
+              background: 'transparent',
+              border: 'none',
+              borderBottom: activeTab === 'inventory' ? '2px solid #f59e0b' : '2px solid transparent',
+              color: activeTab === 'inventory' ? '#fbbf24' : '#94a3b8',
+              fontWeight: activeTab === 'inventory' ? 700 : 500,
+              fontSize: '0.875rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <span>📦</span>
+            <span>Inventory & Stock</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('promotions')}
+            style={{
+              padding: '0.75rem 1.25rem',
+              background: 'transparent',
+              border: 'none',
+              borderBottom: activeTab === 'promotions' ? '2px solid #f59e0b' : '2px solid transparent',
+              color: activeTab === 'promotions' ? '#fbbf24' : '#94a3b8',
+              fontWeight: activeTab === 'promotions' ? 700 : 500,
+              fontSize: '0.875rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <span>🏷️</span>
+            <span>Promotions & Coupons</span>
+          </button>
+        </div>
+      </nav>
+
       {/* Main Content Area */}
       <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '1.5rem' }}>
         {branchId ? (
-          <OperatorQueueView branchId={branchId} />
+          <>
+            {activeTab === 'orders' && <OperatorQueueView branchId={branchId} />}
+            {activeTab === 'inventory' && <OperatorInventoryView branchId={branchId} />}
+            {activeTab === 'promotions' && <OperatorPromotionsView branchId={branchId} />}
+          </>
         ) : (
           <div style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>Loading branch context...</div>
         )}

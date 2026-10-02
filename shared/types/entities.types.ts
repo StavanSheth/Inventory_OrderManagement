@@ -131,6 +131,9 @@ export interface Order {
   total: number;
   coupon_id?: Id | null;
   offer_id?: Id | null;
+  coupon_code_snapshot?: string | null;
+  coupon_discount_snapshot?: number;
+  offer_discount_snapshot?: number;
   payment_status: PaymentStatus;
   payment_method?: PaymentMethod | null;
   placed_at: IsoDateTimeUtc;

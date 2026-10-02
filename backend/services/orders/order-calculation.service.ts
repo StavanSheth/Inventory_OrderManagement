@@ -5,6 +5,8 @@ import { BadRequestError } from '../../errors/app-error';
 export interface CalculatedOrderTotals {
   items: CreateOrderItemInput[];
   subtotal: number;
+  offerDiscount: number;
+  couponDiscount: number;
   discount: number;
   tax: number;
   total: number;
@@ -30,16 +32,23 @@ export function fromPaise(paise: number): number {
   return Math.round(paise) / 100;
 }
 
+export interface CalculationDiscountsInput {
+  offerDiscount?: number;
+  couponDiscount?: number;
+}
+
 export class OrderCalculationService {
   /**
    * Recalculates order line items and financial totals based strictly
    * on verified database products using deterministic minor unit arithmetic.
+   * Total = (Subtotal - Offer Discount - Coupon Discount) + Tax.
    * Never trusts client-supplied prices.
    */
   calculateTotals(
     requestedItems: Array<{ productId: string; quantity: number }>,
     productsMap: Map<string, Product>,
     taxRate: number = 0.05, // 5% standard food tax rate
+    discounts?: CalculationDiscountsInput,
   ): CalculatedOrderTotals {
     if (!requestedItems || requestedItems.length === 0) {
       throw new BadRequestError('Order must contain at least one product item');
@@ -78,15 +87,33 @@ export class OrderCalculationService {
     }
 
     const subtotal = fromPaise(subtotalPaise);
-    const discount = 0;
-    const taxPaise = Math.round(subtotalPaise * taxRate);
+
+    // Apply promotions in minor units: Offer discount first, then Coupon discount
+    const rawOfferPaise = toPaise(discounts?.offerDiscount ?? 0);
+    const offerDiscountPaise = Math.max(0, Math.min(rawOfferPaise, subtotalPaise));
+    const afterOfferPaise = subtotalPaise - offerDiscountPaise;
+
+    const rawCouponPaise = toPaise(discounts?.couponDiscount ?? 0);
+    const couponDiscountPaise = Math.max(0, Math.min(rawCouponPaise, afterOfferPaise));
+    const afterDiscountsPaise = afterOfferPaise - couponDiscountPaise;
+
+    const totalDiscountPaise = offerDiscountPaise + couponDiscountPaise;
+    const discount = fromPaise(totalDiscountPaise);
+    const offerDiscount = fromPaise(offerDiscountPaise);
+    const couponDiscount = fromPaise(couponDiscountPaise);
+
+    // Tax computed on post-discount amount
+    const taxPaise = Math.round(afterDiscountsPaise * taxRate);
     const tax = fromPaise(taxPaise);
-    const totalPaise = subtotalPaise - toPaise(discount) + taxPaise;
+
+    const totalPaise = afterDiscountsPaise + taxPaise;
     const total = fromPaise(totalPaise);
 
     return {
       items,
       subtotal,
+      offerDiscount,
+      couponDiscount,
       discount,
       tax,
       total,

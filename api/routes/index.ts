@@ -5,3 +5,5 @@ export * from './customer-orders.route';
 export * from './catalog.route';
 export * from './cron.route';
 export * from './realtime.route';
+export * from './inventory.route';
+export * from './promotions.route';

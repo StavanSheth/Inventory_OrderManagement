@@ -17,6 +17,8 @@ export const createOrderSchema = z.object({
   branchId: z.string().min(1, 'branchId is required').max(100, 'branchId too long'),
   items: z.array(orderItemSchema).min(1, 'At least one item is required').max(100, 'Cannot exceed 100 items per order'),
   couponId: z.string().max(100).optional().nullable(),
+  couponCode: z.string().max(100).optional().nullable(),
+  offerId: z.string().max(100).optional().nullable(),
 });
 
 export const editOrderSchema = z.object({

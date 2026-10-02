@@ -8,6 +8,9 @@ import { AuditRepository } from '../../../database/repositories/audit.repository
 import { BranchRepository } from '../../../database/repositories/branch.repository';
 import { OrderCalculationService } from './order-calculation.service';
 import { IRealtimeService } from '../realtime/realtime.interface';
+import { IInventoryService } from '../inventory';
+import { IPromotionsService, PromotionsService } from '../promotions';
+import { D1PreparedStatementLike } from '../../../database/types';
 import { BadRequestError, NotFoundError, ForbiddenError } from '../../errors/app-error';
 import {
   calculateOrderExpiresAt,
@@ -30,6 +33,8 @@ export interface CreateOrderOptions {
   customerUserId: string;
   items: OrderItemInput[];
   couponId?: string | null;
+  couponCode?: string | null;
+  offerId?: string | null;
 }
 
 export interface EditOrderOptions {
@@ -65,6 +70,8 @@ export class OrdersService implements IOrdersService {
     private auditRepo?: AuditRepository,
     private branchRepo?: BranchRepository,
     private realtime?: IRealtimeService,
+    private inventoryService?: IInventoryService,
+    private promotionsService?: IPromotionsService,
   ) {}
 
   async getOrderById(branchId: string, orderId: string): Promise<{ order: Order; items: OrderItem[] } | null> {
@@ -109,13 +116,65 @@ export class OrdersService implements IOrdersService {
     const allProducts = await this.productRepo.listByBranch(opts.branchId, true);
     const productsMap = new Map(allProducts.map((p) => [p.id, p]));
 
-    const { items: calcItems, subtotal, discount, tax, total } = this.calc.calculateTotals(opts.items, productsMap);
+    // Step 1: Preliminary subtotal calculation
+    const prelimTotals = this.calc.calculateTotals(opts.items, productsMap);
+    const subtotal = prelimTotals.subtotal;
 
     const now = new Date();
+    let couponDiscount = 0;
+    let couponId = opts.couponId ?? null;
+    let couponCode: string | null = opts.couponCode ?? null;
+    let offerDiscount = 0;
+    const offerId = opts.offerId ?? null;
+
+    // Step 2: Server-side validation of promotions
+    if (this.promotionsService) {
+      if (opts.couponCode || opts.couponId) {
+        let codeToValidate = opts.couponCode;
+        if (!codeToValidate && opts.couponId) {
+          const c = await this.promotionsService.getCouponById(opts.branchId, opts.couponId);
+          codeToValidate = c?.code;
+        }
+        if (codeToValidate) {
+          const val = await this.promotionsService.validateCoupon({
+            branchId: opts.branchId,
+            code: codeToValidate,
+            subtotal,
+            userId: opts.customerUserId,
+            now,
+          });
+          if (!val.isValid) {
+            throw new BadRequestError(val.reason ?? 'Invalid coupon code');
+          }
+          couponDiscount = val.discount;
+          couponId = val.coupon?.id ?? couponId;
+          couponCode = val.coupon?.code ?? codeToValidate;
+        }
+      }
+
+      if (offerId) {
+        const val = await this.promotionsService.validateOffer(opts.branchId, offerId, subtotal, now);
+        if (!val.isValid) {
+          throw new BadRequestError(val.reason ?? 'Invalid offer');
+        }
+        offerDiscount = val.discount;
+      }
+    }
+
+    // Step 3: Authoritative totals calculation
+    const { items: calcItems, discount, tax, total } = this.calc.calculateTotals(
+      opts.items,
+      productsMap,
+      0.05,
+      { offerDiscount, couponDiscount },
+    );
+
     const expiresAt = calculateOrderExpiresAt(now, expiryMinutes);
     const orderId = `ord-${crypto.randomUUID()}`;
     const orderNumber = await this.orderRepo.generateNextOrderNumber(opts.branchId, branch.code);
 
+    // Step 4: Persist pending order with promotion snapshots
+    // NOTE: Inventory is NOT deducted at order creation. Coupon usage is NOT committed.
     const order = await this.orderRepo.create({
       id: orderId,
       order_number: orderNumber,
@@ -126,8 +185,11 @@ export class OrdersService implements IOrdersService {
       discount,
       tax,
       total,
-      coupon_id: opts.couponId ?? null,
-      offer_id: null,
+      coupon_id: couponId,
+      offer_id: offerId,
+      coupon_code_snapshot: couponCode,
+      coupon_discount_snapshot: couponDiscount,
+      offer_discount_snapshot: offerDiscount,
       payment_status: PaymentStatus.PENDING,
       payment_method: null,
       placed_at: now.toISOString(),
@@ -143,7 +205,14 @@ export class OrdersService implements IOrdersService {
       action: AuditAction.ORDER_CREATED,
       entity_type: 'order',
       entity_id: orderId,
-      metadata: { orderNumber, total, itemCount: calcItems.length },
+      metadata: {
+        orderNumber,
+        total,
+        itemCount: calcItems.length,
+        couponCode,
+        couponDiscount,
+        offerDiscount,
+      },
     });
 
     await this.realtime?.publish({
@@ -193,7 +262,63 @@ export class OrdersService implements IOrdersService {
     const allProducts = await this.productRepo.listByBranch(order.branch_id, true);
     const productsMap = new Map(allProducts.map((p) => [p.id, p]));
 
-    const { items: newCalcItems, subtotal, tax, total: newTotal } = this.calc.calculateTotals(opts.items, productsMap);
+    // Step 1: Preliminary totals
+    const prelimTotals = this.calc.calculateTotals(opts.items, productsMap);
+    const subtotal = prelimTotals.subtotal;
+
+    let couponDiscount = 0;
+    let couponId: string | null = order.coupon_id ?? null;
+    let couponCode: string | null = order.coupon_code_snapshot ?? null;
+    let offerDiscount = 0;
+    const offerId: string | null = order.offer_id ?? null;
+
+    // Step 2: Revalidate promotions against new subtotal
+    if (this.promotionsService) {
+      if (order.coupon_id || order.coupon_code_snapshot) {
+        let code = order.coupon_code_snapshot;
+        if (!code && order.coupon_id) {
+          const c = await this.promotionsService.getCouponById(order.branch_id, order.coupon_id);
+          code = c?.code ?? null;
+        }
+        if (code) {
+          const val = await this.promotionsService.validateCoupon({
+            branchId: order.branch_id,
+            code,
+            subtotal,
+            userId: order.customer_user_id,
+            now,
+          });
+          if (val.isValid) {
+            couponDiscount = val.discount;
+            couponId = val.coupon?.id ?? couponId;
+            couponCode = val.coupon?.code ?? code;
+          } else {
+            // Invalidate coupon if new items no longer meet requirements (e.g. minimum order value)
+            couponDiscount = 0;
+            couponId = null;
+            couponCode = null;
+          }
+        }
+      }
+
+      if (order.offer_id) {
+        const val = await this.promotionsService.validateOffer(order.branch_id, order.offer_id, subtotal, now);
+        if (val.isValid) {
+          offerDiscount = val.discount;
+        } else {
+          offerDiscount = 0;
+        }
+      }
+    }
+
+    // Step 3: Authoritative totals with revalidated discounts
+    const { items: newCalcItems, discount: newDiscount, tax, total: newTotal } = this.calc.calculateTotals(
+      opts.items,
+      productsMap,
+      0.05,
+      { offerDiscount, couponDiscount },
+    );
+
     const previousTotal = order.total;
     const lastEditedAt = now.toISOString();
 
@@ -205,7 +330,7 @@ export class OrdersService implements IOrdersService {
 
     const editDiff = this.calc.calculateEditDifference(previousTotal, newTotal, verifiedPaidAmount);
 
-    // Determine target payment status according to financial rules
+    // Target payment status according to financial rules
     let targetPaymentStatus: PaymentStatus = order.payment_status;
     if (order.status === OrderStatus.CONFIRMED) {
       if (newTotal === verifiedPaidAmount) {
@@ -221,6 +346,42 @@ export class OrdersService implements IOrdersService {
       } else if (verifiedPaidAmount > 0) {
         targetPaymentStatus = PaymentStatus.RECORDED;
       }
+    }
+
+    // Step 4: If order is CONFIRMED, calculate inventory delta statements!
+    const extraStatements: D1PreparedStatementLike[] = [];
+    if (order.status === OrderStatus.CONFIRMED && this.inventoryService) {
+      const oldItemsList = previousItems.map((i) => ({ productId: i.product_id, quantity: i.quantity }));
+      const newItemsList = newCalcItems.map((i) => ({ productId: i.product_id, quantity: i.quantity }));
+
+      // Check positive deltas for stock availability
+      const oldQtyMap = new Map<string, number>();
+      for (const it of oldItemsList) {
+        oldQtyMap.set(it.productId, (oldQtyMap.get(it.productId) ?? 0) + it.quantity);
+      }
+      const positiveDeltas: Array<{ productId: string; quantity: number }> = [];
+      for (const it of newItemsList) {
+        const oldQty = oldQtyMap.get(it.productId) ?? 0;
+        if (it.quantity > oldQty) {
+          positiveDeltas.push({ productId: it.productId, quantity: it.quantity - oldQty });
+        }
+      }
+
+      if (positiveDeltas.length > 0) {
+        const stockVal = await this.inventoryService.validateStockAvailability(order.branch_id, positiveDeltas);
+        if (!stockVal.isAvailable) {
+          throw new BadRequestError(`Cannot edit order: ${stockVal.errorMessage}`);
+        }
+      }
+
+      const deltaInvStmts = await this.inventoryService.prepareOrderEditDeltaStatements({
+        branchId: order.branch_id,
+        orderId: opts.orderId,
+        actorUserId: opts.actorUserId,
+        oldItems: oldItemsList,
+        newItems: newItemsList,
+      });
+      extraStatements.push(...deltaInvStmts);
     }
 
     const editCutoffIso = new Date(now.getTime() - editWindowMinutes * 60 * 1000).toISOString();
@@ -241,6 +402,11 @@ export class OrdersService implements IOrdersService {
       })),
       previousTotal,
       newTotal,
+      previousDiscount: order.discount,
+      newDiscount,
+      couponCode,
+      couponDiscount,
+      offerDiscount,
       verifiedPaidAmount,
       paymentDifference: editDiff.paymentDifference,
       additionalAmountRequired: editDiff.additionalAmountRequired,
@@ -249,7 +415,7 @@ export class OrdersService implements IOrdersService {
       timestamp: lastEditedAt,
     };
 
-    // Atomic database mutation: item replacement, order totals, payment status, and audit record in a single batch
+    // Atomic database mutation: item replacement, order totals, discount snapshots, payment status, inventory delta, and audit record in a single batch
     let updatedOrder: Order;
     try {
       updatedOrder = await this.orderRepo.atomicEditOrder({
@@ -257,8 +423,14 @@ export class OrdersService implements IOrdersService {
         branchId: order.branch_id,
         items: newCalcItems,
         subtotal,
+        discount: newDiscount,
         tax,
         total: newTotal,
+        couponId,
+        offerId,
+        couponCodeSnapshot: couponCode,
+        couponDiscountSnapshot: couponDiscount,
+        offerDiscountSnapshot: offerDiscount,
         paymentStatus: targetPaymentStatus,
         lastEditedAt,
         nowIso: lastEditedAt,
@@ -270,6 +442,7 @@ export class OrdersService implements IOrdersService {
           action: AuditAction.ORDER_EDITED,
           metadata: auditMetadata,
         },
+        extraStatements,
       });
     } catch (err) {
       throw new BadRequestError(err instanceof Error ? err.message : 'Order edit failed');
@@ -402,19 +575,76 @@ export class OrdersService implements IOrdersService {
     }
 
     const nowIso = now.toISOString();
+    const orderItems = await this.orderRepo.getOrderItems(orderId);
+    const extraStatements: D1PreparedStatementLike[] = [];
+
+    // Step 1: Validate stock availability and prepare atomic inventory deduction statements
+    if (this.inventoryService) {
+      const itemsList = orderItems.map((i) => ({ productId: i.product_id, quantity: i.quantity }));
+      const stockValidation = await this.inventoryService.validateStockAvailability(order.branch_id, itemsList);
+      if (!stockValidation.isAvailable) {
+        throw new BadRequestError(stockValidation.errorMessage ?? 'Insufficient stock for order confirmation');
+      }
+
+      const invStmts = await this.inventoryService.prepareOrderConfirmationStatements({
+        branchId: order.branch_id,
+        orderId,
+        actorUserId,
+        items: itemsList,
+      });
+      extraStatements.push(...invStmts);
+    }
+
+    // Step 2: Atomic coupon usage and limit increment
+    if (order.coupon_id && this.promotionsService) {
+      const coupon = await this.promotionsService.getCouponById(order.branch_id, order.coupon_id);
+      if (!coupon || !coupon.active) {
+        throw new BadRequestError('Coupon is no longer active');
+      }
+      if (coupon.total_usage_limit !== null && coupon.total_usage_limit !== undefined) {
+        if (coupon.usage_count >= coupon.total_usage_limit) {
+          throw new BadRequestError('Coupon usage limit reached');
+        }
+      }
+
+      const promoRepo = (this.promotionsService as PromotionsService).getPromotionRepo?.();
+      if (promoRepo) {
+        const usageId = `cu-${crypto.randomUUID()}`;
+        const discountAmount = order.coupon_discount_snapshot ?? order.discount;
+        extraStatements.push(
+          promoRepo.prepareCouponIncrementStatement(order.coupon_id, nowIso),
+          promoRepo.prepareCouponUsageStatement(
+            usageId,
+            order.coupon_id,
+            order.customer_user_id,
+            orderId,
+            discountAmount,
+            nowIso,
+          ),
+        );
+      }
+    }
+
+    // Step 3: Atomic execution in D1 batch: order confirmation + stock deduction + movements + coupon usage + audit
     let updated: Order;
     try {
-      updated = await this.orderRepo.confirmOrderConditionally(orderId, nowIso, {
-        id: `aud-${crypto.randomUUID()}`,
-        branchId: order.branch_id,
-        actorUserId,
-        action: AuditAction.ORDER_CONFIRMED,
-        metadata: { confirmedAt: nowIso, previousStatus: order.status },
-      });
+      updated = await this.orderRepo.confirmOrderConditionally(
+        orderId,
+        nowIso,
+        {
+          id: `aud-${crypto.randomUUID()}`,
+          branchId: order.branch_id,
+          actorUserId,
+          action: AuditAction.ORDER_CONFIRMED,
+          metadata: { confirmedAt: nowIso, previousStatus: order.status },
+        },
+        extraStatements,
+      );
     } catch (err) {
       throw new BadRequestError(err instanceof Error ? err.message : 'Confirmation failed');
     }
 
+    // Step 4: Publish realtime events strictly after authoritative commit
     await this.realtime?.publish({
       type: 'OrderStatusChanged',
       payload: {

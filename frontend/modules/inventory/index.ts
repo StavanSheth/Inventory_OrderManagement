@@ -1,4 +1,5 @@
-// Inventory feature module boundary (Phase 1 foundation)
+export * from './operator-inventory-view';
+
 export interface InventoryModuleState {
   filterLowStock: boolean;
 }

@@ -25,6 +25,9 @@ export interface CreateOrderInput {
   total: number;
   coupon_id?: string | null;
   offer_id?: string | null;
+  coupon_code_snapshot?: string | null;
+  coupon_discount_snapshot?: number;
+  offer_discount_snapshot?: number;
   payment_status?: PaymentStatus;
   payment_method?: PaymentMethod | null;
   placed_at?: string;
@@ -37,8 +40,14 @@ export interface AtomicEditOrderOptions {
   branchId?: string;
   items: CreateOrderItemInput[];
   subtotal: number;
+  discount?: number;
   tax: number;
   total: number;
+  couponId?: string | null;
+  offerId?: string | null;
+  couponCodeSnapshot?: string | null;
+  couponDiscountSnapshot?: number;
+  offerDiscountSnapshot?: number;
   paymentStatus?: PaymentStatus;
   lastEditedAt: string;
   nowIso?: string;
@@ -50,6 +59,7 @@ export interface AtomicEditOrderOptions {
     action: string;
     metadata: Record<string, unknown>;
   };
+  extraStatements?: D1PreparedStatementLike[];
 }
 
 export class OrderRepository extends BaseRepository {
@@ -110,9 +120,10 @@ export class OrderRepository extends BaseRepository {
         INSERT INTO orders (
           id, order_number, branch_id, customer_user_id, status, subtotal,
           discount, tax, total, coupon_id, offer_id, payment_status, payment_method,
-          placed_at, expires_at, created_at, updated_at
+          placed_at, expires_at, created_at, updated_at,
+          coupon_code_snapshot, coupon_discount_snapshot, offer_discount_snapshot
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       .bind(
         input.id,
@@ -132,6 +143,9 @@ export class OrderRepository extends BaseRepository {
         input.expires_at,
         now,
         now,
+        input.coupon_code_snapshot ?? null,
+        input.coupon_discount_snapshot ?? 0,
+        input.offer_discount_snapshot ?? 0,
       );
 
     // Prepare order item statements
@@ -349,6 +363,7 @@ export class OrderRepository extends BaseRepository {
       action: string;
       metadata: Record<string, unknown>;
     },
+    extraStatements: D1PreparedStatementLike[] = [],
   ): Promise<Order> {
     const updateStmt = this.db
       .prepare(`
@@ -362,6 +377,8 @@ export class OrderRepository extends BaseRepository {
           AND expires_at > ?
       `)
       .bind(nowIso, nowIso, orderId, nowIso);
+
+    const stmts: D1PreparedStatementLike[] = [updateStmt, ...extraStatements];
 
     if (auditLog) {
       const metadataJson = JSON.stringify(auditLog.metadata ?? {});
@@ -382,17 +399,22 @@ export class OrderRepository extends BaseRepository {
           metadataJson,
           nowIso,
         );
+      stmts.push(auditStmt);
+    }
 
-      const batchRes = await this.db.batch([updateStmt, auditStmt]);
-      const changes = Number((batchRes[0]?.meta as { changes?: number })?.changes ?? (batchRes[0] as { changes?: number })?.changes ?? 0);
-      if (changes === 0) {
-        throw new Error(`Order ${orderId} cannot be confirmed. It may already be confirmed, payment is not VERIFIED, or order has expired.`);
-      }
-    } else {
+    if (stmts.length === 1) {
       const res = await updateStmt.run();
       const changes = Number((res?.meta as { changes?: number })?.changes ?? (res as { changes?: number })?.changes ?? 0);
       if (changes === 0) {
         throw new Error(`Order ${orderId} cannot be confirmed. It may already be confirmed, payment is not VERIFIED, or order has expired.`);
+      }
+    } else {
+      const batchRes = await this.db.batch(stmts);
+      for (let i = 0; i < batchRes.length; i++) {
+        const changes = Number((batchRes[i]?.meta as { changes?: number })?.changes ?? (batchRes[i] as { changes?: number })?.changes ?? 0);
+        if (changes === 0) {
+          throw new Error(`Order ${orderId} cannot be confirmed: conditional check failed on batch statement ${i}`);
+        }
       }
     }
 
@@ -509,8 +531,14 @@ export class OrderRepository extends BaseRepository {
       .prepare(`
         UPDATE orders
         SET subtotal = ?,
+            discount = COALESCE(?, discount),
             tax = ?,
             total = ?,
+            coupon_id = CASE WHEN ? = 1 THEN ? ELSE coupon_id END,
+            offer_id = CASE WHEN ? = 1 THEN ? ELSE offer_id END,
+            coupon_code_snapshot = CASE WHEN ? = 1 THEN ? ELSE coupon_code_snapshot END,
+            coupon_discount_snapshot = COALESCE(?, coupon_discount_snapshot),
+            offer_discount_snapshot = COALESCE(?, offer_discount_snapshot),
             payment_status = COALESCE(?, payment_status),
             last_edited_at = ?,
             updated_at = ?
@@ -522,8 +550,17 @@ export class OrderRepository extends BaseRepository {
       `)
       .bind(
         opts.subtotal,
+        opts.discount !== undefined ? opts.discount : null,
         opts.tax,
         opts.total,
+        opts.couponId !== undefined ? 1 : 0,
+        opts.couponId ?? null,
+        opts.offerId !== undefined ? 1 : 0,
+        opts.offerId ?? null,
+        opts.couponCodeSnapshot !== undefined ? 1 : 0,
+        opts.couponCodeSnapshot ?? null,
+        opts.couponDiscountSnapshot !== undefined ? opts.couponDiscountSnapshot : null,
+        opts.offerDiscountSnapshot !== undefined ? opts.offerDiscountSnapshot : null,
         opts.paymentStatus ?? null,
         opts.lastEditedAt,
         now,
@@ -534,7 +571,7 @@ export class OrderRepository extends BaseRepository {
         opts.editCutoffIso,
       );
 
-    const stmts: D1PreparedStatementLike[] = [deleteStmt, ...itemStmts, updateOrderStmt];
+    const stmts: D1PreparedStatementLike[] = [deleteStmt, ...itemStmts, updateOrderStmt, ...(opts.extraStatements ?? [])];
 
     // 4. Audit statement if provided (commits in the exact same transaction, guarded by edit conditions)
     if (opts.auditLog) {

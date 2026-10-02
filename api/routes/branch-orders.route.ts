@@ -18,14 +18,24 @@ import { D1DatabaseLike } from '../../database/types';
 import { OrderStatus, PaymentMethod } from '../../shared/enums/order.enum';
 import { createRealtimeService } from '../../backend/services/realtime';
 
+import { InventoryService } from '../../backend/services/inventory';
+import { PromotionsService } from '../../backend/services/promotions';
+import { InventoryRepository } from '../../database/repositories/inventory.repository';
+import { PromotionRepository } from '../../database/repositories/promotion.repository';
+
 function buildOrdersService(db: D1DatabaseLike): OrdersService {
+  const auditRepo = new AuditRepository(db);
+  const inventoryRepo = new InventoryRepository(db);
+  const promotionRepo = new PromotionRepository(db);
   return new OrdersService(
     new OrderRepository(db),
     new PaymentRepository(db),
     new ProductRepository(db),
-    new AuditRepository(db),
+    auditRepo,
     new BranchRepository(db),
     createRealtimeService(db),
+    new InventoryService(inventoryRepo, auditRepo),
+    new PromotionsService(promotionRepo, auditRepo),
   );
 }
 

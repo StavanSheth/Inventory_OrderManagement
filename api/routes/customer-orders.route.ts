@@ -15,16 +15,25 @@ import { handleCorsPreflight, getCorsHeaders } from '../middleware/cors';
 import { config } from '../../config/runtime';
 import { D1DatabaseLike } from '../../database/types';
 import { createRealtimeService } from '../../backend/services/realtime';
+import { InventoryService } from '../../backend/services/inventory';
+import { PromotionsService } from '../../backend/services/promotions';
+import { InventoryRepository } from '../../database/repositories/inventory.repository';
+import { PromotionRepository } from '../../database/repositories/promotion.repository';
 import { ForbiddenError } from '../../backend/errors/app-error';
 
 function buildOrdersService(db: D1DatabaseLike): OrdersService {
+  const auditRepo = new AuditRepository(db);
+  const inventoryRepo = new InventoryRepository(db);
+  const promotionRepo = new PromotionRepository(db);
   return new OrdersService(
     new OrderRepository(db),
     new PaymentRepository(db),
     new ProductRepository(db),
-    new AuditRepository(db),
+    auditRepo,
     new BranchRepository(db),
     createRealtimeService(db),
+    new InventoryService(inventoryRepo, auditRepo),
+    new PromotionsService(promotionRepo, auditRepo),
   );
 }
 
@@ -138,6 +147,8 @@ export async function handleCreateOrderRoute(
       customerUserId: userContext.userId,
       items: body.items,
       couponId: body.couponId ?? null,
+      couponCode: body.couponCode ?? null,
+      offerId: body.offerId ?? null,
     });
 
     return successResponse(result, 201, responseHeaders);

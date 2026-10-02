@@ -7,5 +7,6 @@ export * from './order.repository';
 export * from './session.repository';
 export * from './payment.repository';
 export * from './audit.repository';
+export * from './promotion.repository';
 
 

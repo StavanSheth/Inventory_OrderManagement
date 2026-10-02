@@ -174,6 +174,20 @@ export class OrderApiClient {
       },
     );
   }
+
+  /**
+   * Validate coupon code against subtotal for preview.
+   */
+  async validateCoupon(branchId: string, code: string, subtotal: number): Promise<ApiResponse<{ isValid: boolean; discount: number; reason?: string }>> {
+    return apiClient.request<{ isValid: boolean; discount: number; reason?: string }>(
+      `${API_V1_PREFIX}/branches/${branchId}/promotions/coupons/validate`,
+      {
+        method: 'POST',
+        authenticated: true,
+        body: JSON.stringify({ code, subtotal }),
+      },
+    );
+  }
 }
 
 export const orderApiClient = new OrderApiClient();
