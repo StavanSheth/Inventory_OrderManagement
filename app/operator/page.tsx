@@ -49,24 +49,25 @@ export default function OperatorPortalPage() {
   }, [authContext]);
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0b1120', color: '#f8fafc', fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ minHeight: '100vh', background: '#fff1f4', color: '#2b1233', fontFamily: 'var(--font-body-family), system-ui, sans-serif' }}>
       {/* Operator Header Bar */}
       <header
         style={{
-          borderBottom: '1px solid #1e293b',
-          background: 'rgba(15, 23, 42, 0.95)',
-          backdropFilter: 'blur(12px)',
+          borderBottom: '1px solid #f4d3dd',
+          background: 'rgba(255, 255, 255, 0.95)',
+          backdropFilter: 'blur(16px)',
           position: 'sticky',
           top: 0,
           zIndex: 100,
-          padding: '0.75rem 1.5rem',
+          padding: '0.85rem 1.5rem',
+          boxShadow: '0 10px 25px -12px rgba(120, 20, 60, 0.12)',
         }}
       >
         <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
-            <Link href="/" style={{ textDecoration: 'none', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Link href="/" style={{ textDecoration: 'none', color: '#2b1233', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <span style={{ fontSize: '1.5rem' }}>🍦</span>
-              <span style={{ fontWeight: 800, fontSize: '1.15rem', color: '#fbbf24' }}>
+              <span style={{ fontFamily: 'var(--font-display-family)', fontWeight: 700, fontSize: '1.25rem', color: '#d61c5d' }}>
                 MELT DESK
               </span>
             </Link>
@@ -74,45 +75,45 @@ export default function OperatorPortalPage() {
             <span
               style={{
                 fontSize: '0.75rem',
-                fontWeight: 700,
-                padding: '0.2rem 0.5rem',
-                borderRadius: '4px',
-                background: '#3730a3',
-                color: '#c7d2fe',
+                fontWeight: 800,
+                padding: '0.3rem 0.8rem',
+                borderRadius: '9999px',
+                background: '#ffc2d4',
+                color: '#2b1233',
                 textTransform: 'uppercase',
-                letterSpacing: '0.05em',
+                letterSpacing: '0.08em',
               }}
             >
-              Operator & Reception Portal
+              Operator & Reception Desk
             </span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            {/* Branch Switcher (Authoritative for Operator/Owner) */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#1e293b', padding: '0.35rem 0.75rem', borderRadius: '8px' }}>
-              <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Branch:</span>
+            {/* Branch Switcher */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#ffffff', border: '1px solid #f4d3dd', padding: '0.4rem 0.9rem', borderRadius: '9999px', boxShadow: '0 2px 8px -4px rgba(120,20,60,0.1)' }}>
+              <span style={{ fontSize: '0.75rem', color: '#6f5569', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 800 }}>Branch:</span>
               <select
                 value={branchId}
                 onChange={(e) => setBranchId(e.target.value)}
                 disabled={authContext?.user?.role === UserRole.BRANCH_OPERATOR && authContext.memberships.length === 1}
                 style={{
                   background: 'transparent',
-                  color: '#f8fafc',
+                  color: '#2b1233',
                   border: 'none',
                   fontSize: '0.875rem',
-                  fontWeight: 600,
+                  fontWeight: 700,
                   cursor: 'pointer',
                   outline: 'none',
                 }}
               >
                 {branches.length > 0 ? (
                   branches.map((b) => (
-                    <option key={b.id} value={b.id} style={{ background: '#1e293b', color: '#fff' }}>
+                    <option key={b.id} value={b.id} style={{ background: '#ffffff', color: '#2b1233' }}>
                       {b.name} ({b.code})
                     </option>
                   ))
                 ) : (
-                  <option value={branchId} style={{ background: '#1e293b', color: '#fff' }}>
+                  <option value={branchId} style={{ background: '#ffffff', color: '#2b1233' }}>
                     Select Branch
                   </option>
                 )}
@@ -122,13 +123,16 @@ export default function OperatorPortalPage() {
             <Link
               href="/order"
               style={{
-                padding: '0.4rem 0.75rem',
-                borderRadius: '6px',
-                border: '1px solid #334155',
-                color: '#cbd5e1',
+                padding: '0.45rem 1rem',
+                borderRadius: '9999px',
+                border: '1px solid #f4d3dd',
+                background: '#ffffff',
+                color: '#2b1233',
                 textDecoration: 'none',
-                fontSize: '0.75rem',
-                fontWeight: 500,
+                fontSize: '0.8125rem',
+                fontWeight: 700,
+                boxShadow: '0 2px 8px -4px rgba(120,20,60,0.1)',
+                transition: 'all 0.15s ease',
               }}
             >
               Customer Store &rarr;
@@ -140,9 +144,9 @@ export default function OperatorPortalPage() {
       {/* Navigation Sub-header / Tab Bar */}
       <nav
         style={{
-          borderBottom: '1px solid #1e293b',
-          background: '#0f172a',
-          padding: '0 1.5rem',
+          borderBottom: '1px solid #f4d3dd',
+          background: '#ffffff',
+          padding: '0.5rem 1.5rem',
         }}
       >
         <div
@@ -157,17 +161,18 @@ export default function OperatorPortalPage() {
             type="button"
             onClick={() => setActiveTab('orders')}
             style={{
-              padding: '0.75rem 1.25rem',
-              background: 'transparent',
-              border: 'none',
-              borderBottom: activeTab === 'orders' ? '2px solid #f59e0b' : '2px solid transparent',
-              color: activeTab === 'orders' ? '#fbbf24' : '#94a3b8',
-              fontWeight: activeTab === 'orders' ? 700 : 500,
+              padding: '0.55rem 1.15rem',
+              background: activeTab === 'orders' ? '#d61c5d' : 'transparent',
+              border: activeTab === 'orders' ? 'none' : '1px solid transparent',
+              borderRadius: '9999px',
+              color: activeTab === 'orders' ? '#ffffff' : '#6f5569',
+              fontWeight: 800,
               fontSize: '0.875rem',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: '0.5rem',
+              boxShadow: activeTab === 'orders' ? '0 3px 0 #a3134a' : 'none',
               transition: 'all 0.15s ease',
             }}
           >
@@ -179,17 +184,18 @@ export default function OperatorPortalPage() {
             type="button"
             onClick={() => setActiveTab('inventory')}
             style={{
-              padding: '0.75rem 1.25rem',
-              background: 'transparent',
-              border: 'none',
-              borderBottom: activeTab === 'inventory' ? '2px solid #f59e0b' : '2px solid transparent',
-              color: activeTab === 'inventory' ? '#fbbf24' : '#94a3b8',
-              fontWeight: activeTab === 'inventory' ? 700 : 500,
+              padding: '0.55rem 1.15rem',
+              background: activeTab === 'inventory' ? '#d61c5d' : 'transparent',
+              border: activeTab === 'inventory' ? 'none' : '1px solid transparent',
+              borderRadius: '9999px',
+              color: activeTab === 'inventory' ? '#ffffff' : '#6f5569',
+              fontWeight: 800,
               fontSize: '0.875rem',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: '0.5rem',
+              boxShadow: activeTab === 'inventory' ? '0 3px 0 #a3134a' : 'none',
               transition: 'all 0.15s ease',
             }}
           >
@@ -201,17 +207,18 @@ export default function OperatorPortalPage() {
             type="button"
             onClick={() => setActiveTab('promotions')}
             style={{
-              padding: '0.75rem 1.25rem',
-              background: 'transparent',
-              border: 'none',
-              borderBottom: activeTab === 'promotions' ? '2px solid #f59e0b' : '2px solid transparent',
-              color: activeTab === 'promotions' ? '#fbbf24' : '#94a3b8',
-              fontWeight: activeTab === 'promotions' ? 700 : 500,
+              padding: '0.55rem 1.15rem',
+              background: activeTab === 'promotions' ? '#d61c5d' : 'transparent',
+              border: activeTab === 'promotions' ? 'none' : '1px solid transparent',
+              borderRadius: '9999px',
+              color: activeTab === 'promotions' ? '#ffffff' : '#6f5569',
+              fontWeight: 800,
               fontSize: '0.875rem',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: '0.5rem',
+              boxShadow: activeTab === 'promotions' ? '0 3px 0 #a3134a' : 'none',
               transition: 'all 0.15s ease',
             }}
           >
@@ -230,7 +237,7 @@ export default function OperatorPortalPage() {
             {activeTab === 'promotions' && <OperatorPromotionsView branchId={branchId} />}
           </>
         ) : (
-          <div style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>Loading branch context...</div>
+          <div style={{ textAlign: 'center', padding: '3rem', color: '#6f5569', fontWeight: 700 }}>Loading branch context...</div>
         )}
       </main>
     </div>

@@ -65,52 +65,53 @@ export default function CustomerOrderPage() {
   const totalCartCount = cartItems.reduce((sum, it) => sum + it.quantity, 0);
 
   return (
-    <div style={{ minHeight: '100vh', background: '#090d16', color: '#f8fafc', fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ minHeight: '100vh', background: '#fff1f4', color: '#2b1233', fontFamily: 'var(--font-body-family), system-ui, sans-serif' }}>
       {/* Top Application Bar */}
       <header
         style={{
-          borderBottom: '1px solid #1e293b',
-          background: 'rgba(15, 23, 42, 0.85)',
-          backdropFilter: 'blur(12px)',
+          borderBottom: '1px solid #f4d3dd',
+          background: 'rgba(255, 255, 255, 0.95)',
+          backdropFilter: 'blur(16px)',
           position: 'sticky',
           top: 0,
           zIndex: 100,
-          padding: '0.75rem 1.5rem',
+          padding: '0.85rem 1.5rem',
+          boxShadow: '0 10px 25px -12px rgba(120, 20, 60, 0.12)',
         }}
       >
         <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-            <Link href="/" style={{ textDecoration: 'none', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Link href="/" style={{ textDecoration: 'none', color: '#2b1233', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <span style={{ fontSize: '1.5rem' }}>🍦</span>
-              <span style={{ fontWeight: 800, fontSize: '1.25rem', letterSpacing: '-0.02em', color: '#fbbf24' }}>
+              <span style={{ fontFamily: 'var(--font-display-family)', fontWeight: 700, fontSize: '1.35rem', letterSpacing: '-0.02em', color: '#d61c5d' }}>
                 MELT
               </span>
             </Link>
 
             {/* Branch Selector */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#1e293b', padding: '0.35rem 0.75rem', borderRadius: '8px' }}>
-              <span style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Branch:</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#ffffff', border: '1px solid #f4d3dd', padding: '0.4rem 0.9rem', borderRadius: '9999px', boxShadow: '0 2px 8px -4px rgba(120,20,60,0.1)' }}>
+              <span style={{ fontSize: '0.75rem', color: '#6f5569', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 800 }}>Branch:</span>
               <select
                 value={selectedBranchId}
                 onChange={(e) => setSelectedBranchId(e.target.value)}
                 style={{
                   background: 'transparent',
-                  color: '#f8fafc',
+                  color: '#2b1233',
                   border: 'none',
                   fontSize: '0.875rem',
-                  fontWeight: 600,
+                  fontWeight: 700,
                   cursor: 'pointer',
                   outline: 'none',
                 }}
               >
                 {branches.length > 0 ? (
                   branches.map((b) => (
-                    <option key={b.id} value={b.id} style={{ background: '#1e293b', color: '#fff' }}>
+                    <option key={b.id} value={b.id} style={{ background: '#ffffff', color: '#2b1233' }}>
                       {b.name} ({b.code})
                     </option>
                   ))
                 ) : (
-                  <option value={selectedBranchId} style={{ background: '#1e293b', color: '#fff' }}>
+                  <option value={selectedBranchId} style={{ background: '#ffffff', color: '#2b1233' }}>
                     Select Branch
                   </option>
                 )}
@@ -123,14 +124,16 @@ export default function CustomerOrderPage() {
             <button
               onClick={() => setActiveTab('catalog')}
               style={{
-                padding: '0.5rem 0.85rem',
-                borderRadius: '6px',
+                padding: '0.5rem 1rem',
+                borderRadius: '9999px',
                 border: 'none',
-                background: activeTab === 'catalog' ? '#2563eb' : 'transparent',
-                color: activeTab === 'catalog' ? '#ffffff' : '#94a3b8',
-                fontWeight: 600,
+                background: activeTab === 'catalog' ? '#d61c5d' : 'transparent',
+                color: activeTab === 'catalog' ? '#ffffff' : '#6f5569',
+                fontWeight: 800,
                 fontSize: '0.875rem',
                 cursor: 'pointer',
+                boxShadow: activeTab === 'catalog' ? '0 3px 0 #a3134a' : 'none',
+                transition: 'all 0.15s ease',
               }}
             >
               Catalog
@@ -139,29 +142,32 @@ export default function CustomerOrderPage() {
             <button
               onClick={() => setActiveTab('cart')}
               style={{
-                padding: '0.5rem 0.85rem',
-                borderRadius: '6px',
+                padding: '0.5rem 1rem',
+                borderRadius: '9999px',
                 border: 'none',
-                background: activeTab === 'cart' ? '#2563eb' : 'transparent',
-                color: activeTab === 'cart' ? '#ffffff' : '#94a3b8',
-                fontWeight: 600,
+                background: activeTab === 'cart' ? '#d61c5d' : 'transparent',
+                color: activeTab === 'cart' ? '#ffffff' : '#6f5569',
+                fontWeight: 800,
                 fontSize: '0.875rem',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.4rem',
+                boxShadow: activeTab === 'cart' ? '0 3px 0 #a3134a' : 'none',
+                transition: 'all 0.15s ease',
               }}
             >
               <span>Cart</span>
               {totalCartCount > 0 && (
                 <span
                   style={{
-                    background: '#fbbf24',
-                    color: '#0f172a',
+                    background: '#ffcf4d',
+                    color: '#2b1233',
                     fontSize: '0.75rem',
-                    fontWeight: 800,
+                    fontWeight: 900,
                     borderRadius: '9999px',
-                    padding: '0.1rem 0.4rem',
+                    padding: '0.1rem 0.45rem',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
                   }}
                 >
                   {totalCartCount}
@@ -173,14 +179,16 @@ export default function CustomerOrderPage() {
               <button
                 onClick={() => setActiveTab('status')}
                 style={{
-                  padding: '0.5rem 0.85rem',
-                  borderRadius: '6px',
+                  padding: '0.5rem 1rem',
+                  borderRadius: '9999px',
                   border: 'none',
-                  background: activeTab === 'status' ? '#2563eb' : 'transparent',
-                  color: activeTab === 'status' ? '#ffffff' : '#34d399',
-                  fontWeight: 600,
+                  background: activeTab === 'status' ? '#d61c5d' : 'transparent',
+                  color: activeTab === 'status' ? '#ffffff' : '#d61c5d',
+                  fontWeight: 800,
                   fontSize: '0.875rem',
                   cursor: 'pointer',
+                  boxShadow: activeTab === 'status' ? '0 3px 0 #a3134a' : 'none',
+                  transition: 'all 0.15s ease',
                 }}
               >
                 Track Order
@@ -190,14 +198,16 @@ export default function CustomerOrderPage() {
             <button
               onClick={() => setActiveTab('history')}
               style={{
-                padding: '0.5rem 0.85rem',
-                borderRadius: '6px',
+                padding: '0.5rem 1rem',
+                borderRadius: '9999px',
                 border: 'none',
-                background: activeTab === 'history' ? '#2563eb' : 'transparent',
-                color: activeTab === 'history' ? '#ffffff' : '#94a3b8',
-                fontWeight: 600,
+                background: activeTab === 'history' ? '#d61c5d' : 'transparent',
+                color: activeTab === 'history' ? '#ffffff' : '#6f5569',
+                fontWeight: 800,
                 fontSize: '0.875rem',
                 cursor: 'pointer',
+                boxShadow: activeTab === 'history' ? '0 3px 0 #a3134a' : 'none',
+                transition: 'all 0.15s ease',
               }}
             >
               My Orders
@@ -207,13 +217,16 @@ export default function CustomerOrderPage() {
               href="/operator"
               style={{
                 marginLeft: '0.75rem',
-                padding: '0.4rem 0.75rem',
-                borderRadius: '6px',
-                border: '1px solid #334155',
-                color: '#cbd5e1',
+                padding: '0.45rem 0.95rem',
+                borderRadius: '9999px',
+                border: '1px solid #f4d3dd',
+                background: '#ffffff',
+                color: '#2b1233',
                 textDecoration: 'none',
-                fontSize: '0.75rem',
-                fontWeight: 500,
+                fontSize: '0.8125rem',
+                fontWeight: 700,
+                boxShadow: '0 2px 8px -4px rgba(120,20,60,0.1)',
+                transition: 'all 0.15s ease',
               }}
             >
               Operator Desk &rarr;

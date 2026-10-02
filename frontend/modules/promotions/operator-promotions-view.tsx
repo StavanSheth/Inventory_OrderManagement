@@ -192,38 +192,38 @@ export const OperatorPromotionsView: React.FC<OperatorPromotionsViewProps> = ({ 
   return (
     <div className="space-y-6">
       {/* Header and Tabs */}
-      <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-        <div className="flex space-x-2">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#f4d3dd] pb-4">
+        <div className="flex items-center gap-2">
           <button
             onClick={() => setActiveTab('coupons')}
-            className={`px-4 py-2 text-sm font-semibold rounded-lg transition ${
+            className={`px-4 py-2 text-xs md:text-sm font-bold rounded-full transition ${
               activeTab === 'coupons'
-                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                ? 'bg-[#d61c5d] text-white shadow-[0_3px_0_#a3134a]'
+                : 'bg-white text-[#6f5569] border border-[#f4d3dd] hover:bg-[#fff1f4] hover:text-[#2b1233]'
             }`}
           >
             Branch Coupons ({coupons.length})
           </button>
           <button
             onClick={() => setActiveTab('offers')}
-            className={`px-4 py-2 text-sm font-semibold rounded-lg transition ${
+            className={`px-4 py-2 text-xs md:text-sm font-bold rounded-full transition ${
               activeTab === 'offers'
-                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                ? 'bg-[#d61c5d] text-white shadow-[0_3px_0_#a3134a]'
+                : 'bg-white text-[#6f5569] border border-[#f4d3dd] hover:bg-[#fff1f4] hover:text-[#2b1233]'
             }`}
           >
             Branch Offers ({offers.length})
           </button>
         </div>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center gap-2.5">
           {activeTab === 'coupons' ? (
             <button
               onClick={() => {
                 setShowCouponModal(true);
                 setModalError(null);
               }}
-              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-lg transition shadow"
+              className="px-4 py-2 bg-[#d61c5d] hover:bg-[#b8144e] active:translate-y-0.5 text-white font-bold text-xs rounded-full transition shadow-[0_3px_0_#a3134a]"
             >
               + Create Coupon
             </button>
@@ -233,7 +233,7 @@ export const OperatorPromotionsView: React.FC<OperatorPromotionsViewProps> = ({ 
                 setShowOfferModal(true);
                 setModalError(null);
               }}
-              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-lg transition shadow"
+              className="px-4 py-2 bg-[#d61c5d] hover:bg-[#b8144e] active:translate-y-0.5 text-white font-bold text-xs rounded-full transition shadow-[0_3px_0_#a3134a]"
             >
               + Create Offer
             </button>
@@ -242,7 +242,7 @@ export const OperatorPromotionsView: React.FC<OperatorPromotionsViewProps> = ({ 
           <button
             onClick={fetchPromotions}
             disabled={loading}
-            className="text-xs text-slate-400 hover:text-white"
+            className="px-3.5 py-2 bg-white border border-[#f4d3dd] text-[#6f5569] hover:text-[#2b1233] hover:bg-[#fff1f4] rounded-full text-xs font-semibold transition"
           >
             ↻ Refresh
           </button>
@@ -250,57 +250,59 @@ export const OperatorPromotionsView: React.FC<OperatorPromotionsViewProps> = ({ 
       </div>
 
       {error && (
-        <div className="p-4 bg-red-950/40 border border-red-800 rounded-lg text-red-300 text-sm">
+        <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-rose-700 text-sm">
           {error}
         </div>
       )}
 
       {/* Coupons View */}
       {activeTab === 'coupons' && (
-        <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-          <table className="w-full text-left text-sm text-slate-300">
-            <thead className="bg-slate-950/80 text-xs uppercase text-slate-400 border-b border-slate-800">
+        <div className="bg-white border border-[#f4d3dd] rounded-3xl overflow-hidden shadow-[0_10px_30px_-15px_rgba(120,20,60,0.1)]">
+          <table className="w-full text-left text-sm text-[#2b1233]">
+            <thead className="bg-[#fff1f4] text-xs uppercase font-extrabold text-[#6f5569] border-b border-[#f4d3dd]">
               <tr>
-                <th className="px-6 py-3">Code</th>
-                <th className="px-6 py-3">Name</th>
-                <th className="px-6 py-3">Discount</th>
-                <th className="px-6 py-3">Min Order</th>
-                <th className="px-6 py-3">Usage Count / Limit</th>
-                <th className="px-6 py-3">Status</th>
-                <th className="px-6 py-3 text-right">Actions</th>
+                <th className="px-6 py-3.5">Code</th>
+                <th className="px-6 py-3.5">Name</th>
+                <th className="px-6 py-3.5">Discount</th>
+                <th className="px-6 py-3.5">Min Order</th>
+                <th className="px-6 py-3.5">Usage / Limit</th>
+                <th className="px-6 py-3.5">Status</th>
+                <th className="px-6 py-3.5 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60">
+            <tbody className="divide-y divide-[#f4d3dd]/60">
               {coupons.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-slate-500">
+                  <td colSpan={7} className="px-6 py-10 text-center text-[#6f5569]">
                     No coupons created for this branch yet.
                   </td>
                 </tr>
               ) : (
                 coupons.map((c) => (
-                  <tr key={c.id} className="hover:bg-slate-800/30 transition">
-                    <td className="px-6 py-4 font-mono font-bold text-amber-400">
-                      <span className="px-2 py-0.5 rounded bg-amber-950/80 border border-amber-800/80">
+                  <tr key={c.id} className="hover:bg-[#fff1f4]/40 transition">
+                    <td className="px-6 py-4 font-mono font-bold text-[#d61c5d]">
+                      <span className="px-2.5 py-1 rounded-full bg-[#ffc2d4]/40 border border-[#f4d3dd]">
                         {c.code}
                       </span>
                     </td>
-                    <td className="px-6 py-4 font-semibold text-white">{c.name}</td>
-                    <td className="px-6 py-4">
-                      {c.discount_type === 'PERCENTAGE' ? `${c.discount_value}%` : `₹${c.discount_value}`}
+                    <td className="px-6 py-4 font-semibold text-[#2b1233]">{c.name}</td>
+                    <td className="px-6 py-4 text-[#6f5569]">
+                      <span className="font-bold text-[#2b1233]">
+                        {c.discount_type === 'PERCENTAGE' ? `${c.discount_value}%` : `₹${c.discount_value}`}
+                      </span>
                       {c.max_discount && ` (Max ₹${c.max_discount})`}
                     </td>
-                    <td className="px-6 py-4 text-slate-400">₹{c.minimum_order_value}</td>
-                    <td className="px-6 py-4 font-mono text-xs text-slate-300">
+                    <td className="px-6 py-4 text-[#6f5569]">₹{c.minimum_order_value}</td>
+                    <td className="px-6 py-4 font-mono text-xs text-[#6f5569]">
                       {c.usage_count} / {c.total_usage_limit ?? '∞'}
                     </td>
                     <td className="px-6 py-4">
                       {c.active ? (
-                        <span className="px-2 py-0.5 text-xs font-semibold rounded bg-emerald-950/80 border border-emerald-800 text-emerald-300">
+                        <span className="px-2.5 py-1 text-xs font-bold rounded-full bg-[#bfe3a6] text-[#2b1233]">
                           ACTIVE
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 text-xs font-semibold rounded bg-slate-800 text-slate-400">
+                        <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-[#f4d3dd]/50 text-[#6f5569]">
                           INACTIVE
                         </span>
                       )}
@@ -309,7 +311,7 @@ export const OperatorPromotionsView: React.FC<OperatorPromotionsViewProps> = ({ 
                       {c.active && (
                         <button
                           onClick={() => handleDeactivateCoupon(c.id)}
-                          className="px-2.5 py-1 bg-rose-950/80 hover:bg-rose-900 border border-rose-800 text-rose-300 text-xs font-semibold rounded transition"
+                          className="px-3 py-1 bg-white hover:bg-rose-50 border border-rose-200 text-rose-600 text-xs font-bold rounded-full transition"
                         >
                           Deactivate
                         </button>
@@ -325,46 +327,46 @@ export const OperatorPromotionsView: React.FC<OperatorPromotionsViewProps> = ({ 
 
       {/* Offers View */}
       {activeTab === 'offers' && (
-        <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-          <table className="w-full text-left text-sm text-slate-300">
-            <thead className="bg-slate-950/80 text-xs uppercase text-slate-400 border-b border-slate-800">
+        <div className="bg-white border border-[#f4d3dd] rounded-3xl overflow-hidden shadow-[0_10px_30px_-15px_rgba(120,20,60,0.1)]">
+          <table className="w-full text-left text-sm text-[#2b1233]">
+            <thead className="bg-[#fff1f4] text-xs uppercase font-extrabold text-[#6f5569] border-b border-[#f4d3dd]">
               <tr>
-                <th className="px-6 py-3">Offer Name</th>
-                <th className="px-6 py-3">Type</th>
-                <th className="px-6 py-3">Configuration</th>
-                <th className="px-6 py-3">Usage Count / Limit</th>
-                <th className="px-6 py-3">Status</th>
-                <th className="px-6 py-3 text-right">Actions</th>
+                <th className="px-6 py-3.5">Offer Name</th>
+                <th className="px-6 py-3.5">Type</th>
+                <th className="px-6 py-3.5">Configuration</th>
+                <th className="px-6 py-3.5">Usage / Limit</th>
+                <th className="px-6 py-3.5">Status</th>
+                <th className="px-6 py-3.5 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60">
+            <tbody className="divide-y divide-[#f4d3dd]/60">
               {offers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
+                  <td colSpan={6} className="px-6 py-10 text-center text-[#6f5569]">
                     No offers configured for this branch yet.
                   </td>
                 </tr>
               ) : (
                 offers.map((o) => (
-                  <tr key={o.id} className="hover:bg-slate-800/30 transition">
-                    <td className="px-6 py-4 font-semibold text-white">
+                  <tr key={o.id} className="hover:bg-[#fff1f4]/40 transition">
+                    <td className="px-6 py-4 font-semibold text-[#2b1233]">
                       <div>{o.name}</div>
-                      {o.description && <div className="text-xs text-slate-400 font-normal">{o.description}</div>}
+                      {o.description && <div className="text-xs text-[#6f5569] font-normal">{o.description}</div>}
                     </td>
-                    <td className="px-6 py-4 font-mono text-xs text-amber-300">{o.offer_type}</td>
-                    <td className="px-6 py-4 font-mono text-xs text-slate-400 max-w-xs truncate">
+                    <td className="px-6 py-4 font-mono text-xs font-bold text-[#d61c5d]">{o.offer_type}</td>
+                    <td className="px-6 py-4 font-mono text-xs text-[#6f5569] max-w-xs truncate">
                       {o.configuration_json}
                     </td>
-                    <td className="px-6 py-4 font-mono text-xs text-slate-300">
+                    <td className="px-6 py-4 font-mono text-xs text-[#6f5569]">
                       {o.usage_count} / {o.usage_limit ?? '∞'}
                     </td>
                     <td className="px-6 py-4">
                       {o.active ? (
-                        <span className="px-2 py-0.5 text-xs font-semibold rounded bg-emerald-950/80 border border-emerald-800 text-emerald-300">
+                        <span className="px-2.5 py-1 text-xs font-bold rounded-full bg-[#bfe3a6] text-[#2b1233]">
                           ACTIVE
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 text-xs font-semibold rounded bg-slate-800 text-slate-400">
+                        <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-[#f4d3dd]/50 text-[#6f5569]">
                           INACTIVE
                         </span>
                       )}
@@ -373,7 +375,7 @@ export const OperatorPromotionsView: React.FC<OperatorPromotionsViewProps> = ({ 
                       {o.active && (
                         <button
                           onClick={() => handleDeactivateOffer(o.id)}
-                          className="px-2.5 py-1 bg-rose-950/80 hover:bg-rose-900 border border-rose-800 text-rose-300 text-xs font-semibold rounded transition"
+                          className="px-3 py-1 bg-white hover:bg-rose-50 border border-rose-200 text-rose-600 text-xs font-bold rounded-full transition"
                         >
                           Deactivate
                         </button>
@@ -389,12 +391,12 @@ export const OperatorPromotionsView: React.FC<OperatorPromotionsViewProps> = ({ 
 
       {/* Create Coupon Modal */}
       {showCouponModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-lg w-full shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-bold text-white">Create Branch Coupon</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#2b1233]/45 backdrop-blur-sm p-4">
+          <div className="bg-white border border-[#f4d3dd] rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-bold font-display text-[#2b1233]">Create Branch Coupon</h3>
 
             {modalError && (
-              <div className="p-3 bg-red-950/50 border border-red-800 rounded-lg text-xs text-red-300">
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-700">
                 {modalError}
               </div>
             )}
@@ -402,43 +404,43 @@ export const OperatorPromotionsView: React.FC<OperatorPromotionsViewProps> = ({ 
             <form onSubmit={handleCreateCoupon} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">Coupon Code *</label>
+                  <label className="block text-xs font-bold text-[#6f5569] mb-1">Coupon Code *</label>
                   <input
                     type="text"
                     required
                     placeholder="e.g. MELT20"
                     value={couponCode}
                     onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white font-mono text-sm uppercase focus:outline-none focus:border-amber-500"
+                    className="w-full px-3.5 py-2.5 bg-[#fff1f4] border border-[#f4d3dd] rounded-2xl text-[#2b1233] font-mono text-sm uppercase focus:outline-none focus:border-[#d61c5d] focus:bg-white transition"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">Coupon Name *</label>
+                  <label className="block text-xs font-bold text-[#6f5569] mb-1">Coupon Name *</label>
                   <input
                     type="text"
                     required
                     placeholder="e.g. 20% Weekend Promo"
                     value={couponName}
                     onChange={(e) => setCouponName(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white text-sm focus:outline-none focus:border-amber-500"
+                    className="w-full px-3.5 py-2.5 bg-[#fff1f4] border border-[#f4d3dd] rounded-2xl text-[#2b1233] text-sm focus:outline-none focus:border-[#d61c5d] focus:bg-white transition"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">Discount Type</label>
+                  <label className="block text-xs font-bold text-[#6f5569] mb-1">Discount Type</label>
                   <select
                     value={couponDiscountType}
                     onChange={(e) => setCouponDiscountType(e.target.value as DiscountType)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white text-sm focus:outline-none focus:border-amber-500"
+                    className="w-full px-3.5 py-2.5 bg-[#fff1f4] border border-[#f4d3dd] rounded-2xl text-[#2b1233] text-sm focus:outline-none focus:border-[#d61c5d] focus:bg-white transition"
                   >
                     <option value={DiscountType.PERCENTAGE}>Percentage (%)</option>
                     <option value={DiscountType.FIXED}>Fixed (₹)</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">Discount Value *</label>
+                  <label className="block text-xs font-bold text-[#6f5569] mb-1">Discount Value *</label>
                   <input
                     type="number"
                     step="any"
@@ -446,80 +448,80 @@ export const OperatorPromotionsView: React.FC<OperatorPromotionsViewProps> = ({ 
                     placeholder={couponDiscountType === DiscountType.PERCENTAGE ? 'e.g. 20' : 'e.g. 50'}
                     value={couponDiscountValue}
                     onChange={(e) => setCouponDiscountValue(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white text-sm focus:outline-none focus:border-amber-500"
+                    className="w-full px-3.5 py-2.5 bg-[#fff1f4] border border-[#f4d3dd] rounded-2xl text-[#2b1233] text-sm focus:outline-none focus:border-[#d61c5d] focus:bg-white transition"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">Max Cap (₹)</label>
+                  <label className="block text-xs font-bold text-[#6f5569] mb-1">Max Cap (₹)</label>
                   <input
                     type="number"
                     placeholder="Optional"
                     value={couponMaxDiscount}
                     onChange={(e) => setCouponMaxDiscount(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white text-sm focus:outline-none focus:border-amber-500"
+                    className="w-full px-3.5 py-2.5 bg-[#fff1f4] border border-[#f4d3dd] rounded-2xl text-[#2b1233] text-sm focus:outline-none focus:border-[#d61c5d] focus:bg-white transition"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">Min Order (₹)</label>
+                  <label className="block text-xs font-bold text-[#6f5569] mb-1">Min Order (₹)</label>
                   <input
                     type="number"
                     value={couponMinOrder}
                     onChange={(e) => setCouponMinOrder(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white text-sm focus:outline-none focus:border-amber-500"
+                    className="w-full px-3.5 py-2.5 bg-[#fff1f4] border border-[#f4d3dd] rounded-2xl text-[#2b1233] text-sm focus:outline-none focus:border-[#d61c5d] focus:bg-white transition"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">Total Limit</label>
+                  <label className="block text-xs font-bold text-[#6f5569] mb-1">Total Limit</label>
                   <input
                     type="number"
                     placeholder="Unlimited"
                     value={couponTotalLimit}
                     onChange={(e) => setCouponTotalLimit(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white text-sm focus:outline-none focus:border-amber-500"
+                    className="w-full px-3.5 py-2.5 bg-[#fff1f4] border border-[#f4d3dd] rounded-2xl text-[#2b1233] text-sm focus:outline-none focus:border-[#d61c5d] focus:bg-white transition"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">Per User Limit</label>
+                  <label className="block text-xs font-bold text-[#6f5569] mb-1">Per User Limit</label>
                   <input
                     type="number"
                     placeholder="Unlimited"
                     value={couponUserLimit}
                     onChange={(e) => setCouponUserLimit(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white text-sm focus:outline-none focus:border-amber-500"
+                    className="w-full px-3.5 py-2.5 bg-[#fff1f4] border border-[#f4d3dd] rounded-2xl text-[#2b1233] text-sm focus:outline-none focus:border-[#d61c5d] focus:bg-white transition"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">Daily Limit</label>
+                  <label className="block text-xs font-bold text-[#6f5569] mb-1">Daily Limit</label>
                   <input
                     type="number"
                     placeholder="Unlimited"
                     value={couponDailyLimit}
                     onChange={(e) => setCouponDailyLimit(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white text-sm focus:outline-none focus:border-amber-500"
+                    className="w-full px-3.5 py-2.5 bg-[#fff1f4] border border-[#f4d3dd] rounded-2xl text-[#2b1233] text-sm focus:outline-none focus:border-[#d61c5d] focus:bg-white transition"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">Start Date</label>
+                  <label className="block text-xs font-bold text-[#6f5569] mb-1">Start Date</label>
                   <input
                     type="date"
                     value={couponStartAt}
                     onChange={(e) => setCouponStartAt(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white text-sm focus:outline-none focus:border-amber-500"
+                    className="w-full px-3.5 py-2.5 bg-[#fff1f4] border border-[#f4d3dd] rounded-2xl text-[#2b1233] text-sm focus:outline-none focus:border-[#d61c5d] focus:bg-white transition"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">End Date</label>
+                  <label className="block text-xs font-bold text-[#6f5569] mb-1">End Date</label>
                   <input
                     type="date"
                     value={couponEndAt}
                     onChange={(e) => setCouponEndAt(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white text-sm focus:outline-none focus:border-amber-500"
+                    className="w-full px-3.5 py-2.5 bg-[#fff1f4] border border-[#f4d3dd] rounded-2xl text-[#2b1233] text-sm focus:outline-none focus:border-[#d61c5d] focus:bg-white transition"
                   />
                 </div>
               </div>
@@ -529,14 +531,14 @@ export const OperatorPromotionsView: React.FC<OperatorPromotionsViewProps> = ({ 
                   type="button"
                   onClick={() => setShowCouponModal(false)}
                   disabled={modalSubmitting}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg transition"
+                  className="px-4 py-2 bg-white border border-[#f4d3dd] hover:bg-[#fff1f4] text-[#6f5569] text-xs font-bold rounded-full transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={modalSubmitting}
-                  className="px-4 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 text-xs font-bold rounded-lg transition"
+                  className="px-5 py-2 bg-[#d61c5d] hover:bg-[#b8144e] disabled:opacity-50 text-white text-xs font-bold rounded-full transition shadow-[0_3px_0_#a3134a]"
                 >
                   {modalSubmitting ? 'Creating...' : 'Create Coupon'}
                 </button>
@@ -548,35 +550,35 @@ export const OperatorPromotionsView: React.FC<OperatorPromotionsViewProps> = ({ 
 
       {/* Create Offer Modal */}
       {showOfferModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-md w-full shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold text-white">Create Branch Offer</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#2b1233]/45 backdrop-blur-sm p-4">
+          <div className="bg-white border border-[#f4d3dd] rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
+            <h3 className="text-lg font-bold font-display text-[#2b1233]">Create Branch Offer</h3>
 
             {modalError && (
-              <div className="p-3 bg-red-950/50 border border-red-800 rounded-lg text-xs text-red-300">
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-700">
                 {modalError}
               </div>
             )}
 
             <form onSubmit={handleCreateOffer} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">Offer Name *</label>
+                <label className="block text-xs font-bold text-[#6f5569] mb-1">Offer Name *</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. Summer Scoop Deal"
                   value={offerName}
                   onChange={(e) => setOfferName(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white text-sm focus:outline-none focus:border-amber-500"
+                  className="w-full px-3.5 py-2.5 bg-[#fff1f4] border border-[#f4d3dd] rounded-2xl text-[#2b1233] text-sm focus:outline-none focus:border-[#d61c5d] focus:bg-white transition"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">Offer Type</label>
+                <label className="block text-xs font-bold text-[#6f5569] mb-1">Offer Type</label>
                 <select
                   value={offerType}
                   onChange={(e) => setOfferType(e.target.value as OfferType)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white text-sm focus:outline-none focus:border-amber-500"
+                  className="w-full px-3.5 py-2.5 bg-[#fff1f4] border border-[#f4d3dd] rounded-2xl text-[#2b1233] text-sm focus:outline-none focus:border-[#d61c5d] focus:bg-white transition"
                 >
                   <option value={OfferType.FLAT}>Flat Discount</option>
                   <option value={OfferType.COMBO}>Combo Deal</option>
@@ -586,35 +588,35 @@ export const OperatorPromotionsView: React.FC<OperatorPromotionsViewProps> = ({ 
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">Discount Type</label>
+                  <label className="block text-xs font-bold text-[#6f5569] mb-1">Discount Type</label>
                   <select
                     value={offerConfigType}
                     onChange={(e) => setOfferConfigType(e.target.value as 'PERCENTAGE' | 'FIXED')}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white text-sm focus:outline-none focus:border-amber-500"
+                    className="w-full px-3.5 py-2.5 bg-[#fff1f4] border border-[#f4d3dd] rounded-2xl text-[#2b1233] text-sm focus:outline-none focus:border-[#d61c5d] focus:bg-white transition"
                   >
                     <option value="PERCENTAGE">Percentage (%)</option>
                     <option value="FIXED">Fixed (₹)</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">Discount Value</label>
+                  <label className="block text-xs font-bold text-[#6f5569] mb-1">Discount Value</label>
                   <input
                     type="number"
                     value={offerConfigVal}
                     onChange={(e) => setOfferConfigVal(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white text-sm focus:outline-none focus:border-amber-500"
+                    className="w-full px-3.5 py-2.5 bg-[#fff1f4] border border-[#f4d3dd] rounded-2xl text-[#2b1233] text-sm focus:outline-none focus:border-[#d61c5d] focus:bg-white transition"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">Description</label>
+                <label className="block text-xs font-bold text-[#6f5569] mb-1">Description</label>
                 <input
                   type="text"
                   placeholder="Optional details"
                   value={offerDescription}
                   onChange={(e) => setOfferDescription(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white text-sm focus:outline-none focus:border-amber-500"
+                  className="w-full px-3.5 py-2.5 bg-[#fff1f4] border border-[#f4d3dd] rounded-2xl text-[#2b1233] text-sm focus:outline-none focus:border-[#d61c5d] focus:bg-white transition"
                 />
               </div>
 
@@ -623,14 +625,14 @@ export const OperatorPromotionsView: React.FC<OperatorPromotionsViewProps> = ({ 
                   type="button"
                   onClick={() => setShowOfferModal(false)}
                   disabled={modalSubmitting}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg transition"
+                  className="px-4 py-2 bg-white border border-[#f4d3dd] hover:bg-[#fff1f4] text-[#6f5569] text-xs font-bold rounded-full transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={modalSubmitting}
-                  className="px-4 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 text-xs font-bold rounded-lg transition"
+                  className="px-5 py-2 bg-[#d61c5d] hover:bg-[#b8144e] disabled:opacity-50 text-white text-xs font-bold rounded-full transition shadow-[0_3px_0_#a3134a]"
                 >
                   {modalSubmitting ? 'Creating...' : 'Create Offer'}
                 </button>
@@ -642,3 +644,4 @@ export const OperatorPromotionsView: React.FC<OperatorPromotionsViewProps> = ({ 
     </div>
   );
 };
+

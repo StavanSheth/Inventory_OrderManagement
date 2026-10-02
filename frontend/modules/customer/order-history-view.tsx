@@ -48,46 +48,45 @@ export const OrderHistoryView: React.FC<OrderHistoryViewProps> = ({
   const getStatusBadge = (status: OrderStatus) => {
     switch (status) {
       case OrderStatus.PENDING:
-        return { label: 'Pending Payment', bg: '#fef3c7', text: '#92400e' };
+        return { label: 'Pending Payment', bg: '#ffcf4d', text: '#2b1233' };
       case OrderStatus.CONFIRMED:
-        return { label: 'Confirmed', bg: '#dcfce7', text: '#15803d' };
+        return { label: 'Confirmed', bg: '#bfe3a6', text: '#2b1233' };
       case OrderStatus.PREPARING:
-        return { label: 'Preparing', bg: '#fef9c3', text: '#854d0e' };
+        return { label: 'Preparing', bg: '#ecd3b4', text: '#2b1233' };
       case OrderStatus.READY:
-        return { label: 'Ready for Pickup', bg: '#d1fae5', text: '#065f46' };
+        return { label: 'Ready for Pickup', bg: '#a9bfff', text: '#2b1233' };
       case OrderStatus.COMPLETED:
-        return { label: 'Completed', bg: '#f3f4f6', text: '#374151' };
+        return { label: 'Completed', bg: '#ffc2d4', text: '#2b1233' };
       case OrderStatus.EXPIRED:
-        return { label: 'Expired', bg: '#fee2e2', text: '#991b1b' };
       case OrderStatus.CANCELLED:
-        return { label: 'Cancelled', bg: '#fee2e2', text: '#b91c1c' };
+        return { label: 'Cancelled', bg: '#fecdd3', text: '#9f1239' };
       default:
-        return { label: status, bg: '#f3f4f6', text: '#4b5563' };
+        return { label: status, bg: '#fff1f4', text: '#6f5569' };
     }
   };
 
   const getPaymentStatusBadge = (status: PaymentStatus) => {
     switch (status) {
       case PaymentStatus.VERIFIED:
-        return { label: 'Paid & Verified', bg: '#dcfce7', text: '#166534' };
+        return { label: 'Paid & Verified', bg: '#bfe3a6', text: '#2b1233' };
       case PaymentStatus.RECORDED:
-        return { label: 'Payment Recorded', bg: '#e0e7ff', text: '#3730a3' };
+        return { label: 'Payment Recorded', bg: '#a9bfff', text: '#2b1233' };
       case PaymentStatus.FAILED:
-        return { label: 'Payment Failed', bg: '#fee2e2', text: '#991b1b' };
+        return { label: 'Payment Failed', bg: '#fecdd3', text: '#9f1239' };
       default:
-        return { label: 'Pending Payment', bg: '#fef3c7', text: '#92400e' };
+        return { label: 'Pending Payment', bg: '#ffcf4d', text: '#2b1233' };
     }
   };
 
   return (
-    <div style={{ maxWidth: '900px', margin: '0 auto', padding: '1.5rem', fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ maxWidth: '900px', margin: '0 auto', padding: '1.5rem', fontFamily: 'var(--font-body-family), system-ui, sans-serif' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 700, margin: '0 0 0.25rem 0', color: '#111827' }}>
+          <h1 style={{ fontFamily: 'var(--font-display-family)', fontSize: '2rem', fontWeight: 700, margin: '0 0 0.25rem 0', color: '#2b1233' }}>
             My Orders
           </h1>
-          <p style={{ margin: 0, color: '#6b7280', fontSize: '0.875rem' }}>
+          <p style={{ margin: 0, color: '#6f5569', fontSize: '0.875rem', fontWeight: 600 }}>
             View and track your previous and active orders
           </p>
         </div>
@@ -96,29 +95,32 @@ export const OrderHistoryView: React.FC<OrderHistoryViewProps> = ({
             <button
               onClick={onBackToCatalog}
               style={{
-                padding: '0.5rem 1rem',
-                border: '1px solid #d1d5db',
-                borderRadius: '6px',
+                padding: '0.5rem 1.1rem',
+                border: '1px solid #f4d3dd',
+                borderRadius: '9999px',
                 background: '#ffffff',
+                color: '#2b1233',
                 cursor: 'pointer',
-                fontWeight: 500,
-                fontSize: '0.875rem',
+                fontWeight: 700,
+                fontSize: '0.8125rem',
+                boxShadow: '0 2px 8px -4px rgba(120,20,60,0.1)',
               }}
             >
-              Back to Catalog
+              Back to Counter
             </button>
           )}
           <button
             onClick={fetchOrders}
             style={{
-              padding: '0.5rem 1rem',
+              padding: '0.5rem 1.25rem',
               border: 'none',
-              borderRadius: '6px',
-              background: '#2563eb',
+              borderRadius: '9999px',
+              background: '#d61c5d',
               color: '#ffffff',
               cursor: 'pointer',
-              fontWeight: 500,
-              fontSize: '0.875rem',
+              fontWeight: 800,
+              fontSize: '0.8125rem',
+              boxShadow: '0 3px 0 #a3134a',
             }}
           >
             Refresh
@@ -131,8 +133,8 @@ export const OrderHistoryView: React.FC<OrderHistoryViewProps> = ({
         style={{
           display: 'flex',
           gap: '0.5rem',
-          borderBottom: '1px solid #e5e7eb',
-          paddingBottom: '0.5rem',
+          borderBottom: '1px solid #f4d3dd',
+          paddingBottom: '0.75rem',
           marginBottom: '1.5rem',
           overflowX: 'auto',
         }}
@@ -142,14 +144,16 @@ export const OrderHistoryView: React.FC<OrderHistoryViewProps> = ({
             key={tab}
             onClick={() => setStatusFilter(tab)}
             style={{
-              padding: '0.375rem 0.75rem',
+              padding: '0.45rem 1rem',
               borderRadius: '9999px',
-              border: 'none',
-              background: statusFilter === tab ? '#2563eb' : '#f3f4f6',
-              color: statusFilter === tab ? '#ffffff' : '#4b5563',
+              border: statusFilter === tab ? 'none' : '1px solid #f4d3dd',
+              background: statusFilter === tab ? '#d61c5d' : '#ffffff',
+              color: statusFilter === tab ? '#ffffff' : '#2b1233',
               fontSize: '0.8125rem',
-              fontWeight: 600,
+              fontWeight: 800,
               cursor: 'pointer',
+              boxShadow: statusFilter === tab ? '0 3px 0 #a3134a' : '0 2px 8px -4px rgba(120,20,60,0.08)',
+              transition: 'all 0.15s ease',
             }}
           >
             {tab === 'ALL' ? 'All Orders' : tab.replace('_', ' ')}
@@ -159,20 +163,21 @@ export const OrderHistoryView: React.FC<OrderHistoryViewProps> = ({
 
       {/* Content */}
       {loading && (
-        <div style={{ padding: '3rem', textAlign: 'center', color: '#6b7280' }}>
-          <div style={{ fontSize: '1.125rem', fontWeight: 500 }}>Loading your orders...</div>
+        <div style={{ padding: '3rem', textAlign: 'center', color: '#6f5569' }}>
+          <div style={{ fontSize: '1rem', fontWeight: 700 }}>Loading your scoops...</div>
         </div>
       )}
 
       {error && !loading && (
         <div
           style={{
-            padding: '1rem',
-            background: '#fee2e2',
-            border: '1px solid #f87171',
-            borderRadius: '6px',
-            color: '#b91c1c',
+            padding: '1rem 1.25rem',
+            background: '#ffffff',
+            border: '1px solid #f4d3dd',
+            borderRadius: '1rem',
+            color: '#d61c5d',
             marginBottom: '1rem',
+            fontWeight: 700,
           }}
         >
           {error}
@@ -184,15 +189,15 @@ export const OrderHistoryView: React.FC<OrderHistoryViewProps> = ({
           style={{
             padding: '3rem',
             textAlign: 'center',
-            background: '#f9fafb',
-            borderRadius: '8px',
-            border: '1px dashed #d1d5db',
+            background: '#ffffff',
+            borderRadius: '1.5rem',
+            border: '1px dashed #f4d3dd',
           }}
         >
-          <div style={{ fontSize: '1.125rem', fontWeight: 600, color: '#374151', marginBottom: '0.5rem' }}>
+          <div style={{ fontFamily: 'var(--font-display-family)', fontSize: '1.25rem', fontWeight: 700, color: '#2b1233', marginBottom: '0.5rem' }}>
             No orders found
           </div>
-          <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
+          <p style={{ color: '#6f5569', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
             {statusFilter === 'ALL'
               ? "You haven't placed any orders yet."
               : `No orders match the "${statusFilter}" filter.`}
@@ -201,23 +206,25 @@ export const OrderHistoryView: React.FC<OrderHistoryViewProps> = ({
             <button
               onClick={onBackToCatalog}
               style={{
-                padding: '0.625rem 1.25rem',
+                padding: '0.65rem 1.5rem',
                 border: 'none',
-                borderRadius: '6px',
-                background: '#2563eb',
+                borderRadius: '9999px',
+                background: '#d61c5d',
                 color: '#ffffff',
-                fontWeight: 600,
+                fontWeight: 800,
+                fontSize: '0.875rem',
                 cursor: 'pointer',
+                boxShadow: '0 4px 0 #a3134a',
               }}
             >
-              Browse Catalog
+              Browse Scoops
             </button>
           )}
         </div>
       )}
 
       {!loading && !error && filteredOrders.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
           {filteredOrders.map((order) => {
             const statusBadge = getStatusBadge(order.status);
             const paymentBadge = getPaymentStatusBadge(order.payment_status);
@@ -230,64 +237,66 @@ export const OrderHistoryView: React.FC<OrderHistoryViewProps> = ({
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  padding: '1rem 1.25rem',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '8px',
+                  padding: '1.25rem 1.5rem',
+                  border: '1px solid #f4d3dd',
+                  borderRadius: '1.25rem',
                   background: '#ffffff',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                  boxShadow: '0 8px 24px -12px rgba(120, 20, 60, 0.12)',
                   cursor: 'pointer',
-                  transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+                  transition: 'all 0.15s ease',
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = '#93c5fd';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(37,99,235,0.08)';
+                  e.currentTarget.style.borderColor = '#d61c5d';
+                  e.currentTarget.style.boxShadow = '0 12px 32px -12px rgba(120,20,60,0.22)';
+                  e.currentTarget.style.transform = 'translateY(-2px)';
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = '#e5e7eb';
-                  e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.04)';
+                  e.currentTarget.style.borderColor = '#f4d3dd';
+                  e.currentTarget.style.boxShadow = '0 8px 24px -12px rgba(120, 20, 60, 0.12)';
+                  e.currentTarget.style.transform = 'translateY(0)';
                 }}
               >
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.375rem' }}>
-                    <span style={{ fontWeight: 700, fontSize: '1rem', color: '#111827' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.4rem' }}>
+                    <span style={{ fontFamily: 'var(--font-display-family)', fontWeight: 700, fontSize: '1.15rem', color: '#2b1233' }}>
                       {order.order_number}
                     </span>
                     <span
                       style={{
-                        padding: '0.2rem 0.6rem',
+                        padding: '0.25rem 0.75rem',
                         borderRadius: '9999px',
                         background: statusBadge.bg,
                         color: statusBadge.text,
                         fontSize: '0.75rem',
-                        fontWeight: 600,
+                        fontWeight: 800,
                       }}
                     >
                       {statusBadge.label}
                     </span>
                     <span
                       style={{
-                        padding: '0.2rem 0.6rem',
+                        padding: '0.25rem 0.75rem',
                         borderRadius: '9999px',
                         background: paymentBadge.bg,
                         color: paymentBadge.text,
                         fontSize: '0.75rem',
-                        fontWeight: 600,
+                        fontWeight: 800,
                       }}
                     >
                       {paymentBadge.label}
                     </span>
                   </div>
-                  <div style={{ color: '#6b7280', fontSize: '0.8125rem' }}>
+                  <div style={{ color: '#6f5569', fontSize: '0.8125rem', fontWeight: 600 }}>
                     Placed on: {new Date(order.placed_at).toLocaleString()}
                   </div>
                 </div>
 
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '1.125rem', fontWeight: 700, color: '#111827' }}>
+                  <div style={{ fontFamily: 'var(--font-display-family)', fontSize: '1.25rem', fontWeight: 700, color: '#d61c5d' }}>
                     ₹{order.total.toFixed(2)}
                   </div>
-                  <div style={{ color: '#2563eb', fontSize: '0.8125rem', fontWeight: 600, marginTop: '0.25rem' }}>
-                    View Details &rarr;
+                  <div style={{ color: '#2b1233', fontSize: '0.8125rem', fontWeight: 800, marginTop: '0.25rem' }}>
+                    View Scoop &rarr;
                   </div>
                 </div>
               </div>

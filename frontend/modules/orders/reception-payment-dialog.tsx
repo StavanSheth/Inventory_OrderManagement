@@ -117,7 +117,8 @@ export const ReceptionPaymentDialog: React.FC<ReceptionPaymentDialogProps> = ({
         left: 0,
         right: 0,
         bottom: 0,
-        background: 'rgba(0,0,0,0.5)',
+        background: 'rgba(43, 18, 51, 0.45)',
+        backdropFilter: 'blur(6px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -128,34 +129,42 @@ export const ReceptionPaymentDialog: React.FC<ReceptionPaymentDialogProps> = ({
       <div
         style={{
           background: '#ffffff',
-          borderRadius: '12px',
+          borderRadius: '1.75rem',
           maxWidth: '550px',
           width: '100%',
-          padding: '1.5rem',
-          boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)',
+          padding: '1.75rem',
+          border: '1px solid #f4d3dd',
+          boxShadow: '0 25px 50px -12px rgba(120, 20, 60, 0.25)',
           maxHeight: '90vh',
           overflowY: 'auto',
-          fontFamily: 'system-ui, sans-serif',
+          fontFamily: 'var(--font-body-family), system-ui, sans-serif',
+          color: '#2b1233',
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
           <div>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: '#111827' }}>
+            <h2 style={{ fontFamily: 'var(--font-display-family)', fontSize: '1.4rem', fontWeight: 700, margin: 0, color: '#2b1233' }}>
               Reception Payment & Verification
             </h2>
-            <p style={{ margin: '0.25rem 0 0 0', color: '#6b7280', fontSize: '0.875rem' }}>
-              Order: <span style={{ fontWeight: 600, color: '#111827' }}>{order.order_number}</span>
+            <p style={{ margin: '0.25rem 0 0 0', color: '#6f5569', fontSize: '0.875rem', fontWeight: 600 }}>
+              Order: <span style={{ fontWeight: 800, color: '#d61c5d' }}>{order.order_number}</span>
             </p>
           </div>
           <button
             onClick={onClose}
             style={{
-              background: 'none',
-              border: 'none',
-              fontSize: '1.5rem',
-              lineHeight: 1,
+              background: '#fff1f4',
+              border: '1px solid #f4d3dd',
+              borderRadius: '9999px',
+              width: '32px',
+              height: '32px',
+              fontSize: '1.25rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
               cursor: 'pointer',
-              color: '#9ca3af',
+              color: '#6f5569',
+              fontWeight: 'bold',
             }}
           >
             &times;
@@ -165,33 +174,34 @@ export const ReceptionPaymentDialog: React.FC<ReceptionPaymentDialogProps> = ({
         {/* Order Balance Overview */}
         <div
           style={{
-            background: '#f9fafb',
-            border: '1px solid #e5e7eb',
-            borderRadius: '8px',
-            padding: '1rem',
+            background: '#fff1f4',
+            border: '1px solid #f4d3dd',
+            borderRadius: '1.25rem',
+            padding: '1.15rem',
             marginBottom: '1.25rem',
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem', fontSize: '0.875rem' }}>
-            <span style={{ color: '#4b5563' }}>Order Total:</span>
-            <span style={{ fontWeight: 700, color: '#111827' }}>₹{order.total.toFixed(2)}</span>
+            <span style={{ color: '#6f5569', fontWeight: 600 }}>Order Total:</span>
+            <span style={{ fontWeight: 800, color: '#2b1233' }}>₹{order.total.toFixed(2)}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem', fontSize: '0.875rem' }}>
-            <span style={{ color: '#4b5563' }}>Verified Paid:</span>
-            <span style={{ fontWeight: 600, color: '#16a34a' }}>₹{verifiedPaid.toFixed(2)}</span>
+            <span style={{ color: '#6f5569', fontWeight: 600 }}>Verified Paid:</span>
+            <span style={{ fontWeight: 800, color: '#2b1233' }}>₹{verifiedPaid.toFixed(2)}</span>
           </div>
           <div
             style={{
               display: 'flex',
               justifyContent: 'space-between',
-              fontSize: '0.925rem',
-              fontWeight: 700,
-              paddingTop: '0.35rem',
-              borderTop: '1px dashed #d1d5db',
+              fontSize: '1rem',
+              fontWeight: 800,
+              paddingTop: '0.5rem',
+              marginTop: '0.35rem',
+              borderTop: '1px dashed #f4d3dd',
             }}
           >
-            <span style={{ color: '#111827' }}>Current Balance Due:</span>
-            <span style={{ color: payableAmount > 0 ? '#b91c1c' : '#16a34a' }}>
+            <span style={{ color: '#2b1233' }}>Current Balance Due:</span>
+            <span style={{ color: payableAmount > 0 ? '#d61c5d' : '#2b1233' }}>
               ₹{payableAmount.toFixed(2)}
             </span>
           </div>
@@ -200,13 +210,14 @@ export const ReceptionPaymentDialog: React.FC<ReceptionPaymentDialogProps> = ({
         {error && (
           <div
             style={{
-              padding: '0.75rem',
-              background: '#fee2e2',
-              border: '1px solid #f87171',
-              borderRadius: '6px',
-              color: '#b91c1c',
+              padding: '0.85rem 1rem',
+              background: '#ffffff',
+              border: '1px solid #f4d3dd',
+              borderRadius: '1rem',
+              color: '#d61c5d',
               fontSize: '0.875rem',
               marginBottom: '1rem',
+              fontWeight: 700,
             }}
           >
             {error}
@@ -216,13 +227,13 @@ export const ReceptionPaymentDialog: React.FC<ReceptionPaymentDialogProps> = ({
         {actionSuccess && (
           <div
             style={{
-              padding: '0.75rem',
-              background: '#dcfce7',
-              border: '1px solid #86efac',
-              borderRadius: '6px',
-              color: '#166534',
+              padding: '0.85rem 1rem',
+              background: '#bfe3a6',
+              borderRadius: '1rem',
+              color: '#2b1233',
               fontSize: '0.875rem',
               marginBottom: '1rem',
+              fontWeight: 800,
             }}
           >
             {actionSuccess}
@@ -232,7 +243,7 @@ export const ReceptionPaymentDialog: React.FC<ReceptionPaymentDialogProps> = ({
         {/* Pending recorded payments awaiting verification */}
         {pendingPayments.length > 0 && (
           <div style={{ marginBottom: '1.25rem' }}>
-            <h3 style={{ fontSize: '0.925rem', fontWeight: 600, color: '#374151', marginBottom: '0.5rem' }}>
+            <h3 style={{ fontSize: '0.925rem', fontWeight: 800, color: '#2b1233', marginBottom: '0.5rem' }}>
               Pending Verification ({pendingPayments.length})
             </h3>
             {pendingPayments.map((p) => (
@@ -242,18 +253,17 @@ export const ReceptionPaymentDialog: React.FC<ReceptionPaymentDialogProps> = ({
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  background: '#fef3c7',
-                  border: '1px solid #fde68a',
-                  borderRadius: '6px',
-                  padding: '0.625rem 0.75rem',
+                  background: '#ffcf4d',
+                  borderRadius: '1rem',
+                  padding: '0.75rem 1rem',
                   marginBottom: '0.5rem',
                 }}
               >
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: '0.875rem', color: '#92400e' }}>
+                  <div style={{ fontWeight: 800, fontSize: '0.875rem', color: '#2b1233' }}>
                     {p.method} — ₹{p.amount.toFixed(2)}
                   </div>
-                  <div style={{ fontSize: '0.75rem', color: '#b45309' }}>
+                  <div style={{ fontSize: '0.75rem', color: '#2b1233', opacity: 0.8, fontWeight: 600 }}>
                     Recorded on {new Date(p.created_at).toLocaleTimeString()}
                   </div>
                 </div>
@@ -262,13 +272,13 @@ export const ReceptionPaymentDialog: React.FC<ReceptionPaymentDialogProps> = ({
                   disabled={loading}
                   onClick={() => handleVerifyPayment(p.id)}
                   style={{
-                    padding: '0.35rem 0.75rem',
-                    background: '#16a34a',
+                    padding: '0.45rem 1rem',
+                    background: '#2b1233',
                     color: '#ffffff',
                     border: 'none',
-                    borderRadius: '4px',
+                    borderRadius: '9999px',
                     fontSize: '0.75rem',
-                    fontWeight: 600,
+                    fontWeight: 800,
                     cursor: loading ? 'not-allowed' : 'pointer',
                   }}
                 >
@@ -282,13 +292,13 @@ export const ReceptionPaymentDialog: React.FC<ReceptionPaymentDialogProps> = ({
         {/* Record new payment if balance is due */}
         {payableAmount > 0 && (
           <form onSubmit={handleRecordPayment} style={{ marginBottom: '1.25rem' }}>
-            <h3 style={{ fontSize: '0.925rem', fontWeight: 600, color: '#374151', marginBottom: '0.75rem' }}>
+            <h3 style={{ fontSize: '0.925rem', fontWeight: 800, color: '#2b1233', marginBottom: '0.75rem' }}>
               Record Payment at Reception
             </h3>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: '#4b5563', marginBottom: '0.25rem' }}>
+                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 700, color: '#6f5569', marginBottom: '0.25rem' }}>
                   Method
                 </label>
                 <select
@@ -296,10 +306,13 @@ export const ReceptionPaymentDialog: React.FC<ReceptionPaymentDialogProps> = ({
                   onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
                   style={{
                     width: '100%',
-                    padding: '0.5rem',
-                    borderRadius: '6px',
-                    border: '1px solid #d1d5db',
+                    padding: '0.6rem 0.9rem',
+                    borderRadius: '9999px',
+                    border: '1px solid #f4d3dd',
                     fontSize: '0.875rem',
+                    fontWeight: 700,
+                    color: '#2b1233',
+                    background: '#ffffff',
                   }}
                 >
                   <option value={PaymentMethod.CASH}>Cash</option>
@@ -309,7 +322,7 @@ export const ReceptionPaymentDialog: React.FC<ReceptionPaymentDialogProps> = ({
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: '#4b5563', marginBottom: '0.25rem' }}>
+                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 700, color: '#6f5569', marginBottom: '0.25rem' }}>
                   Exact Amount (₹)
                 </label>
                 <input
@@ -320,18 +333,20 @@ export const ReceptionPaymentDialog: React.FC<ReceptionPaymentDialogProps> = ({
                   onChange={(e) => setAmount(Number(e.target.value))}
                   style={{
                     width: '100%',
-                    padding: '0.5rem',
-                    borderRadius: '6px',
-                    border: '1px solid #d1d5db',
+                    padding: '0.6rem 0.9rem',
+                    borderRadius: '9999px',
+                    border: '1px solid #f4d3dd',
                     fontSize: '0.875rem',
-                    background: '#f9fafb',
+                    fontWeight: 700,
+                    color: '#2b1233',
+                    background: '#fff1f4',
                   }}
                 />
               </div>
             </div>
 
             <div style={{ marginBottom: '0.75rem' }}>
-              <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: '#4b5563', marginBottom: '0.25rem' }}>
+              <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 700, color: '#6f5569', marginBottom: '0.25rem' }}>
                 Transaction Ref (Optional)
               </label>
               <input
@@ -341,16 +356,17 @@ export const ReceptionPaymentDialog: React.FC<ReceptionPaymentDialogProps> = ({
                 onChange={(e) => setTransactionRef(e.target.value)}
                 style={{
                   width: '100%',
-                  padding: '0.5rem',
-                  borderRadius: '6px',
-                  border: '1px solid #d1d5db',
+                  padding: '0.6rem 1rem',
+                  borderRadius: '9999px',
+                  border: '1px solid #f4d3dd',
                   fontSize: '0.875rem',
+                  color: '#2b1233',
                 }}
               />
             </div>
 
             <div style={{ marginBottom: '0.75rem' }}>
-              <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: '#4b5563', marginBottom: '0.25rem' }}>
+              <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 700, color: '#6f5569', marginBottom: '0.25rem' }}>
                 Reception Notes (Optional)
               </label>
               <input
@@ -360,10 +376,11 @@ export const ReceptionPaymentDialog: React.FC<ReceptionPaymentDialogProps> = ({
                 onChange={(e) => setNotes(e.target.value)}
                 style={{
                   width: '100%',
-                  padding: '0.5rem',
-                  borderRadius: '6px',
-                  border: '1px solid #d1d5db',
+                  padding: '0.6rem 1rem',
+                  borderRadius: '9999px',
+                  border: '1px solid #f4d3dd',
                   fontSize: '0.875rem',
+                  color: '#2b1233',
                 }}
               />
             </div>
@@ -373,14 +390,16 @@ export const ReceptionPaymentDialog: React.FC<ReceptionPaymentDialogProps> = ({
               disabled={loading || amount <= 0}
               style={{
                 width: '100%',
-                padding: '0.625rem',
-                background: '#2563eb',
+                padding: '0.75rem',
+                background: '#d61c5d',
                 color: '#ffffff',
                 border: 'none',
-                borderRadius: '6px',
-                fontWeight: 600,
+                borderRadius: '9999px',
+                fontWeight: 800,
                 fontSize: '0.875rem',
                 cursor: loading ? 'not-allowed' : 'pointer',
+                boxShadow: '0 3px 0 #a3134a',
+                transition: 'all 0.15s ease',
               }}
             >
               {loading ? 'Recording...' : `Record ₹${amount.toFixed(2)} Payment`}
@@ -392,14 +411,13 @@ export const ReceptionPaymentDialog: React.FC<ReceptionPaymentDialogProps> = ({
         {isFullyVerified && order.status === OrderStatus.PENDING && (
           <div
             style={{
-              padding: '1rem',
-              background: '#ecfdf5',
-              border: '1px solid #a7f3d0',
-              borderRadius: '8px',
+              padding: '1.25rem',
+              background: '#bfe3a6',
+              borderRadius: '1.25rem',
               textAlign: 'center',
             }}
           >
-            <div style={{ fontWeight: 600, color: '#065f46', marginBottom: '0.5rem', fontSize: '0.925rem' }}>
+            <div style={{ fontWeight: 800, color: '#2b1233', marginBottom: '0.75rem', fontSize: '0.925rem' }}>
               Payment is fully verified. Ready to confirm order!
             </div>
             <button
@@ -407,14 +425,15 @@ export const ReceptionPaymentDialog: React.FC<ReceptionPaymentDialogProps> = ({
               disabled={loading}
               onClick={handleConfirmOrder}
               style={{
-                padding: '0.625rem 1.5rem',
-                background: '#16a34a',
+                padding: '0.65rem 1.75rem',
+                background: '#2b1233',
                 color: '#ffffff',
                 border: 'none',
-                borderRadius: '6px',
-                fontWeight: 700,
+                borderRadius: '9999px',
+                fontWeight: 800,
                 cursor: loading ? 'not-allowed' : 'pointer',
                 fontSize: '0.875rem',
+                boxShadow: '0 3px 0 #431d4e',
               }}
             >
               {loading ? 'Confirming...' : 'Confirm Order Now'}

@@ -62,17 +62,17 @@ export const CatalogView: React.FC<CatalogViewProps> = ({ branchId, onAddToCart 
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-12 text-slate-400">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500 mr-3"></div>
-        <span>Loading catalog...</span>
+      <div className="flex items-center justify-center p-12 text-[#6f5569]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#d61c5d] mr-3"></div>
+        <span className="font-bold text-sm">Loading scoops...</span>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="p-6 bg-red-950/40 border border-red-800 rounded-lg text-red-300">
-        <p className="font-medium">Error loading catalog</p>
+      <div className="p-6 bg-white border border-[#f4d3dd] rounded-3xl text-[#d61c5d] shadow-sm">
+        <p className="font-bold">Error loading catalog</p>
         <p className="text-sm opacity-80">{error}</p>
       </div>
     );
@@ -83,15 +83,15 @@ export const CatalogView: React.FC<CatalogViewProps> = ({ branchId, onAddToCart 
   return (
     <div className="space-y-6">
       {/* Category Tabs */}
-      <div className="flex space-x-2 border-b border-slate-700/60 pb-2 overflow-x-auto">
+      <div className="flex space-x-2 border-b border-[#f4d3dd] pb-3 overflow-x-auto">
         {categories.map((cat) => (
           <button
             key={cat.category.id}
             onClick={() => setSelectedCategoryId(cat.category.id)}
-            className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors whitespace-nowrap ${
+            className={`px-5 py-2.5 rounded-full font-extrabold text-sm transition whitespace-nowrap ${
               selectedCategoryId === cat.category.id
-                ? 'bg-amber-500 text-slate-950 shadow'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                ? 'bg-[#d61c5d] text-white shadow-[0_4px_0_#a3134a]'
+                : 'bg-white border border-[#f4d3dd] text-[#2b1233] hover:bg-[#fff1f4]'
             }`}
           >
             {cat.category.name} ({cat.products.length})
@@ -101,36 +101,38 @@ export const CatalogView: React.FC<CatalogViewProps> = ({ branchId, onAddToCart 
 
       {/* Product Cards Grid */}
       {activeCategory && activeCategory.products.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {activeCategory.products.map((product) => {
             const qty = quantities[product.id] ?? 1;
             return (
               <div
                 key={product.id}
-                className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 flex flex-col justify-between hover:border-slate-700 transition"
+                className="bg-white border border-[#f4d3dd] rounded-3xl p-6 flex flex-col justify-between shadow-[0_10px_30px_-15px_rgba(120,20,60,0.12)] hover:shadow-[0_16px_40px_-16px_rgba(120,20,60,0.22)] transition"
               >
                 <div>
-                  <div className="flex justify-between items-start mb-2">
-                    <h3 className="font-semibold text-white text-base">{product.name}</h3>
-                    <span className="text-amber-400 font-bold text-base">₹{product.price.toFixed(2)}</span>
+                  <div className="flex justify-between items-start mb-3 gap-2">
+                    <h3 className="font-display font-semibold text-[#2b1233] text-lg leading-tight">{product.name}</h3>
+                    <span className="text-[#d61c5d] font-extrabold text-sm bg-[#fff1f4] px-3 py-1 rounded-full border border-[#f4d3dd] whitespace-nowrap">
+                      ₹{product.price.toFixed(2)}
+                    </span>
                   </div>
                   {product.description && (
-                    <p className="text-sm text-slate-400 mb-4 line-clamp-2">{product.description}</p>
+                    <p className="text-sm text-[#6f5569] mb-5 line-clamp-2 leading-relaxed">{product.description}</p>
                   )}
                 </div>
 
-                <div className="flex items-center justify-between pt-4 border-t border-slate-800/80">
-                  <div className="flex items-center space-x-2 bg-slate-950 rounded-lg p-1 border border-slate-800">
+                <div className="flex items-center justify-between pt-4 border-t border-[#f4d3dd]">
+                  <div className="flex items-center space-x-1.5 bg-[#fff1f4] rounded-full p-1 border border-[#f4d3dd]">
                     <button
                       onClick={() => handleQuantityChange(product.id, -1)}
-                      className="w-7 h-7 flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-800 rounded text-sm font-bold"
+                      className="w-7 h-7 flex items-center justify-center text-[#2b1233] hover:bg-white rounded-full text-sm font-black transition"
                     >
                       -
                     </button>
-                    <span className="w-8 text-center text-sm font-semibold text-white">{qty}</span>
+                    <span className="w-7 text-center text-sm font-extrabold text-[#2b1233]">{qty}</span>
                     <button
                       onClick={() => handleQuantityChange(product.id, 1)}
-                      className="w-7 h-7 flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-800 rounded text-sm font-bold"
+                      className="w-7 h-7 flex items-center justify-center text-[#2b1233] hover:bg-white rounded-full text-sm font-black transition"
                     >
                       +
                     </button>
@@ -138,7 +140,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({ branchId, onAddToCart 
 
                   <button
                     onClick={() => onAddToCart(product, qty)}
-                    className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold rounded-lg text-sm transition shadow-sm"
+                    className="px-5 py-2.5 bg-[#d61c5d] hover:bg-[#c21853] text-white font-extrabold rounded-full text-sm transition shadow-[0_4px_0_#a3134a] hover:translate-y-[2px] hover:shadow-[0_2px_0_#a3134a]"
                   >
                     Add to Cart
                   </button>
@@ -148,7 +150,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({ branchId, onAddToCart 
           })}
         </div>
       ) : (
-        <p className="text-slate-400 p-8 text-center">No products available in this category.</p>
+        <p className="text-[#6f5569] p-8 text-center font-bold">No treats available in this category.</p>
       )}
     </div>
   );

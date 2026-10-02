@@ -105,69 +105,69 @@ export const CartView: React.FC<CartViewProps> = ({
 
   if (items.length === 0) {
     return (
-      <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-8 text-center text-slate-400">
-        <p className="text-base mb-2">Your cart is empty.</p>
-        <p className="text-sm text-slate-500">Add some delicious ice cream from the catalog above!</p>
+      <div className="bg-white border border-[#f4d3dd] rounded-3xl p-8 text-center text-[#6f5569] shadow-[0_10px_30px_-15px_rgba(120,20,60,0.12)]">
+        <p className="font-display font-semibold text-lg text-[#2b1233] mb-2">Your cone is empty.</p>
+        <p className="text-sm">Pick some delicious flavours from the scoops counter above!</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-6">
-      <div className="flex justify-between items-center border-b border-slate-800 pb-4">
-        <h2 className="text-lg font-bold text-white">Your Cart ({items.length} items)</h2>
+    <div className="bg-white border border-[#f4d3dd] rounded-3xl p-6 md:p-8 space-y-6 shadow-[0_14px_40px_-16px_rgba(120,20,60,0.18)]">
+      <div className="flex justify-between items-center border-b border-[#f4d3dd] pb-4">
+        <h2 className="font-display text-xl font-bold text-[#2b1233]">Your Scoops ({items.length} items)</h2>
         <button
           onClick={onClearCart}
-          className="text-xs text-rose-400 hover:text-rose-300 transition"
+          className="text-xs font-bold text-[#d61c5d] hover:text-[#a3134a] transition uppercase tracking-wider"
         >
           Clear All
         </button>
       </div>
 
       {error && (
-        <div className="p-4 bg-red-950/40 border border-red-800 rounded-lg text-red-300 text-sm">
+        <div className="p-4 bg-[#fff1f4] border border-[#f4d3dd] rounded-2xl text-[#d61c5d] text-sm font-semibold">
           {error}
         </div>
       )}
 
       {/* Item List */}
-      <div className="space-y-4 max-h-96 overflow-y-auto pr-1">
+      <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
         {items.map((item) => {
           const lineTotal = item.product.price * item.quantity;
           return (
             <div
               key={item.product.id}
-              className="flex items-center justify-between p-3 bg-slate-950/60 border border-slate-800/80 rounded-lg"
+              className="flex items-center justify-between p-4 bg-[#fff1f4]/70 border border-[#f4d3dd] rounded-2xl"
             >
               <div className="flex-1 mr-4">
-                <h4 className="font-semibold text-white text-sm">{item.product.name}</h4>
-                <p className="text-xs text-slate-400">₹{item.product.price.toFixed(2)} each</p>
+                <h4 className="font-display font-semibold text-[#2b1233] text-base">{item.product.name}</h4>
+                <p className="text-xs text-[#6f5569] font-bold">₹{item.product.price.toFixed(2)} each</p>
               </div>
 
               <div className="flex items-center space-x-3">
-                <div className="flex items-center space-x-2 bg-slate-900 border border-slate-800 rounded p-1">
+                <div className="flex items-center space-x-1.5 bg-white border border-[#f4d3dd] rounded-full p-1 shadow-sm">
                   <button
                     onClick={() => onUpdateQuantity(item.product.id, Math.max(1, item.quantity - 1))}
-                    className="w-6 h-6 flex items-center justify-center text-slate-300 hover:text-white rounded"
+                    className="w-6 h-6 flex items-center justify-center text-[#2b1233] hover:bg-[#fff1f4] rounded-full text-xs font-black transition"
                   >
                     -
                   </button>
-                  <span className="w-6 text-center text-xs font-semibold text-white">{item.quantity}</span>
+                  <span className="w-6 text-center text-xs font-extrabold text-[#2b1233]">{item.quantity}</span>
                   <button
                     onClick={() => onUpdateQuantity(item.product.id, item.quantity + 1)}
-                    className="w-6 h-6 flex items-center justify-center text-slate-300 hover:text-white rounded"
+                    className="w-6 h-6 flex items-center justify-center text-[#2b1233] hover:bg-[#fff1f4] rounded-full text-xs font-black transition"
                   >
                     +
                   </button>
                 </div>
 
-                <span className="w-20 text-right font-bold text-sm text-amber-400">
+                <span className="w-20 text-right font-black text-sm text-[#d61c5d]">
                   ₹{lineTotal.toFixed(2)}
                 </span>
 
                 <button
                   onClick={() => onRemoveItem(item.product.id)}
-                  className="text-slate-500 hover:text-rose-400 p-1 transition"
+                  className="text-[#6f5569] hover:text-[#d61c5d] p-1 transition font-bold"
                   title="Remove item"
                 >
                   ✕
@@ -179,21 +179,21 @@ export const CartView: React.FC<CartViewProps> = ({
       </div>
 
       {/* Coupon Entry & Validation */}
-      <div className="border-t border-slate-800 pt-4">
-        <label className="block text-xs font-semibold text-slate-400 mb-1.5">Have a Coupon?</label>
+      <div className="border-t border-[#f4d3dd] pt-4">
+        <label className="block text-xs font-bold text-[#6f5569] uppercase tracking-wider mb-2">Have a Coupon?</label>
         {appliedCoupon ? (
-          <div className="flex items-center justify-between p-2.5 bg-emerald-950/40 border border-emerald-800 rounded-lg">
+          <div className="flex items-center justify-between p-3 bg-[#bfe3a6]/30 border border-[#bfe3a6] rounded-2xl">
             <div className="flex items-center space-x-2">
-              <span className="text-emerald-400 font-bold text-xs uppercase bg-emerald-900/60 px-2 py-0.5 rounded">
+              <span className="text-[#2b1233] font-black text-xs uppercase bg-[#bfe3a6] px-3 py-1 rounded-full">
                 {appliedCoupon.code}
               </span>
-              <span className="text-xs text-emerald-300">
+              <span className="text-xs text-[#2b1233] font-extrabold">
                 -₹{appliedCoupon.discount.toFixed(2)} applied
               </span>
             </div>
             <button
               onClick={handleRemoveCoupon}
-              className="text-xs text-slate-400 hover:text-rose-400 transition"
+              className="text-xs font-bold text-[#d61c5d] hover:text-[#a3134a] transition"
             >
               Remove
             </button>
@@ -206,45 +206,45 @@ export const CartView: React.FC<CartViewProps> = ({
                 placeholder="Enter coupon code"
                 value={couponCodeInput}
                 onChange={(e) => setCouponCodeInput(e.target.value.toUpperCase())}
-                className="flex-1 px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                className="flex-1 px-4 py-2.5 bg-white border border-[#f4d3dd] rounded-full text-sm text-[#2b1233] placeholder-[#6f5569]/60 font-semibold focus:outline-none focus:border-[#d61c5d]"
               />
               <button
                 onClick={handleApplyCoupon}
                 disabled={validatingCoupon || !couponCodeInput.trim()}
-                className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-white font-medium text-xs rounded-lg transition"
+                className="px-5 py-2.5 bg-[#2b1233] hover:bg-[#431d4e] disabled:opacity-50 text-white font-extrabold text-xs rounded-full transition shadow-sm"
               >
                 {validatingCoupon ? 'Checking...' : 'Apply'}
               </button>
             </div>
             {couponError && (
-              <p className="text-xs text-rose-400">{couponError}</p>
+              <p className="text-xs text-[#d61c5d] font-bold pl-3">{couponError}</p>
             )}
           </div>
         )}
       </div>
 
-      {/* Summary (Display only - Authoritative totals calculated by server) */}
-      <div className="border-t border-slate-800 pt-4 space-y-2">
-        <div className="flex justify-between text-sm text-slate-400">
+      {/* Summary */}
+      <div className="border-t border-[#f4d3dd] pt-4 space-y-2">
+        <div className="flex justify-between text-sm text-[#6f5569] font-medium">
           <span>Subtotal</span>
-          <span>₹{subtotal.toFixed(2)}</span>
+          <span className="text-[#2b1233] font-bold">₹{subtotal.toFixed(2)}</span>
         </div>
         {appliedCoupon && (
-          <div className="flex justify-between text-sm text-emerald-400">
+          <div className="flex justify-between text-sm text-[#2b1233] font-extrabold">
             <span>Coupon Discount ({appliedCoupon.code})</span>
-            <span>-₹{couponDiscount.toFixed(2)}</span>
+            <span className="text-[#d61c5d]">-₹{couponDiscount.toFixed(2)}</span>
           </div>
         )}
-        <div className="flex justify-between text-sm text-slate-400">
+        <div className="flex justify-between text-sm text-[#6f5569] font-medium">
           <span>Estimated Tax (5%)</span>
-          <span>₹{tax.toFixed(2)}</span>
+          <span className="text-[#2b1233] font-bold">₹{tax.toFixed(2)}</span>
         </div>
-        <div className="flex justify-between text-base font-bold text-white pt-2 border-t border-slate-800">
-          <span>Estimated Total</span>
-          <span className="text-amber-400">₹{total.toFixed(2)}</span>
+        <div className="flex justify-between text-base font-black text-[#2b1233] pt-3 border-t border-[#f4d3dd]">
+          <span className="font-display text-lg">Estimated Total</span>
+          <span className="font-display text-xl text-[#d61c5d]">₹{total.toFixed(2)}</span>
         </div>
-        <p className="text-xs text-slate-500 text-center italic pt-1">
-          * Final price and taxes are authoritatively verified by the server upon placement.
+        <p className="text-xs text-[#6f5569] text-center italic pt-1">
+          * Final price and taxes are verified at reception.
         </p>
       </div>
 
@@ -252,11 +252,11 @@ export const CartView: React.FC<CartViewProps> = ({
       <button
         onClick={handleCheckout}
         disabled={submitting || items.length === 0}
-        className="w-full py-3 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold rounded-lg transition shadow-md flex items-center justify-center space-x-2"
+        className="w-full py-4 bg-[#d61c5d] hover:bg-[#c21853] disabled:opacity-50 text-white font-extrabold text-base rounded-full transition shadow-[0_5px_0_#a3134a] hover:translate-y-[2px] hover:shadow-[0_2px_0_#a3134a] flex items-center justify-center space-x-2"
       >
         {submitting ? (
           <>
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-slate-950 mr-2"></div>
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
             <span>Placing Order...</span>
           </>
         ) : (

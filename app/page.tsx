@@ -24,30 +24,31 @@ export default function Home() {
           right: '1.5rem',
           zIndex: 9999,
           display: 'flex',
-          gap: '0.75rem',
+          gap: '0.65rem',
           alignItems: 'center',
-          background: 'rgba(15, 23, 42, 0.85)',
+          background: 'rgba(255, 255, 255, 0.95)',
           backdropFilter: 'blur(16px)',
-          border: '1px solid rgba(255, 255, 255, 0.15)',
+          border: '1px solid #f4d3dd',
           borderRadius: '9999px',
-          padding: '0.4rem 0.6rem 0.4rem 1rem',
-          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)',
+          padding: '0.35rem 0.5rem 0.35rem 1rem',
+          boxShadow: '0 14px 40px -16px rgba(120, 20, 60, 0.35)',
         }}
       >
-        <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#e2e8f0' }}>
-          Ice Cream Ordering:
+        <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#2b1233', fontFamily: 'var(--font-display-family)' }}>
+          Order Desk:
         </span>
         <Link
           href="/order"
           style={{
-            padding: '0.4rem 0.85rem',
-            background: '#2563eb',
+            padding: '0.45rem 1rem',
+            background: '#d61c5d',
             color: '#ffffff',
             borderRadius: '9999px',
             textDecoration: 'none',
             fontSize: '0.8125rem',
-            fontWeight: 700,
-            transition: 'background 0.15s ease',
+            fontWeight: 800,
+            boxShadow: '0 3px 0 #a3134a',
+            transition: 'all 0.15s ease',
           }}
         >
           🍦 Order Online
@@ -55,13 +56,15 @@ export default function Home() {
         <Link
           href="/operator"
           style={{
-            padding: '0.4rem 0.85rem',
-            background: 'rgba(255, 255, 255, 0.1)',
-            color: '#cbd5e1',
+            padding: '0.45rem 0.95rem',
+            background: '#fff1f4',
+            border: '1px solid #f4d3dd',
+            color: '#2b1233',
             borderRadius: '9999px',
             textDecoration: 'none',
             fontSize: '0.8125rem',
-            fontWeight: 600,
+            fontWeight: 700,
+            transition: 'all 0.15s ease',
           }}
         >
           📋 Operator Desk

@@ -9,6 +9,11 @@
   --color-accent: var(--accent);
   --color-accent-fg: var(--accent-text);
   --color-line: var(--line);
+  --color-pistachio: var(--pistachio, #bfe3a6);
+  --color-mango: var(--mango, #ffcf4d);
+  --color-strawberry: var(--strawberry, #ffc2d4);
+  --color-blueberry: var(--blueberry, #a9bfff);
+  --color-cocoa: var(--cocoa, #6b3a2a);
   --font-display: var(--font-display-family);
   --font-body: var(--font-body-family);
 }

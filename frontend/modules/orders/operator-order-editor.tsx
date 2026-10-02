@@ -175,7 +175,8 @@ export const OperatorOrderEditor: React.FC<OperatorOrderEditorProps> = ({
         left: 0,
         right: 0,
         bottom: 0,
-        background: 'rgba(0,0,0,0.5)',
+        background: 'rgba(43, 18, 51, 0.45)',
+        backdropFilter: 'blur(6px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -186,34 +187,42 @@ export const OperatorOrderEditor: React.FC<OperatorOrderEditorProps> = ({
       <div
         style={{
           background: '#ffffff',
-          borderRadius: '12px',
+          borderRadius: '1.75rem',
           maxWidth: '650px',
           width: '100%',
-          padding: '1.5rem',
-          boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)',
+          padding: '1.75rem',
+          border: '1px solid #f4d3dd',
+          boxShadow: '0 25px 50px -12px rgba(120, 20, 60, 0.25)',
           maxHeight: '90vh',
           overflowY: 'auto',
-          fontFamily: 'system-ui, sans-serif',
+          fontFamily: 'var(--font-body-family), system-ui, sans-serif',
+          color: '#2b1233',
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
           <div>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: '#111827' }}>
+            <h2 style={{ fontFamily: 'var(--font-display-family)', fontSize: '1.4rem', fontWeight: 700, margin: 0, color: '#2b1233' }}>
               Edit Order — {order.order_number}
             </h2>
-            <p style={{ margin: '0.25rem 0 0 0', color: '#6b7280', fontSize: '0.875rem' }}>
+            <p style={{ margin: '0.25rem 0 0 0', color: '#6f5569', fontSize: '0.875rem', fontWeight: 600 }}>
               Within 60-minute window. Recalculates items with authoritative DB prices.
             </p>
           </div>
           <button
             onClick={onClose}
             style={{
-              background: 'none',
-              border: 'none',
-              fontSize: '1.5rem',
-              lineHeight: 1,
+              background: '#fff1f4',
+              border: '1px solid #f4d3dd',
+              borderRadius: '9999px',
+              width: '32px',
+              height: '32px',
+              fontSize: '1.25rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
               cursor: 'pointer',
-              color: '#9ca3af',
+              color: '#6f5569',
+              fontWeight: 'bold',
             }}
           >
             &times;
@@ -223,13 +232,14 @@ export const OperatorOrderEditor: React.FC<OperatorOrderEditorProps> = ({
         {error && (
           <div
             style={{
-              padding: '0.75rem',
-              background: '#fee2e2',
-              border: '1px solid #f87171',
-              borderRadius: '6px',
-              color: '#b91c1c',
+              padding: '0.85rem 1rem',
+              background: '#ffffff',
+              border: '1px solid #f4d3dd',
+              borderRadius: '1rem',
+              color: '#d61c5d',
               fontSize: '0.875rem',
               marginBottom: '1rem',
+              fontWeight: 700,
             }}
           >
             {error}
@@ -238,12 +248,12 @@ export const OperatorOrderEditor: React.FC<OperatorOrderEditorProps> = ({
 
         {/* Current Items List */}
         <div style={{ marginBottom: '1.25rem' }}>
-          <h3 style={{ fontSize: '0.925rem', fontWeight: 600, color: '#374151', marginBottom: '0.5rem' }}>
+          <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#2b1233', marginBottom: '0.5rem' }}>
             Order Items ({items.length})
           </h3>
 
           {items.length === 0 ? (
-            <div style={{ padding: '1rem', textAlign: 'center', color: '#9ca3af', background: '#f9fafb', borderRadius: '6px' }}>
+            <div style={{ padding: '1rem', textAlign: 'center', color: '#6f5569', background: '#fff1f4', borderRadius: '1rem', border: '1px solid #f4d3dd' }}>
               No items in order. Add items below.
             </div>
           ) : (
@@ -255,51 +265,53 @@ export const OperatorOrderEditor: React.FC<OperatorOrderEditorProps> = ({
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    padding: '0.625rem 0.75rem',
-                    background: '#f9fafb',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '6px',
+                    padding: '0.75rem 1rem',
+                    background: '#fff1f4',
+                    border: '1px solid #f4d3dd',
+                    borderRadius: '1rem',
                   }}
                 >
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, fontSize: '0.875rem', color: '#111827' }}>
+                    <div style={{ fontWeight: 800, fontSize: '0.875rem', color: '#2b1233' }}>
                       {item.productName}
                     </div>
-                    <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                    <div style={{ fontSize: '0.75rem', color: '#6f5569', fontWeight: 600 }}>
                       ₹{item.unitPrice.toFixed(2)} each &bull; Tax {item.taxRate}%
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginRight: '1rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginRight: '1rem', background: '#ffffff', padding: '0.2rem 0.5rem', borderRadius: '9999px', border: '1px solid #f4d3dd' }}>
                     <button
                       type="button"
                       onClick={() => handleQuantityChange(item.productId, -1)}
                       style={{
-                        width: '28px',
-                        height: '28px',
-                        border: '1px solid #d1d5db',
-                        borderRadius: '4px',
-                        background: '#ffffff',
+                        width: '24px',
+                        height: '24px',
+                        border: 'none',
+                        borderRadius: '9999px',
+                        background: '#fff1f4',
                         cursor: 'pointer',
-                        fontWeight: 700,
+                        fontWeight: 900,
+                        color: '#2b1233',
                       }}
                     >
                       -
                     </button>
-                    <span style={{ minWidth: '24px', textAlign: 'center', fontWeight: 600, fontSize: '0.875rem' }}>
+                    <span style={{ minWidth: '24px', textAlign: 'center', fontWeight: 800, fontSize: '0.875rem', color: '#2b1233' }}>
                       {item.quantity}
                     </span>
                     <button
                       type="button"
                       onClick={() => handleQuantityChange(item.productId, 1)}
                       style={{
-                        width: '28px',
-                        height: '28px',
-                        border: '1px solid #d1d5db',
-                        borderRadius: '4px',
-                        background: '#ffffff',
+                        width: '24px',
+                        height: '24px',
+                        border: 'none',
+                        borderRadius: '9999px',
+                        background: '#fff1f4',
                         cursor: 'pointer',
-                        fontWeight: 700,
+                        fontWeight: 900,
+                        color: '#2b1233',
                       }}
                     >
                       +
@@ -307,7 +319,7 @@ export const OperatorOrderEditor: React.FC<OperatorOrderEditorProps> = ({
                   </div>
 
                   <div style={{ textAlign: 'right', minWidth: '70px', marginRight: '0.75rem' }}>
-                    <div style={{ fontWeight: 600, fontSize: '0.875rem', color: '#111827' }}>
+                    <div style={{ fontWeight: 800, fontSize: '0.875rem', color: '#d61c5d' }}>
                       ₹{(item.unitPrice * item.quantity).toFixed(2)}
                     </div>
                   </div>
@@ -318,10 +330,11 @@ export const OperatorOrderEditor: React.FC<OperatorOrderEditorProps> = ({
                     style={{
                       background: 'none',
                       border: 'none',
-                      color: '#ef4444',
+                      color: '#d61c5d',
                       cursor: 'pointer',
                       fontSize: '1.25rem',
                       lineHeight: 1,
+                      fontWeight: 'bold',
                     }}
                     title="Remove item"
                   >
@@ -334,8 +347,8 @@ export const OperatorOrderEditor: React.FC<OperatorOrderEditorProps> = ({
         </div>
 
         {/* Add Product from Catalog */}
-        <div style={{ marginBottom: '1.5rem', background: '#f3f4f6', padding: '0.75rem', borderRadius: '8px' }}>
-          <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#4b5563', marginBottom: '0.35rem' }}>
+        <div style={{ marginBottom: '1.5rem', background: '#fff1f4', padding: '1rem', borderRadius: '1.25rem', border: '1px solid #f4d3dd' }}>
+          <div style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#2b1233', marginBottom: '0.5rem' }}>
             Add Product to Order:
           </div>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -345,10 +358,13 @@ export const OperatorOrderEditor: React.FC<OperatorOrderEditorProps> = ({
               disabled={loadingCatalog || catalog.length === 0}
               style={{
                 flex: 1,
-                padding: '0.5rem',
-                borderRadius: '6px',
-                border: '1px solid #d1d5db',
+                padding: '0.6rem 0.9rem',
+                borderRadius: '9999px',
+                border: '1px solid #f4d3dd',
                 fontSize: '0.875rem',
+                fontWeight: 700,
+                color: '#2b1233',
+                background: '#ffffff',
               }}
             >
               <option value="">
@@ -365,14 +381,15 @@ export const OperatorOrderEditor: React.FC<OperatorOrderEditorProps> = ({
               onClick={handleAddItem}
               disabled={!selectedAddProductId}
               style={{
-                padding: '0.5rem 1rem',
-                background: selectedAddProductId ? '#2563eb' : '#9ca3af',
-                color: '#ffffff',
+                padding: '0.6rem 1.25rem',
+                background: selectedAddProductId ? '#d61c5d' : '#f4d3dd',
+                color: selectedAddProductId ? '#ffffff' : '#6f5569',
                 border: 'none',
-                borderRadius: '6px',
-                fontWeight: 600,
-                fontSize: '0.875rem',
+                borderRadius: '9999px',
+                fontWeight: 800,
+                fontSize: '0.8125rem',
                 cursor: selectedAddProductId ? 'pointer' : 'not-allowed',
+                boxShadow: selectedAddProductId ? '0 3px 0 #a3134a' : 'none',
               }}
             >
               Add Item
@@ -383,36 +400,36 @@ export const OperatorOrderEditor: React.FC<OperatorOrderEditorProps> = ({
         {/* Live Recalculation & Payment Difference Box */}
         <div
           style={{
-            background: '#f8fafc',
-            border: '1px solid #cbd5e1',
-            borderRadius: '8px',
-            padding: '1rem',
+            background: '#fff1f4',
+            border: '1px solid #f4d3dd',
+            borderRadius: '1.25rem',
+            padding: '1.15rem 1.25rem',
             marginBottom: '1.5rem',
           }}
         >
-          <div style={{ fontSize: '0.925rem', fontWeight: 700, color: '#1e293b', marginBottom: '0.5rem' }}>
+          <div style={{ fontSize: '0.925rem', fontWeight: 800, color: '#2b1233', marginBottom: '0.65rem' }}>
             Payment & Recalculation Impact
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.875rem', marginBottom: '0.75rem' }}>
             <div>
-              <span style={{ color: '#64748b' }}>Old Order Total:</span>{' '}
-              <span style={{ fontWeight: 600, color: '#334155' }}>₹{order.total.toFixed(2)}</span>
+              <span style={{ color: '#6f5569', fontWeight: 600 }}>Old Order Total:</span>{' '}
+              <span style={{ fontWeight: 800, color: '#2b1233' }}>₹{order.total.toFixed(2)}</span>
             </div>
             <div>
-              <span style={{ color: '#64748b' }}>New Order Total:</span>{' '}
-              <span style={{ fontWeight: 700, color: '#0f172a' }}>₹{previewCalculation.total.toFixed(2)}</span>
+              <span style={{ color: '#6f5569', fontWeight: 600 }}>New Order Total:</span>{' '}
+              <span style={{ fontWeight: 800, color: '#d61c5d' }}>₹{previewCalculation.total.toFixed(2)}</span>
             </div>
             <div>
-              <span style={{ color: '#64748b' }}>Verified Paid:</span>{' '}
-              <span style={{ fontWeight: 600, color: '#16a34a' }}>₹{verifiedPaid.toFixed(2)}</span>
+              <span style={{ color: '#6f5569', fontWeight: 600 }}>Verified Paid:</span>{' '}
+              <span style={{ fontWeight: 800, color: '#2b1233' }}>₹{verifiedPaid.toFixed(2)}</span>
             </div>
             <div>
-              <span style={{ color: '#64748b' }}>Gross Difference:</span>{' '}
+              <span style={{ color: '#6f5569', fontWeight: 600 }}>Gross Difference:</span>{' '}
               <span
                 style={{
-                  fontWeight: 600,
-                  color: editDiff.paymentDifference > 0 ? '#b91c1c' : editDiff.paymentDifference < 0 ? '#15803d' : '#334155',
+                  fontWeight: 800,
+                  color: editDiff.paymentDifference > 0 ? '#d61c5d' : editDiff.paymentDifference < 0 ? '#2b1233' : '#6f5569',
                 }}
               >
                 {editDiff.paymentDifference >= 0 ? `+₹${editDiff.paymentDifference.toFixed(2)}` : `-₹${Math.abs(editDiff.paymentDifference).toFixed(2)}`}
@@ -424,42 +441,40 @@ export const OperatorOrderEditor: React.FC<OperatorOrderEditorProps> = ({
           {editDiff.isUnderpaid && (
             <div
               style={{
-                padding: '0.625rem',
-                background: '#fef2f2',
-                border: '1px solid #fecaca',
-                borderRadius: '6px',
-                color: '#991b1b',
+                padding: '0.75rem 1rem',
+                background: '#ffc2d4',
+                borderRadius: '1rem',
+                color: '#2b1233',
                 fontSize: '0.875rem',
-                fontWeight: 600,
+                fontWeight: 800,
               }}
             >
               Additional payment required at reception:{' '}
-              <span style={{ fontSize: '1rem' }}>₹{editDiff.additionalAmountRequired.toFixed(2)}</span>
+              <span style={{ fontSize: '1rem', color: '#d61c5d' }}>₹{editDiff.additionalAmountRequired.toFixed(2)}</span>
             </div>
           )}
 
           {editDiff.isOverpaid && (
             <div
               style={{
-                padding: '0.625rem',
-                background: '#f0fdf4',
-                border: '1px solid #bbf7d0',
-                borderRadius: '6px',
-                color: '#166534',
+                padding: '0.75rem 1rem',
+                background: '#bfe3a6',
+                borderRadius: '1rem',
+                color: '#2b1233',
                 fontSize: '0.875rem',
-                fontWeight: 600,
+                fontWeight: 800,
               }}
             >
               Overpayment / credit recorded:{' '}
               <span style={{ fontSize: '1rem' }}>₹{editDiff.overpaymentAmount.toFixed(2)}</span>
-              <div style={{ fontSize: '0.75rem', fontWeight: 400, marginTop: '0.2rem', color: '#15803d' }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 600, marginTop: '0.2rem', color: '#2b1233', opacity: 0.8 }}>
                 Note: Per Phase 3 rules, refund/credit is not auto-disbursed and must be handled explicitly.
               </div>
             </div>
           )}
 
           {!editDiff.isUnderpaid && !editDiff.isOverpaid && (
-            <div style={{ color: '#475569', fontSize: '0.8125rem' }}>
+            <div style={{ color: '#6f5569', fontSize: '0.8125rem', fontWeight: 600 }}>
               No net payment difference after edit.
             </div>
           )}
@@ -471,11 +486,12 @@ export const OperatorOrderEditor: React.FC<OperatorOrderEditorProps> = ({
             type="button"
             onClick={onClose}
             style={{
-              padding: '0.625rem 1.25rem',
-              border: '1px solid #d1d5db',
-              borderRadius: '6px',
+              padding: '0.55rem 1.25rem',
+              border: '1px solid #f4d3dd',
+              borderRadius: '9999px',
               background: '#ffffff',
-              fontWeight: 500,
+              fontWeight: 800,
+              color: '#2b1233',
               cursor: 'pointer',
               fontSize: '0.875rem',
             }}
@@ -487,14 +503,15 @@ export const OperatorOrderEditor: React.FC<OperatorOrderEditorProps> = ({
             disabled={submitting || items.length === 0}
             onClick={handleSubmit}
             style={{
-              padding: '0.625rem 1.5rem',
+              padding: '0.55rem 1.5rem',
               border: 'none',
-              borderRadius: '6px',
-              background: '#2563eb',
+              borderRadius: '9999px',
+              background: '#d61c5d',
               color: '#ffffff',
-              fontWeight: 600,
+              fontWeight: 800,
               cursor: submitting || items.length === 0 ? 'not-allowed' : 'pointer',
               fontSize: '0.875rem',
+              boxShadow: '0 3px 0 #a3134a',
             }}
           >
             {submitting ? 'Saving Changes...' : 'Save & Recalculate'}

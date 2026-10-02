@@ -115,7 +115,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
         left: 0,
         right: 0,
         bottom: 0,
-        background: 'rgba(0,0,0,0.5)',
+        background: 'rgba(43, 18, 51, 0.45)',
+        backdropFilter: 'blur(6px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -126,50 +127,59 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       <div
         style={{
           background: '#ffffff',
-          borderRadius: '12px',
+          borderRadius: '1.75rem',
           maxWidth: '700px',
           width: '100%',
           padding: '1.75rem',
-          boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)',
+          border: '1px solid #f4d3dd',
+          boxShadow: '0 25px 50px -12px rgba(120, 20, 60, 0.25)',
           maxHeight: '90vh',
           overflowY: 'auto',
-          fontFamily: 'system-ui, sans-serif',
+          fontFamily: 'var(--font-body-family), system-ui, sans-serif',
+          color: '#2b1233',
         }}
       >
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <h2 style={{ fontSize: '1.35rem', fontWeight: 700, margin: 0, color: '#111827' }}>
+              <h2 style={{ fontFamily: 'var(--font-display-family)', fontSize: '1.5rem', fontWeight: 700, margin: 0, color: '#2b1233' }}>
                 {order.order_number}
               </h2>
               <span
                 style={{
-                  padding: '0.25rem 0.65rem',
+                  padding: '0.3rem 0.8rem',
                   borderRadius: '9999px',
-                  background: '#e0e7ff',
-                  color: '#3730a3',
+                  background: '#ffc2d4',
+                  color: '#2b1233',
                   fontSize: '0.75rem',
-                  fontWeight: 700,
+                  fontWeight: 800,
+                  textTransform: 'uppercase',
                 }}
               >
                 {order.status}
               </span>
             </div>
-            <div style={{ color: '#6b7280', fontSize: '0.8125rem', marginTop: '0.25rem' }}>
-              Customer: <span style={{ fontWeight: 600, color: '#374151' }}>{order.customer_user_id}</span> &bull; Placed:{' '}
+            <div style={{ color: '#6f5569', fontSize: '0.8125rem', marginTop: '0.25rem', fontWeight: 600 }}>
+              Customer: <span style={{ fontWeight: 800, color: '#2b1233' }}>{order.customer_user_id}</span> &bull; Placed:{' '}
               {new Date(order.placed_at).toLocaleString()}
             </div>
           </div>
           <button
             onClick={onClose}
             style={{
-              background: 'none',
-              border: 'none',
-              fontSize: '1.5rem',
-              lineHeight: 1,
+              background: '#fff1f4',
+              border: '1px solid #f4d3dd',
+              borderRadius: '9999px',
+              width: '32px',
+              height: '32px',
+              fontSize: '1.25rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
               cursor: 'pointer',
-              color: '#9ca3af',
+              color: '#6f5569',
+              fontWeight: 'bold',
             }}
           >
             &times;
@@ -179,13 +189,14 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
         {error && (
           <div
             style={{
-              padding: '0.75rem',
-              background: '#fee2e2',
-              border: '1px solid #f87171',
-              borderRadius: '6px',
-              color: '#b91c1c',
+              padding: '0.85rem 1rem',
+              background: '#ffffff',
+              border: '1px solid #f4d3dd',
+              borderRadius: '1rem',
+              color: '#d61c5d',
               fontSize: '0.875rem',
               marginBottom: '1rem',
+              fontWeight: 700,
             }}
           >
             {error}
@@ -198,28 +209,28 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
             gap: '0.75rem',
-            background: '#f9fafb',
-            border: '1px solid #e5e7eb',
-            borderRadius: '8px',
-            padding: '1rem',
+            background: '#fff1f4',
+            border: '1px solid #f4d3dd',
+            borderRadius: '1.25rem',
+            padding: '1rem 1.25rem',
             marginBottom: '1.25rem',
             fontSize: '0.875rem',
           }}
         >
           <div>
-            <div style={{ color: '#6b7280', fontSize: '0.75rem' }}>Payment Status</div>
-            <div style={{ fontWeight: 700, color: '#111827' }}>{order.payment_status}</div>
+            <div style={{ color: '#6f5569', fontSize: '0.75rem', fontWeight: 700 }}>Payment Status</div>
+            <div style={{ fontWeight: 800, color: '#2b1233' }}>{order.payment_status}</div>
           </div>
           <div>
-            <div style={{ color: '#6b7280', fontSize: '0.75rem' }}>Expiry Time</div>
-            <div style={{ fontWeight: 600, color: isExpired ? '#dc2626' : '#111827' }}>
+            <div style={{ color: '#6f5569', fontSize: '0.75rem', fontWeight: 700 }}>Expiry Time</div>
+            <div style={{ fontWeight: 800, color: isExpired ? '#d61c5d' : '#2b1233' }}>
               {new Date(order.expires_at).toLocaleTimeString()}{' '}
               {isExpired ? '(Expired)' : ''}
             </div>
           </div>
           <div>
-            <div style={{ color: '#6b7280', fontSize: '0.75rem' }}>60-Min Edit Window</div>
-            <div style={{ fontWeight: 600, color: editWindowValid ? '#16a34a' : '#9ca3af' }}>
+            <div style={{ color: '#6f5569', fontSize: '0.75rem', fontWeight: 700 }}>60-Min Edit Window</div>
+            <div style={{ fontWeight: 800, color: editWindowValid ? '#2b1233' : '#6f5569' }}>
               {editWindowValid ? 'Active' : 'Closed'}
             </div>
           </div>
@@ -227,32 +238,32 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
 
         {/* Items Table */}
         <div style={{ marginBottom: '1.25rem' }}>
-          <h3 style={{ fontSize: '0.95rem', fontWeight: 600, color: '#374151', marginBottom: '0.5rem' }}>
+          <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#2b1233', marginBottom: '0.5rem' }}>
             Ordered Items ({items.length})
           </h3>
-          <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden' }}>
+          <div style={{ border: '1px solid #f4d3dd', borderRadius: '1rem', overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
               <thead>
-                <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb', textAlign: 'left' }}>
-                  <th style={{ padding: '0.5rem 0.75rem', color: '#4b5563', fontWeight: 600 }}>Item</th>
-                  <th style={{ padding: '0.5rem 0.75rem', color: '#4b5563', fontWeight: 600, textAlign: 'center' }}>Qty</th>
-                  <th style={{ padding: '0.5rem 0.75rem', color: '#4b5563', fontWeight: 600, textAlign: 'right' }}>Price</th>
-                  <th style={{ padding: '0.5rem 0.75rem', color: '#4b5563', fontWeight: 600, textAlign: 'right' }}>Line Total</th>
+                <tr style={{ background: '#fff1f4', borderBottom: '1px solid #f4d3dd', textAlign: 'left' }}>
+                  <th style={{ padding: '0.65rem 1rem', color: '#6f5569', fontWeight: 800 }}>Item</th>
+                  <th style={{ padding: '0.65rem 1rem', color: '#6f5569', fontWeight: 800, textAlign: 'center' }}>Qty</th>
+                  <th style={{ padding: '0.65rem 1rem', color: '#6f5569', fontWeight: 800, textAlign: 'right' }}>Price</th>
+                  <th style={{ padding: '0.65rem 1rem', color: '#6f5569', fontWeight: 800, textAlign: 'right' }}>Line Total</th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((it) => (
-                  <tr key={it.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                    <td style={{ padding: '0.5rem 0.75rem', fontWeight: 500, color: '#111827' }}>
+                  <tr key={it.id} style={{ borderBottom: '1px solid #f4d3dd/60' }}>
+                    <td style={{ padding: '0.65rem 1rem', fontWeight: 700, color: '#2b1233' }}>
                       {it.product_name_snapshot}
                     </td>
-                    <td style={{ padding: '0.5rem 0.75rem', textAlign: 'center', color: '#374151' }}>
+                    <td style={{ padding: '0.65rem 1rem', textAlign: 'center', color: '#2b1233', fontWeight: 700 }}>
                       {it.quantity}
                     </td>
-                    <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', color: '#374151' }}>
+                    <td style={{ padding: '0.65rem 1rem', textAlign: 'right', color: '#6f5569', fontWeight: 600 }}>
                       ₹{it.unit_price_snapshot.toFixed(2)}
                     </td>
-                    <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', fontWeight: 600, color: '#111827' }}>
+                    <td style={{ padding: '0.65rem 1rem', textAlign: 'right', fontWeight: 800, color: '#2b1233' }}>
                       ₹{it.line_total.toFixed(2)}
                     </td>
                   </tr>
@@ -265,10 +276,10 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
         {/* Financial Summary */}
         <div
           style={{
-            background: '#f8fafc',
-            border: '1px solid #e2e8f0',
-            borderRadius: '8px',
-            padding: '1rem',
+            background: '#fff1f4',
+            border: '1px solid #f4d3dd',
+            borderRadius: '1.25rem',
+            padding: '1.15rem 1.25rem',
             marginBottom: '1.25rem',
             display: 'flex',
             justifyContent: 'space-between',
@@ -276,38 +287,40 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           }}
         >
           <div>
-            <div style={{ color: '#64748b', fontSize: '0.8125rem' }}>
+            <div style={{ color: '#6f5569', fontSize: '0.8125rem', fontWeight: 600 }}>
               Subtotal: ₹{order.subtotal.toFixed(2)} &bull; Tax: ₹{order.tax.toFixed(2)}
             </div>
-            <div style={{ color: '#16a34a', fontSize: '0.8125rem' }}>
+            <div style={{ color: '#2b1233', fontSize: '0.8125rem', fontWeight: 800, marginTop: '0.2rem' }}>
               Verified Paid at Reception: ₹{verifiedPaid.toFixed(2)}
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            <div style={{ fontSize: '0.75rem', color: '#6f5569', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 800 }}>
               Total Amount
             </div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>
+            <div style={{ fontFamily: 'var(--font-display-family)', fontSize: '1.65rem', fontWeight: 800, color: '#d61c5d' }}>
               ₹{order.total.toFixed(2)}
             </div>
           </div>
         </div>
 
         {/* Reception & Status Actions */}
-        <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '1.25rem', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+        <div style={{ borderTop: '1px solid #f4d3dd', paddingTop: '1.25rem', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button
               type="button"
               onClick={() => onOpenPayment(order, payments)}
               style={{
-                padding: '0.5rem 1rem',
-                background: '#2563eb',
+                padding: '0.55rem 1.25rem',
+                background: '#d61c5d',
                 color: '#ffffff',
                 border: 'none',
-                borderRadius: '6px',
-                fontWeight: 600,
-                fontSize: '0.875rem',
+                borderRadius: '9999px',
+                fontWeight: 800,
+                fontSize: '0.8125rem',
                 cursor: 'pointer',
+                boxShadow: '0 3px 0 #a3134a',
+                transition: 'all 0.15s ease',
               }}
             >
               Reception Payment
@@ -318,14 +331,15 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 type="button"
                 onClick={() => onOpenEdit(order, items, payments)}
                 style={{
-                  padding: '0.5rem 1rem',
-                  background: '#f3f4f6',
-                  color: '#1f2937',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '6px',
-                  fontWeight: 600,
-                  fontSize: '0.875rem',
+                  padding: '0.55rem 1.25rem',
+                  background: '#ffffff',
+                  color: '#2b1233',
+                  border: '1px solid #f4d3dd',
+                  borderRadius: '9999px',
+                  fontWeight: 800,
+                  fontSize: '0.8125rem',
                   cursor: 'pointer',
+                  transition: 'all 0.15s ease',
                 }}
               >
                 Edit Order Items
@@ -341,13 +355,13 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 disabled={updatingStatus}
                 onClick={() => handleStatusTransition(OrderStatus.PREPARING)}
                 style={{
-                  padding: '0.5rem 1rem',
-                  background: '#eab308',
-                  color: '#ffffff',
+                  padding: '0.55rem 1.25rem',
+                  background: '#ffcf4d',
+                  color: '#2b1233',
                   border: 'none',
-                  borderRadius: '6px',
-                  fontWeight: 600,
-                  fontSize: '0.875rem',
+                  borderRadius: '9999px',
+                  fontWeight: 800,
+                  fontSize: '0.8125rem',
                   cursor: updatingStatus ? 'not-allowed' : 'pointer',
                 }}
               >
@@ -361,13 +375,13 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 disabled={updatingStatus}
                 onClick={() => handleStatusTransition(OrderStatus.READY)}
                 style={{
-                  padding: '0.5rem 1rem',
-                  background: '#10b981',
-                  color: '#ffffff',
+                  padding: '0.55rem 1.25rem',
+                  background: '#a9bfff',
+                  color: '#2b1233',
                   border: 'none',
-                  borderRadius: '6px',
-                  fontWeight: 600,
-                  fontSize: '0.875rem',
+                  borderRadius: '9999px',
+                  fontWeight: 800,
+                  fontSize: '0.8125rem',
                   cursor: updatingStatus ? 'not-allowed' : 'pointer',
                 }}
               >
@@ -381,13 +395,13 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 disabled={updatingStatus}
                 onClick={() => handleStatusTransition(OrderStatus.COMPLETED)}
                 style={{
-                  padding: '0.5rem 1rem',
-                  background: '#4b5563',
-                  color: '#ffffff',
+                  padding: '0.55rem 1.25rem',
+                  background: '#ffc2d4',
+                  color: '#2b1233',
                   border: 'none',
-                  borderRadius: '6px',
-                  fontWeight: 600,
-                  fontSize: '0.875rem',
+                  borderRadius: '9999px',
+                  fontWeight: 800,
+                  fontSize: '0.8125rem',
                   cursor: updatingStatus ? 'not-allowed' : 'pointer',
                 }}
               >

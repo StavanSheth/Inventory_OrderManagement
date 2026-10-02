@@ -121,21 +121,20 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
   const getStatusBadge = (status: OrderStatus) => {
     switch (status) {
       case OrderStatus.PENDING:
-        return { label: 'Pending', bg: '#fef3c7', text: '#92400e' };
+        return { label: 'Pending', bg: '#ffcf4d', text: '#2b1233' };
       case OrderStatus.CONFIRMED:
-        return { label: 'Confirmed', bg: '#dcfce7', text: '#15803d' };
+        return { label: 'Confirmed', bg: '#bfe3a6', text: '#2b1233' };
       case OrderStatus.PREPARING:
-        return { label: 'Preparing', bg: '#fef9c3', text: '#854d0e' };
+        return { label: 'Preparing', bg: '#ecd3b4', text: '#2b1233' };
       case OrderStatus.READY:
-        return { label: 'Ready', bg: '#d1fae5', text: '#065f46' };
+        return { label: 'Ready', bg: '#a9bfff', text: '#2b1233' };
       case OrderStatus.COMPLETED:
-        return { label: 'Completed', bg: '#f3f4f6', text: '#374151' };
+        return { label: 'Completed', bg: '#ffc2d4', text: '#2b1233' };
       case OrderStatus.EXPIRED:
-        return { label: 'Expired', bg: '#fee2e2', text: '#991b1b' };
       case OrderStatus.CANCELLED:
-        return { label: 'Cancelled', bg: '#fee2e2', text: '#b91c1c' };
+        return { label: 'Cancelled', bg: '#fecdd3', text: '#9f1239' };
       default:
-        return { label: status, bg: '#f3f4f6', text: '#4b5563' };
+        return { label: status, bg: '#fff1f4', text: '#6f5569' };
     }
   };
 
@@ -151,28 +150,30 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
   ];
 
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '1.5rem', fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '1rem 0', fontFamily: 'var(--font-body-family), system-ui, sans-serif' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 800, margin: '0 0 0.25rem 0', color: '#111827' }}>
+          <h1 style={{ fontFamily: 'var(--font-display-family)', fontSize: '2rem', fontWeight: 700, margin: '0 0 0.25rem 0', color: '#2b1233' }}>
             Branch Order Queue
           </h1>
-          <p style={{ margin: 0, color: '#6b7280', fontSize: '0.875rem' }}>
+          <p style={{ margin: 0, color: '#6f5569', fontSize: '0.875rem', fontWeight: 600 }}>
             Realtime reception & fulfillment order management (Branch: {branchId})
           </p>
         </div>
         <button
           onClick={fetchOrders}
           style={{
-            padding: '0.5rem 1rem',
-            background: '#2563eb',
+            padding: '0.55rem 1.35rem',
+            background: '#d61c5d',
             color: '#ffffff',
             border: 'none',
-            borderRadius: '6px',
-            fontWeight: 600,
-            fontSize: '0.875rem',
+            borderRadius: '9999px',
+            fontWeight: 800,
+            fontSize: '0.8125rem',
             cursor: 'pointer',
+            boxShadow: '0 3px 0 #a3134a',
+            transition: 'all 0.15s ease',
           }}
         >
           Refresh Queue
@@ -184,8 +185,8 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
         style={{
           display: 'flex',
           gap: '0.5rem',
-          borderBottom: '1px solid #e5e7eb',
-          paddingBottom: '0.5rem',
+          borderBottom: '1px solid #f4d3dd',
+          paddingBottom: '0.75rem',
           marginBottom: '1.5rem',
           overflowX: 'auto',
         }}
@@ -198,27 +199,31 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               style={{
-                padding: '0.5rem 0.85rem',
-                borderRadius: '8px',
-                border: 'none',
-                background: isSelected ? '#1e293b' : '#f3f4f6',
-                color: isSelected ? '#ffffff' : '#4b5563',
+                padding: '0.45rem 1rem',
+                borderRadius: '9999px',
+                border: isSelected ? 'none' : '1px solid #f4d3dd',
+                background: isSelected ? '#d61c5d' : '#ffffff',
+                color: isSelected ? '#ffffff' : '#2b1233',
                 fontSize: '0.8125rem',
-                fontWeight: 600,
+                fontWeight: 800,
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.4rem',
                 whiteSpace: 'nowrap',
+                boxShadow: isSelected ? '0 3px 0 #a3134a' : '0 2px 8px -4px rgba(120,20,60,0.08)',
+                transition: 'all 0.15s ease',
               }}
             >
               <span>{tab.label}</span>
               <span
                 style={{
                   fontSize: '0.75rem',
-                  padding: '0.1rem 0.4rem',
+                  padding: '0.1rem 0.45rem',
                   borderRadius: '9999px',
-                  background: isSelected ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.06)',
+                  background: isSelected ? 'rgba(255,255,255,0.25)' : '#fff1f4',
+                  color: isSelected ? '#ffffff' : '#2b1233',
+                  fontWeight: 900,
                 }}
               >
                 {count}
@@ -232,12 +237,13 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
       {error && (
         <div
           style={{
-            padding: '1rem',
-            background: '#fee2e2',
-            border: '1px solid #f87171',
-            borderRadius: '6px',
-            color: '#b91c1c',
+            padding: '1rem 1.25rem',
+            background: '#ffffff',
+            border: '1px solid #f4d3dd',
+            borderRadius: '1rem',
+            color: '#d61c5d',
             marginBottom: '1.25rem',
+            fontWeight: 700,
           }}
         >
           {error}
@@ -246,7 +252,7 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
 
       {/* Loading state */}
       {loading && (
-        <div style={{ padding: '3rem', textAlign: 'center', color: '#6b7280' }}>
+        <div style={{ padding: '3rem', textAlign: 'center', color: '#6f5569', fontWeight: 700 }}>
           Loading order queue...
         </div>
       )}
@@ -257,10 +263,11 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
           style={{
             padding: '3rem',
             textAlign: 'center',
-            background: '#f9fafb',
-            borderRadius: '8px',
-            border: '1px dashed #d1d5db',
-            color: '#6b7280',
+            background: '#ffffff',
+            borderRadius: '1.5rem',
+            border: '1px dashed #f4d3dd',
+            color: '#6f5569',
+            fontWeight: 700,
           }}
         >
           No orders in this state.
@@ -273,7 +280,7 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
-            gap: '1rem',
+            gap: '1.25rem',
           }}
         >
           {filteredOrders.map((order) => {
@@ -286,54 +293,55 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
                 key={order.id}
                 style={{
                   background: '#ffffff',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '10px',
-                  padding: '1.25rem',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                  border: '1px solid #f4d3dd',
+                  borderRadius: '1.5rem',
+                  padding: '1.5rem',
+                  boxShadow: '0 8px 24px -12px rgba(120, 20, 60, 0.12)',
                   display: 'flex',
                   flexDirection: 'column',
                   justifyContent: 'space-between',
+                  transition: 'all 0.15s ease',
                 }}
               >
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
                     <div>
-                      <div style={{ fontWeight: 800, fontSize: '1.1rem', color: '#111827' }}>
+                      <div style={{ fontFamily: 'var(--font-display-family)', fontWeight: 700, fontSize: '1.2rem', color: '#2b1233' }}>
                         {order.order_number}
                       </div>
-                      <div style={{ color: '#6b7280', fontSize: '0.75rem' }}>
+                      <div style={{ color: '#6f5569', fontSize: '0.75rem', fontWeight: 600 }}>
                         {new Date(order.placed_at).toLocaleTimeString()} &bull; ID: {order.id.slice(0, 8)}...
                       </div>
                     </div>
                     <span
                       style={{
-                        padding: '0.25rem 0.6rem',
+                        padding: '0.25rem 0.75rem',
                         borderRadius: '9999px',
                         background: badge.bg,
                         color: badge.text,
                         fontSize: '0.75rem',
-                        fontWeight: 700,
+                        fontWeight: 800,
                       }}
                     >
                       {badge.label}
                     </span>
                   </div>
 
-                  <div style={{ background: '#f9fafb', padding: '0.75rem', borderRadius: '6px', marginBottom: '1rem', fontSize: '0.8125rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                      <span style={{ color: '#6b7280' }}>Payment:</span>
-                      <span style={{ fontWeight: 600, color: order.payment_status === PaymentStatus.VERIFIED ? '#16a34a' : '#d97706' }}>
+                  <div style={{ background: '#fff1f4', padding: '0.85rem 1rem', borderRadius: '1rem', marginBottom: '1.25rem', fontSize: '0.8125rem', border: '1px solid #f4d3dd' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                      <span style={{ color: '#6f5569', fontWeight: 600 }}>Payment:</span>
+                      <span style={{ fontWeight: 800, color: order.payment_status === PaymentStatus.VERIFIED ? '#2b1233' : '#d61c5d' }}>
                         {order.payment_status}
                       </span>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: '#6b7280' }}>Total:</span>
-                      <span style={{ fontWeight: 800, fontSize: '1rem', color: '#111827' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: '#6f5569', fontWeight: 600 }}>Total:</span>
+                      <span style={{ fontFamily: 'var(--font-display-family)', fontWeight: 800, fontSize: '1.15rem', color: '#d61c5d' }}>
                         ₹{order.total.toFixed(2)}
                       </span>
                     </div>
                     {isPending && (
-                      <div style={{ marginTop: '0.35rem', color: '#dc2626', fontSize: '0.75rem' }}>
+                      <div style={{ marginTop: '0.45rem', color: '#d61c5d', fontSize: '0.75rem', fontWeight: 700 }}>
                         Expires at: {new Date(order.expires_at).toLocaleTimeString()}
                       </div>
                     )}
@@ -346,14 +354,15 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
                     onClick={() => setSelectedOrderId(order.id)}
                     style={{
                       flex: 1,
-                      padding: '0.45rem',
-                      background: '#f3f4f6',
-                      color: '#1f2937',
-                      border: '1px solid #d1d5db',
-                      borderRadius: '6px',
+                      padding: '0.5rem',
+                      background: '#fff1f4',
+                      color: '#2b1233',
+                      border: '1px solid #f4d3dd',
+                      borderRadius: '9999px',
                       fontSize: '0.75rem',
-                      fontWeight: 600,
+                      fontWeight: 800,
                       cursor: 'pointer',
+                      transition: 'all 0.15s ease',
                     }}
                   >
                     View Detail
@@ -363,14 +372,16 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
                     onClick={() => handleOpenPayment(order)}
                     style={{
                       flex: 1,
-                      padding: '0.45rem',
-                      background: '#2563eb',
+                      padding: '0.5rem',
+                      background: '#d61c5d',
                       color: '#ffffff',
                       border: 'none',
-                      borderRadius: '6px',
+                      borderRadius: '9999px',
                       fontSize: '0.75rem',
-                      fontWeight: 600,
+                      fontWeight: 800,
                       cursor: 'pointer',
+                      boxShadow: '0 3px 0 #a3134a',
+                      transition: 'all 0.15s ease',
                     }}
                   >
                     Payment
@@ -380,14 +391,15 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
                     <button
                       onClick={() => handleOpenEdit(order)}
                       style={{
-                        padding: '0.45rem 0.75rem',
+                        padding: '0.5rem 0.9rem',
                         background: '#ffffff',
-                        color: '#374151',
-                        border: '1px solid #d1d5db',
-                        borderRadius: '6px',
+                        color: '#2b1233',
+                        border: '1px solid #f4d3dd',
+                        borderRadius: '9999px',
                         fontSize: '0.75rem',
-                        fontWeight: 600,
+                        fontWeight: 800,
                         cursor: 'pointer',
+                        transition: 'all 0.15s ease',
                       }}
                     >
                       Edit

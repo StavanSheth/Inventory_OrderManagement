@@ -115,20 +115,20 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onBac
   const getStatusColor = (status: OrderStatus) => {
     switch (status) {
       case OrderStatus.PENDING:
-        return 'bg-amber-500/20 text-amber-300 border-amber-500/40';
+        return 'bg-[#ffcf4d] text-[#2b1233] border-[#ffcf4d]';
       case OrderStatus.CONFIRMED:
-        return 'bg-blue-500/20 text-blue-300 border-blue-500/40';
+        return 'bg-[#bfe3a6] text-[#2b1233] border-[#bfe3a6]';
       case OrderStatus.PREPARING:
-        return 'bg-purple-500/20 text-purple-300 border-purple-500/40';
+        return 'bg-[#ecd3b4] text-[#2b1233] border-[#ecd3b4]';
       case OrderStatus.READY:
-        return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
+        return 'bg-[#a9bfff] text-[#2b1233] border-[#a9bfff]';
       case OrderStatus.COMPLETED:
-        return 'bg-emerald-600/20 text-emerald-400 border-emerald-600/40';
+        return 'bg-[#ffc2d4] text-[#2b1233] border-[#ffc2d4]';
       case OrderStatus.EXPIRED:
       case OrderStatus.CANCELLED:
-        return 'bg-red-500/20 text-red-300 border-red-500/40';
+        return 'bg-[#fecdd3] text-[#9f1239] border-[#fecdd3]';
       default:
-        return 'bg-slate-500/20 text-slate-300 border-slate-500/40';
+        return 'bg-[#fff1f4] text-[#6f5569] border-[#f4d3dd]';
     }
   };
 
@@ -141,24 +141,24 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onBac
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-12 text-slate-400">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500 mr-3"></div>
-        <span>Loading order status...</span>
+      <div className="flex items-center justify-center p-12 text-[#6f5569]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#d61c5d] mr-3"></div>
+        <span className="font-bold text-sm">Tracking your scoop...</span>
       </div>
     );
   }
 
   if (error || !order) {
     return (
-      <div className="p-6 bg-red-950/40 border border-red-800 rounded-lg text-red-300">
-        <p className="font-semibold">Unable to display order</p>
-        <p className="text-sm opacity-80">{error ?? 'Order not found'}</p>
+      <div className="p-6 bg-white border border-[#f4d3dd] rounded-3xl text-[#d61c5d] shadow-sm max-w-lg mx-auto">
+        <p className="font-bold text-base">Unable to display order</p>
+        <p className="text-sm opacity-80 mt-1">{error ?? 'Order not found'}</p>
         {onBackToCatalog && (
           <button
             onClick={onBackToCatalog}
-            className="mt-4 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded text-sm"
+            className="mt-4 px-5 py-2 bg-[#d61c5d] hover:bg-[#c21853] text-white rounded-full text-xs font-extrabold transition shadow-sm"
           >
-            Back to Catalog
+            Back to Counter
           </button>
         )}
       </div>
@@ -168,37 +168,37 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onBac
   const isEditable = isWithinOrderEditWindow(new Date(order.placed_at), 60);
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8 space-y-6 max-w-2xl mx-auto shadow-xl">
+    <div className="bg-white border border-[#f4d3dd] rounded-3xl p-6 md:p-8 space-y-6 max-w-2xl mx-auto shadow-[0_14px_40px_-16px_rgba(120,20,60,0.18)] text-[#2b1233]">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-6 border-b border-slate-800 gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-6 border-b border-[#f4d3dd] gap-4">
         <div>
-          <span className="text-xs font-mono uppercase tracking-wider text-slate-400">Order Reference</span>
-          <h2 className="text-2xl font-black text-white tracking-tight">{order.order_number}</h2>
-          <p className="text-xs text-slate-500 mt-1">Placed at {new Date(order.placed_at).toLocaleTimeString()}</p>
+          <span className="text-xs font-bold uppercase tracking-wider text-[#6f5569]">Order Reference</span>
+          <h2 className="font-display text-3xl font-extrabold text-[#2b1233] tracking-tight">{order.order_number}</h2>
+          <p className="text-xs text-[#6f5569] font-medium mt-1">Placed at {new Date(order.placed_at).toLocaleTimeString()}</p>
         </div>
 
         <div className="flex flex-col sm:items-end">
           <span
-            className={`px-3 py-1 rounded-full text-xs font-bold border tracking-wide uppercase ${getStatusColor(
+            className={`px-4 py-1.5 rounded-full text-xs font-black border tracking-wider uppercase ${getStatusColor(
               order.status as OrderStatus,
             )}`}
           >
             {order.status}
           </span>
-          <span className="text-xs text-slate-400 mt-1">Payment: {order.payment_status}</span>
+          <span className="text-xs text-[#6f5569] font-bold mt-1.5">Payment: {order.payment_status}</span>
         </div>
       </div>
 
       {/* Expiry Countdown Box for Pending Orders */}
       {order.status === OrderStatus.PENDING && (
-        <div className="p-4 bg-amber-950/30 border border-amber-800/60 rounded-xl flex items-center justify-between">
+        <div className="p-5 bg-[#ffcf4d]/25 border border-[#ffcf4d] rounded-2xl flex items-center justify-between">
           <div>
-            <h4 className="text-sm font-bold text-amber-300">Pay at Reception</h4>
-            <p className="text-xs text-amber-400/80">Please show this order number to the cashier.</p>
+            <h4 className="text-sm font-black text-[#2b1233]">Pay at Reception</h4>
+            <p className="text-xs text-[#2b1233]/80 font-medium">Please show this order reference to the cashier.</p>
           </div>
           <div className="text-right">
-            <span className="text-xs text-slate-400 block">Expires in</span>
-            <span className="font-mono text-lg font-bold text-amber-400">
+            <span className="text-xs text-[#6f5569] block font-bold">Expires in</span>
+            <span className="font-display text-xl font-black text-[#d61c5d]">
               {timeLeftMs > 0 ? formatRemainingTime(timeLeftMs) : 'Expired'}
             </span>
           </div>
@@ -207,41 +207,41 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onBac
 
       {/* Items List */}
       <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Ordered Items</h3>
+        <h3 className="text-xs font-extrabold text-[#6f5569] uppercase tracking-wider">Ordered Items</h3>
         <div className="space-y-2">
           {items.map((item) => (
             <div
               key={item.id}
-              className="flex justify-between items-center py-2 border-b border-slate-800/60 text-sm"
+              className="flex justify-between items-center py-2.5 border-b border-[#f4d3dd]/60 text-sm"
             >
               <div>
-                <span className="font-medium text-white">{item.product_name_snapshot}</span>
-                <span className="text-xs text-slate-400 ml-2">× {item.quantity}</span>
+                <span className="font-bold text-[#2b1233]">{item.product_name_snapshot}</span>
+                <span className="text-xs text-[#6f5569] ml-2 font-extrabold">× {item.quantity}</span>
               </div>
-              <span className="font-semibold text-slate-200">₹{item.line_total.toFixed(2)}</span>
+              <span className="font-extrabold text-[#2b1233]">₹{item.line_total.toFixed(2)}</span>
             </div>
           ))}
         </div>
       </div>
 
       {/* Totals */}
-      <div className="pt-2 space-y-1 text-sm border-t border-slate-800">
-        <div className="flex justify-between text-slate-400">
+      <div className="pt-2 space-y-1.5 text-sm border-t border-[#f4d3dd]">
+        <div className="flex justify-between text-[#6f5569] font-medium">
           <span>Subtotal</span>
-          <span>₹{order.subtotal.toFixed(2)}</span>
+          <span className="text-[#2b1233] font-bold">₹{order.subtotal.toFixed(2)}</span>
         </div>
-        <div className="flex justify-between text-slate-400">
+        <div className="flex justify-between text-[#6f5569] font-medium">
           <span>Tax</span>
-          <span>₹{order.tax.toFixed(2)}</span>
+          <span className="text-[#2b1233] font-bold">₹{order.tax.toFixed(2)}</span>
         </div>
-        <div className="flex justify-between text-slate-400">
+        <div className="flex justify-between text-[#6f5569] font-medium">
           <span>Payment Status</span>
-          <span className="text-emerald-400 font-medium">{order.payment_status}</span>
+          <span className="text-[#d61c5d] font-extrabold">{order.payment_status}</span>
         </div>
         {payments.some((p) => p.status === PaymentStatus.VERIFIED) && (
-          <div className="flex justify-between text-slate-400">
+          <div className="flex justify-between text-[#6f5569] font-medium">
             <span>Verified Paid at Reception</span>
-            <span className="text-emerald-400 font-medium">
+            <span className="text-[#2b1233] font-bold">
               ₹{payments
                 .filter((p) => p.status === PaymentStatus.VERIFIED)
                 .reduce((sum, p) => sum + p.amount, 0)
@@ -249,26 +249,26 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onBac
             </span>
           </div>
         )}
-        <div className="flex justify-between text-base font-bold text-white pt-2 border-t border-slate-800/80">
-          <span>Total Payable</span>
-          <span className="text-amber-400 text-lg">₹{order.total.toFixed(2)}</span>
+        <div className="flex justify-between text-base font-extrabold text-[#2b1233] pt-3 border-t border-[#f4d3dd]">
+          <span className="font-display text-lg">Total Payable</span>
+          <span className="font-display text-2xl text-[#d61c5d]">₹{order.total.toFixed(2)}</span>
         </div>
       </div>
 
       {/* Footer Navigation */}
-      <div className="flex justify-between items-center pt-4 border-t border-slate-800">
+      <div className="flex justify-between items-center pt-4 border-t border-[#f4d3dd]">
         {onBackToCatalog && (
           <button
             onClick={onBackToCatalog}
-            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium rounded-lg text-sm transition"
+            className="px-5 py-2.5 bg-[#fff1f4] hover:bg-white border border-[#f4d3dd] text-[#2b1233] font-extrabold rounded-full text-xs transition shadow-sm"
           >
-            ← Back to Catalog
+            ← Back to Counter
           </button>
         )}
 
         {isEditable && order.status !== OrderStatus.COMPLETED && order.status !== OrderStatus.CANCELLED && (
-          <span className="text-xs text-slate-500 italic">
-            Order can be modified by operator within 60 mins of order.
+          <span className="text-xs text-[#6f5569] italic">
+            Order can be modified at reception within 60 mins.
           </span>
         )}
       </div>
