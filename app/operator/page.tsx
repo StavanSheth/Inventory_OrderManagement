@@ -43,8 +43,22 @@ export default function OperatorPortalPage() {
             }
           }
 
-          // Otherwise default to first available branch
-          setBranchId((prev) => (prev ? prev : json.data![0].id));
+          let initialBranch = json.data[0].id;
+          if (typeof window !== 'undefined') {
+            const urlParams = new URLSearchParams(window.location.search);
+            const branchQuery = urlParams.get('branch')?.toLowerCase();
+            if (branchQuery) {
+              const matched = json.data.find(
+                (b) => b.code.toLowerCase() === branchQuery || b.id.toLowerCase() === branchQuery,
+              );
+              if (matched) {
+                initialBranch = matched.id;
+              }
+            }
+          }
+
+          // Otherwise default to resolved branch
+          setBranchId((prev) => (prev ? prev : initialBranch));
         }
       })
       .catch(() => {});

@@ -54,7 +54,22 @@ export default function CustomerOrderPage() {
       .then((json) => {
         if (json.success && Array.isArray(json.data) && json.data.length > 0) {
           setBranches(json.data);
-          setSelectedBranchId((prev) => (json.data?.some((b) => b.id === prev) ? prev : json.data![0].id));
+
+          let initialBranch = json.data[0].id;
+          if (typeof window !== 'undefined') {
+            const urlParams = new URLSearchParams(window.location.search);
+            const branchQuery = urlParams.get('branch')?.toLowerCase();
+            if (branchQuery) {
+              const matched = json.data.find(
+                (b) => b.code.toLowerCase() === branchQuery || b.id.toLowerCase() === branchQuery,
+              );
+              if (matched) {
+                initialBranch = matched.id;
+              }
+            }
+          }
+
+          setSelectedBranchId((prev) => (json.data?.some((b) => b.id === prev) ? prev : initialBranch));
         }
       })
       .catch(() => {});
