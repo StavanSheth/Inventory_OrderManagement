@@ -44,12 +44,20 @@ export function createAuthInfrastructure(
 
   // Verifier selection
   let verifier: IFirebaseVerifier;
+  const isProductionLike = process.env.NODE_ENV === 'production' || (process.env.NODE_ENV as string) === 'staging' || process.env.APP_ENV === 'staging';
+
   if (options.customVerifier) {
+    if (isProductionLike && options.customVerifier instanceof TestFirebaseVerifier) {
+      throw new Error('FATAL: TestFirebaseVerifier cannot be used in production or staging environments');
+    }
     verifier = options.customVerifier;
   } else if (process.env.NODE_ENV === 'test' && !process.env.FORCE_PRODUCTION_VERIFIER) {
     verifier = new TestFirebaseVerifier();
   } else {
-    const projectId = config.firebase.projectId ?? process.env.FIREBASE_PROJECT_ID ?? 'melt-icecream';
+    const projectId = config.firebase.projectId ?? process.env.FIREBASE_PROJECT_ID;
+    if (!projectId || projectId.trim().length === 0) {
+      throw new Error('Firebase projectId is required in production and staging environments');
+    }
     verifier = new FirebaseProductionVerifier(projectId);
   }
 

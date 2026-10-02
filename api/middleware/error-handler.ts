@@ -4,12 +4,18 @@ import { ApiErrorCode } from '../../shared/enums/errors.enum';
 import { HTTP_STATUS } from '../../shared/constants/api.constants';
 
 export function handleApiError(error: unknown, additionalHeaders?: Record<string, string>): Response {
+  const isProductionLike = process.env.NODE_ENV === 'production' || (process.env.NODE_ENV as string) === 'staging' || process.env.APP_ENV === 'staging';
+
   if (error instanceof AppError) {
-    return errorResponse(error.code, error.message, error.details, error.statusCode, additionalHeaders);
+    const message = isProductionLike && error.statusCode >= 500
+      ? 'An internal server error occurred'
+      : error.message;
+    const details = isProductionLike && error.statusCode >= 500 ? undefined : error.details;
+
+    return errorResponse(error.code, message, details, error.statusCode, additionalHeaders);
   }
 
-  const isProduction = process.env.NODE_ENV === 'production';
-  const sanitizedMessage = isProduction
+  const sanitizedMessage = isProductionLike
     ? 'An internal server error occurred'
     : error instanceof Error
       ? error.message

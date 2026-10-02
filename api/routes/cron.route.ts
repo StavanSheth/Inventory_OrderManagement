@@ -14,9 +14,29 @@ import { CloudflareEnv } from '../../database/types';
  * Finds all PENDING orders past their expires_at and marks them EXPIRED.
  */
 export async function handleOrderExpiryRoute(
-  env?: { DB?: D1DatabaseLike } | CloudflareEnv,
+  env?: { DB?: D1DatabaseLike; CRON_SECRET?: string } | CloudflareEnv,
+  request?: Request,
 ): Promise<Response> {
   try {
+    const cronSecret = (env && 'CRON_SECRET' in env ? (env as { CRON_SECRET?: string }).CRON_SECRET : undefined) ?? process.env.CRON_SECRET;
+    if (cronSecret && request) {
+      const authHeader = request.headers.get('authorization');
+      const cronHeader = request.headers.get('x-cron-secret');
+      const expectedBearer = `Bearer ${cronSecret}`;
+      if (authHeader !== expectedBearer && cronHeader !== cronSecret) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: { code: 'UNAUTHORIZED', message: 'Invalid or missing cron authentication secret' },
+          }),
+          {
+            status: 401,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        );
+      }
+    }
+
     const db = getDatabase(env as { env?: CloudflareEnv } | CloudflareEnv | undefined);
     const job = new OrderExpiryJob(
       new OrderRepository(db),

@@ -9,7 +9,7 @@ import { UnauthorizedError } from '../../errors/app-error';
  */
 export class TestFirebaseVerifier implements IFirebaseVerifier {
   constructor() {
-    if (process.env.NODE_ENV === 'production') {
+    if (process.env.NODE_ENV === 'production' || (process.env.NODE_ENV as string) === 'staging' || process.env.APP_ENV === 'staging') {
       throw new Error('FATAL: TestFirebaseVerifier cannot be used in production environment');
     }
   }

@@ -33,7 +33,7 @@ jobs:
       - name: Run test suite
         run: npm test
 
-      - name: Verify clean in-memory migrations (0001 -> 0008)
+      - name: Verify clean in-memory migrations (0001 -> 0010)
         run: npx tsx scripts/migrate.ts --memory
 
       - name: Verify persistent migrations
