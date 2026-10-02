@@ -159,26 +159,53 @@ export const BranchManagementView: React.FC<BranchManagementViewProps> = ({
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            setShowCreateModal(true);
-            setError(null);
-          }}
-          style={{
-            padding: '0.55rem 1.25rem',
-            background: '#d61c5d',
-            color: '#ffffff',
-            borderRadius: '9999px',
-            border: 'none',
-            fontWeight: 800,
-            fontSize: '0.875rem',
-            cursor: 'pointer',
-            boxShadow: '0 3px 0 #a3134a',
-          }}
-        >
-          ➕ Add New Branch
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={() => {
+              const url = new URL('/api/v1/owner/reports', window.location.origin);
+              url.searchParams.set('type', 'branches');
+              window.open(url.toString(), '_blank');
+            }}
+            style={{
+              padding: '0.55rem 1.15rem',
+              background: '#fff1f4',
+              color: '#d61c5d',
+              borderRadius: '9999px',
+              border: '1px solid #f4d3dd',
+              fontWeight: 800,
+              fontSize: '0.8125rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+            }}
+          >
+            <span>📥</span>
+            <span>Download Branches CSV</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setShowCreateModal(true);
+              setError(null);
+            }}
+            style={{
+              padding: '0.55rem 1.25rem',
+              background: '#d61c5d',
+              color: '#ffffff',
+              borderRadius: '9999px',
+              border: 'none',
+              fontWeight: 800,
+              fontSize: '0.875rem',
+              cursor: 'pointer',
+              boxShadow: '0 3px 0 #a3134a',
+            }}
+          >
+            ➕ Add New Branch
+          </button>
+        </div>
       </div>
 
       {successMessage && (

@@ -214,23 +214,53 @@ export const UnifiedLedgerView: React.FC<UnifiedLedgerViewProps> = ({ branchId, 
             Realtime dual audit trail for Orders and Inventory Movements (Branch: {branchId})
           </p>
         </div>
-        <button
-          onClick={fetchLedgerData}
-          style={{
-            padding: '0.55rem 1.35rem',
-            background: '#d61c5d',
-            color: '#ffffff',
-            border: 'none',
-            borderRadius: '9999px',
-            fontWeight: 800,
-            fontSize: '0.8125rem',
-            cursor: 'pointer',
-            boxShadow: '0 3px 0 #a3134a',
-            transition: 'all 0.15s ease',
-          }}
-        >
-          Refresh Ledger
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          {isOwner && (
+            <button
+              type="button"
+              onClick={() => {
+                const url = new URL('/api/v1/owner/reports', window.location.origin);
+                url.searchParams.set('type', 'ledger');
+                url.searchParams.set('branchId', branchId);
+                window.open(url.toString(), '_blank');
+              }}
+              style={{
+                padding: '0.55rem 1.15rem',
+                background: '#fff1f4',
+                color: '#d61c5d',
+                borderRadius: '9999px',
+                border: '1px solid #f4d3dd',
+                fontWeight: 800,
+                fontSize: '0.8125rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+              }}
+            >
+              <span>📥</span>
+              <span>Download Ledger CSV</span>
+            </button>
+          )}
+
+          <button
+            onClick={fetchLedgerData}
+            style={{
+              padding: '0.55rem 1.35rem',
+              background: '#d61c5d',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '9999px',
+              fontWeight: 800,
+              fontSize: '0.8125rem',
+              cursor: 'pointer',
+              boxShadow: '0 3px 0 #a3134a',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            Refresh Ledger
+          </button>
+        </div>
       </div>
 
       {/* Metrics Overview Cards */}

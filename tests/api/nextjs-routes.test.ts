@@ -25,6 +25,9 @@ import * as VerifyPaymentRoute from '../../app/api/v1/branches/[id]/orders/[orde
 import * as ConfirmOrderRoute from '../../app/api/v1/branches/[id]/orders/[orderId]/confirm/route';
 import * as RealtimeEventsRoute from '../../app/api/v1/realtime/events/route';
 import * as CronExpireRoute from '../../app/api/v1/cron/expire-orders/route';
+import * as OwnerMarketingCustomersRoute from '../../app/api/v1/owner/marketing/customers/route';
+import * as OwnerMarketingBroadcastRoute from '../../app/api/v1/owner/marketing/broadcast/route';
+import * as OwnerReportsRoute from '../../app/api/v1/owner/reports/route';
 
 function bearerToken(uid: string, email: string, name: string): string {
   return `Bearer mock-user:${uid}:${email}:${name}`;
@@ -49,6 +52,7 @@ describe('Next.js API Routes (app/api/v1) — End-to-End Exposure', () => {
     await branchRepo.create({ id: 'branch-beta', name: 'Branch Beta', code: 'BETA', status: BranchStatus.ACTIVE });
 
     // 2. Users
+    await userRepo.create({ id: 'usr-owner', firebase_uid: 'fb-owner', email: 'owner@melt.local', display_name: 'Owner', role: UserRole.OWNER });
     await userRepo.create({ id: 'usr-cust', firebase_uid: 'fb-cust', email: 'cust@melt.local', display_name: 'Customer', role: UserRole.CUSTOMER });
     await userRepo.create({ id: 'usr-op', firebase_uid: 'fb-op', email: 'op@melt.local', display_name: 'Operator', role: UserRole.CUSTOMER });
     await userRepo.addMembership('mem-op', 'usr-op', 'branch-alpha', UserRole.BRANCH_OPERATOR, MembershipStatus.ACTIVE);
@@ -267,5 +271,60 @@ describe('Next.js API Routes (app/api/v1) — End-to-End Exposure', () => {
     const json = (await resp.json()) as { data: { order: { status: string; payment_status: string } } };
     assert.strictEqual(json.data.order.status, 'READY');
     assert.strictEqual(json.data.order.payment_status, 'VERIFIED');
+  });
+
+  it('exposes GET and POST /owner/marketing routes for customer segmentation and broadcasts', async () => {
+    // 1. GET customers with order stats and categorization
+    const custReq = new Request('http://x/api/v1/owner/marketing/customers?range=30d&category=ALL', {
+      headers: { Authorization: bearerToken('fb-owner', 'owner@melt.local', 'Owner') },
+    });
+    const custResp = await OwnerMarketingCustomersRoute.GET(custReq as any);
+    assert.strictEqual(custResp.status, 200);
+    const custJson = (await custResp.json()) as { data: { customers: unknown[]; summary: { totalCount: number } } };
+    assert.ok(Array.isArray(custJson.data.customers));
+    assert.ok(custJson.data.summary.totalCount >= 1);
+
+    // 2. POST broadcast campaign
+    const broadReq = new Request('http://x/api/v1/owner/marketing/broadcast', {
+      method: 'POST',
+      headers: {
+        Authorization: bearerToken('fb-owner', 'owner@melt.local', 'Owner'),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        channel: 'WHATSAPP',
+        recipients: [
+          {
+            userId: 'usr-cust',
+            name: 'Customer',
+            phone: '919876543210',
+            message: 'Hello Customer! 20% off gelato this weekend.',
+          },
+        ],
+        messageTemplate: 'Hello {{name}}! 20% off gelato this weekend.',
+        imageUrl: 'https://example.com/banner.jpg',
+      }),
+    });
+    const broadResp = await OwnerMarketingBroadcastRoute.POST(broadReq as any);
+    assert.strictEqual(broadResp.status, 201);
+    const broadJson = (await broadResp.json()) as { data: { campaignId: string; dispatchedCount: number; previews: Array<{ actionUrl: string }> } };
+    assert.strictEqual(broadJson.data.dispatchedCount, 1);
+    assert.ok(broadJson.data.campaignId.startsWith('camp-'));
+    assert.ok(broadJson.data.previews[0].actionUrl.includes('https://wa.me/919876543210'));
+  });
+
+  it('exposes GET /owner/reports for CSV reports export across history, inventory, branches, ledger, and customers', async () => {
+    const reportTypes = ['history', 'inventory', 'branches', 'ledger', 'customers'] as const;
+
+    for (const type of reportTypes) {
+      const repReq = new Request(`http://x/api/v1/owner/reports?type=${type}&format=csv`, {
+        headers: { Authorization: bearerToken('fb-owner', 'owner@melt.local', 'Owner') },
+      });
+      const repResp = await OwnerReportsRoute.GET(repReq as any);
+      assert.strictEqual(repResp.status, 200);
+      assert.strictEqual(repResp.headers.get('Content-Type'), 'text/csv; charset=utf-8');
+      const csv = await repResp.text();
+      assert.ok(csv.length > 0, `CSV content for ${type} should not be empty`);
+    }
   });
 });

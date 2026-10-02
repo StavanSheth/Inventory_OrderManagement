@@ -8,10 +8,22 @@ import { BranchManagementView } from '@/frontend/modules/branches';
 import { BranchSettingsView, DataManagementView } from '@/frontend/modules/settings';
 import { UnifiedLedgerView } from '@/frontend/modules/ledger';
 import { OperatorInventoryView } from '@/frontend/modules/inventory';
+import { OwnerMessagingView } from '@/frontend/modules/marketing';
+import { OwnerReportsView } from '@/frontend/modules/reports';
 import { Branch } from '@/shared/types/entities.types';
 import { GlobalNavigation, BunMobileNav } from '@/frontend/components/ui';
 
-type OwnerTab = 'dashboard' | 'queue' | 'orders' | 'inventory' | 'branches' | 'ledger' | 'settings' | 'data';
+type OwnerTab =
+  | 'dashboard'
+  | 'queue'
+  | 'orders'
+  | 'inventory'
+  | 'branches'
+  | 'ledger'
+  | 'settings'
+  | 'data'
+  | 'marketing'
+  | 'reports';
 
 export default function OwnerPortalPage() {
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -58,6 +70,8 @@ export default function OwnerPortalPage() {
     { id: 'inventory', label: 'Inventory', icon: '📦' },
     { id: 'branches', label: 'Branches', icon: '🏢' },
     { id: 'ledger', label: 'Ledger', icon: '📑' },
+    { id: 'marketing', label: 'Broadcast & Messages', icon: '📢' },
+    { id: 'reports', label: 'Reports & Downloads', icon: '📥' },
     { id: 'settings', label: 'Settings', icon: '⚙️' },
     { id: 'data', label: 'Data', icon: '🛡️' },
   ];
@@ -225,6 +239,18 @@ export default function OwnerPortalPage() {
               <UnifiedLedgerView
                 branchId={selectedBranchId === 'ALL' && branches[0] ? branches[0].id : selectedBranchId}
                 isOwner={true}
+              />
+            )}
+            {activeTab === 'marketing' && (
+              <OwnerMessagingView
+                branches={branches}
+                selectedBranchId={selectedBranchId}
+              />
+            )}
+            {activeTab === 'reports' && (
+              <OwnerReportsView
+                branches={branches}
+                selectedBranchId={selectedBranchId}
               />
             )}
             {activeTab === 'settings' && (

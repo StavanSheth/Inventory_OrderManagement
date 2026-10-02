@@ -195,4 +195,82 @@ export class UserRepository extends BaseRepository {
 
     return (await this.findById(userId))!;
   }
+
+  async getCustomersWithOrderStats(options?: {
+    startDate?: string;
+    endDate?: string;
+    branchId?: string;
+  }): Promise<Array<{
+    id: string;
+    displayName: string;
+    email: string;
+    phone: string | null;
+    totalOrders: number;
+    totalSpent: number;
+    avgOrderValue: number;
+    lastOrderAt: string | null;
+    firstOrderAt: string | null;
+  }>> {
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    if (options?.startDate) {
+      conditions.push('o.placed_at >= ?');
+      params.push(options.startDate);
+    }
+    if (options?.endDate) {
+      conditions.push('o.placed_at <= ?');
+      params.push(options.endDate);
+    }
+    if (options?.branchId && options.branchId !== 'ALL') {
+      conditions.push('o.branch_id = ?');
+      params.push(options.branchId);
+    }
+
+    const orderFilter = conditions.length > 0 ? `AND ${conditions.join(' AND ')}` : '';
+
+    const sql = `
+      SELECT 
+        u.id,
+        u.display_name as displayName,
+        u.email,
+        u.phone,
+        COUNT(o.id) as totalOrders,
+        COALESCE(SUM(CASE WHEN o.status NOT IN ('CANCELLED', 'EXPIRED') THEN o.total ELSE 0 END), 0) as totalSpent,
+        MAX(o.placed_at) as lastOrderAt,
+        MIN(o.placed_at) as firstOrderAt
+      FROM users u
+      LEFT JOIN orders o ON o.customer_user_id = u.id ${orderFilter}
+      WHERE u.role = 'CUSTOMER' OR u.role IS NULL OR u.role = ''
+      GROUP BY u.id
+      ORDER BY totalSpent DESC, totalOrders DESC
+    `;
+
+    const res = await this.db.prepare(sql).bind(...params).all<{
+      id: string;
+      displayName: string;
+      email: string;
+      phone: string | null;
+      totalOrders: number;
+      totalSpent: number;
+      lastOrderAt: string | null;
+      firstOrderAt: string | null;
+    }>();
+
+    return (res?.results ?? []).map((r) => {
+      const orders = Number(r.totalOrders || 0);
+      const spent = Number(r.totalSpent || 0);
+      return {
+        id: r.id,
+        displayName: r.displayName || 'Customer',
+        email: r.email || '',
+        phone: r.phone || null,
+        totalOrders: orders,
+        totalSpent: spent,
+        avgOrderValue: orders > 0 ? Number((spent / orders).toFixed(2)) : 0,
+        lastOrderAt: r.lastOrderAt || null,
+        firstOrderAt: r.firstOrderAt || null,
+      };
+    });
+  }
 }

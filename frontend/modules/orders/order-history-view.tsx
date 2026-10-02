@@ -342,23 +342,55 @@ export const UnifiedOrderHistoryView: React.FC<UnifiedOrderHistoryViewProps> = (
           )}
         </div>
 
-        <button
-          type="button"
-          onClick={fetchOrders}
-          disabled={loading}
-          style={{
-            padding: '0.45rem 1rem',
-            background: '#d61c5d',
-            color: '#ffffff',
-            borderRadius: '9999px',
-            border: 'none',
-            fontWeight: 800,
-            fontSize: '0.8125rem',
-            cursor: 'pointer',
-          }}
-        >
-          {loading ? 'Loading...' : '🔍 Filter'}
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          {isOwner && (
+            <button
+              type="button"
+              onClick={() => {
+                const url = new URL('/api/v1/owner/reports', window.location.origin);
+                url.searchParams.set('type', 'history');
+                url.searchParams.set('branchId', selectedBranchId);
+                if (startDate) url.searchParams.set('startDate', startDate);
+                if (endDate) url.searchParams.set('endDate', endDate);
+                window.open(url.toString(), '_blank');
+              }}
+              style={{
+                padding: '0.45rem 1rem',
+                borderRadius: '9999px',
+                border: '1px solid #f4d3dd',
+                background: '#fff1f4',
+                color: '#d61c5d',
+                fontWeight: 800,
+                fontSize: '0.8125rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+              }}
+            >
+              <span>📥</span>
+              <span>Download History CSV</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={fetchOrders}
+            disabled={loading}
+            style={{
+              padding: '0.45rem 1rem',
+              background: '#d61c5d',
+              color: '#ffffff',
+              borderRadius: '9999px',
+              border: 'none',
+              fontWeight: 800,
+              fontSize: '0.8125rem',
+              cursor: 'pointer',
+            }}
+          >
+            {loading ? 'Loading...' : '🔍 Filter'}
+          </button>
+        </div>
       </div>
 
       {error && (

@@ -529,16 +529,34 @@ export const OperatorInventoryView: React.FC<OperatorInventoryViewProps> = ({ br
           </button>
         </div>
 
-        <button
-          onClick={() => {
-            fetchInventory();
-            fetchMovements();
-          }}
-          disabled={loading}
-          className="text-xs text-[#6f5569] hover:text-[#2b1233] font-extrabold flex items-center space-x-1"
-        >
-          <span>↻ Refresh</span>
-        </button>
+        <div className="flex items-center gap-3">
+          {isOwner && (
+            <button
+              type="button"
+              onClick={() => {
+                const url = new URL('/api/v1/owner/reports', window.location.origin);
+                url.searchParams.set('type', 'inventory');
+                url.searchParams.set('branchId', branchId);
+                window.open(url.toString(), '_blank');
+              }}
+              className="px-3.5 py-1.5 bg-[#fff1f4] hover:bg-white border border-[#f4d3dd] text-[#d61c5d] text-xs font-bold rounded-full transition shadow-xs flex items-center gap-1.5"
+            >
+              <span>📥</span>
+              <span>Download Inventory CSV</span>
+            </button>
+          )}
+
+          <button
+            onClick={() => {
+              fetchInventory();
+              fetchMovements();
+            }}
+            disabled={loading}
+            className="text-xs text-[#6f5569] hover:text-[#2b1233] font-extrabold flex items-center space-x-1"
+          >
+            <span>↻ Refresh</span>
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -867,8 +885,11 @@ export const OperatorInventoryView: React.FC<OperatorInventoryViewProps> = ({ br
 
       {/* Refill / Adjustment Modal */}
       {modalMode && targetItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#2b1233]/45 backdrop-blur-sm p-4">
-          <div className="bg-white border border-[#f4d3dd] rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl space-y-4 text-[#2b1233]">
+        <div
+          style={{ zIndex: 9999 }}
+          className="fixed inset-0 flex items-center justify-center bg-[#2b1233]/65 backdrop-blur-md p-4 overflow-y-auto"
+        >
+          <div className="bg-white border border-[#f4d3dd] rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl space-y-4 text-[#2b1233] my-auto">
             <h3 className="font-display text-xl font-bold text-[#2b1233]">
               {modalMode === 'refill' ? 'Refill Stock' : 'Manual Stock Adjustment'}
             </h3>
@@ -936,8 +957,11 @@ export const OperatorInventoryView: React.FC<OperatorInventoryViewProps> = ({ br
 
       {/* Recipe / BOM Management Modal */}
       {recipeProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#2b1233]/45 backdrop-blur-sm p-4">
-          <div className="bg-white border border-[#f4d3dd] rounded-3xl p-6 md:p-8 max-w-xl w-full shadow-2xl space-y-4 text-[#2b1233] max-h-[90vh] overflow-y-auto">
+        <div
+          style={{ zIndex: 9999 }}
+          className="fixed inset-0 flex items-center justify-center bg-[#2b1233]/65 backdrop-blur-md p-4 overflow-y-auto"
+        >
+          <div className="bg-white border border-[#f4d3dd] rounded-3xl p-6 md:p-8 max-w-xl w-full shadow-2xl space-y-4 text-[#2b1233] max-h-[85vh] overflow-y-auto my-auto">
             <div className="flex justify-between items-center border-b border-[#f4d3dd] pb-3">
               <div>
                 <h3 className="font-display text-lg font-bold text-[#2b1233]">Product BOM Recipe</h3>
@@ -1060,8 +1084,11 @@ export const OperatorInventoryView: React.FC<OperatorInventoryViewProps> = ({ br
 
       {/* Add Raw Material Modal */}
       {showAddMatModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#2b1233]/45 backdrop-blur-sm p-4">
-          <div className="bg-white border border-[#f4d3dd] rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl space-y-4 text-[#2b1233]">
+        <div
+          style={{ zIndex: 9999 }}
+          className="fixed inset-0 flex items-center justify-center bg-[#2b1233]/65 backdrop-blur-md p-4 overflow-y-auto"
+        >
+          <div className="bg-white border border-[#f4d3dd] rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl space-y-4 text-[#2b1233] my-auto">
             <h3 className="font-display text-xl font-bold text-[#2b1233]">Create Raw Material</h3>
 
             {matError && (
@@ -1141,22 +1168,28 @@ export const OperatorInventoryView: React.FC<OperatorInventoryViewProps> = ({ br
 
       {/* Modal 4: Configure Selling Price & GST Tax Rates */}
       {pricingProduct && (
-        <div className="fixed inset-0 z-50 bg-[#2b1233]/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white border border-[#f4d3dd] rounded-3xl p-6 md:p-8 max-w-lg w-full shadow-2xl space-y-4 text-[#2b1233] max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-start">
+        <div
+          style={{ zIndex: 9999 }}
+          className="fixed inset-0 bg-[#2b1233]/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto"
+        >
+          <div className="bg-white border border-[#f4d3dd] rounded-3xl p-5 sm:p-8 max-w-xl w-full shadow-2xl space-y-4 text-[#2b1233] max-h-[85vh] overflow-y-auto my-auto relative">
+            <div className="sticky -top-5 sm:-top-8 bg-white/95 backdrop-blur-md z-20 -mx-5 -mt-5 sm:-mx-8 sm:-mt-8 p-5 sm:p-8 border-b border-[#f4d3dd] flex justify-between items-center shadow-xs">
               <div>
-                <h3 className="font-display text-xl font-bold text-[#2b1233]">
-                  Configure Selling Price & Taxes
+                <h3 className="font-display text-xl font-bold text-[#2b1233] flex items-center gap-2">
+                  <span>⚙️</span>
+                  <span>Configure Selling Price & Taxes</span>
                 </h3>
                 <p className="text-xs text-[#6f5569] font-medium mt-0.5">
-                  {pricingProduct.name} &bull; <span className="font-mono">{pricingProduct.id}</span>
+                  {pricingProduct.name} &bull; <span className="font-mono text-[#d61c5d] font-bold">{pricingProduct.id}</span>
                 </p>
               </div>
               <button
+                type="button"
                 onClick={() => setPricingProduct(null)}
-                className="text-[#6f5569] hover:text-[#2b1233] text-lg font-bold"
+                className="w-9 h-9 rounded-full bg-[#fff1f4] hover:bg-[#f4d3dd] text-[#2b1233] flex items-center justify-center text-lg font-bold transition shadow-xs"
+                title="Close"
               >
-                &times;
+                ✕
               </button>
             </div>
 
