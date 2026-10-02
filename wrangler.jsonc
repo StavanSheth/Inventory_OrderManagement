@@ -3,6 +3,7 @@
   "name": "inventory-ordermanagement",
   "compatibility_date": "2024-09-23",
   "compatibility_flags": ["nodejs_compat"],
+  "pages_build_output_dir": ".next",
 
   // Authoritative D1 database binding for Cloudflare Workers / Next.js runtime.
   // In production, the Worker runtime accesses the database via `env.DB`.
@@ -10,10 +11,7 @@
     {
       "binding": "DB",
       "database_name": "inventory_ordermanagement_db",
-      // DEPLOYMENT STRATEGY:
-      // Replace with the production D1 UUID generated via:
-      // `npx wrangler d1 create inventory_ordermanagement_db`
-      "database_id": "REPLACE_WITH_PRODUCTION_D1_DATABASE_ID",
+      "database_id": "00000000-0000-0000-0000-000000000001",
       "migrations_dir": "database/migrations"
     }
   ],
@@ -25,12 +23,32 @@
 
   // Environment-specific configurations
   "env": {
+    "production": {
+      "vars": {
+        "NODE_ENV": "production",
+        "API_BASE_URL": "https://icecream-melt.com",
+        "ENABLE_REALTIME": "true"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "inventory_ordermanagement_prod_db",
+          "database_id": "00000000-0000-0000-0000-000000000001",
+          "migrations_dir": "database/migrations"
+        }
+      ]
+    },
     "staging": {
+      "vars": {
+        "NODE_ENV": "staging",
+        "API_BASE_URL": "https://staging.icecream-melt.com",
+        "ENABLE_REALTIME": "true"
+      },
       "d1_databases": [
         {
           "binding": "DB",
           "database_name": "inventory_ordermanagement_staging_db",
-          "database_id": "REPLACE_WITH_STAGING_D1_DATABASE_ID",
+          "database_id": "00000000-0000-0000-0000-000000000002",
           "migrations_dir": "database/migrations"
         }
       ]
@@ -40,7 +58,8 @@
       // or `wrangler dev --local`
       "vars": {
         "NODE_ENV": "development",
-        "API_BASE_URL": "http://localhost:3000"
+        "API_BASE_URL": "http://localhost:3000",
+        "ENABLE_REALTIME": "true"
       }
     }
   }

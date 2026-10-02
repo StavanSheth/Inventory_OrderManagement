@@ -223,7 +223,8 @@ describe('Phase 3 — Database Atomicity & Audit Tests', () => {
       const logs = await auditRepo.listByEntity('order', order.id);
       const expiryLog = logs.find((l) => l.action === 'ORDER_EXPIRED');
       assert.ok(expiryLog, 'ORDER_EXPIRED audit log must be recorded');
-      assert.strictEqual(expiryLog.actor_user_id, order.customer_user_id);
+      assert.strictEqual(expiryLog.actor_type, 'SYSTEM');
+      assert.strictEqual(expiryLog.actor_user_id, null);
 
       const meta = JSON.parse(expiryLog.metadata_json ?? '{}') as {
         orderNumber: string;

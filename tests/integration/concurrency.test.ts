@@ -12,7 +12,7 @@ import { BranchRepository } from '../../database/repositories/branch.repository'
 import { UserRepository } from '../../database/repositories/user.repository';
 import { OrdersService } from '../../backend/services/orders';
 import { OrderExpiryJob } from '../../backend/jobs/order-expiry.job';
-import { DatabaseRealtimeService } from '../../backend/services/realtime/database-realtime.service';
+import { DatabaseRealtimeService, centralRealtimeHub } from '../../backend/services/realtime/database-realtime.service';
 import { OrderStatus, PaymentStatus, PaymentMethod } from '../../shared/enums/order.enum';
 import { BranchStatus } from '../../shared/enums/branch.enum';
 import { UserRole, MembershipStatus } from '../../shared/enums/roles.enum';
@@ -29,8 +29,10 @@ describe('Phase 3 — Concurrency, Payment Lifecycle & Ticket Transport Tests', 
   let realtimeService: DatabaseRealtimeService;
 
   beforeEach(async () => {
+    centralRealtimeHub.clear();
     db = createMemoryD1Database();
     await runMigrations(db);
+    centralRealtimeHub.setDatabase(db);
 
     orderRepo = new OrderRepository(db);
     paymentRepo = new PaymentRepository(db);
@@ -416,11 +418,28 @@ describe('Phase 3 — Concurrency, Payment Lifecycle & Ticket Transport Tests', 
         },
       });
 
-      // Service A polls D1 (simulating the background interval tick in the SSE stream)
-      const dispatched = await serviceA.pollOnce();
-      assert.strictEqual(dispatched, 1, 'Service A must dispatch the event published by Service B');
+      // Service A instantly received the event through CentralRealtimeHub without polling!
       assert.strictEqual(receivedEvents.length, 1);
       assert.strictEqual((receivedEvents[0] as { type: string }).type, 'OrderStatusChanged');
+
+      // Now verify that an external D1 event (written directly by another isolate) is caught up on poll
+      const extEventId = `evt-ext-${crypto.randomUUID()}`;
+      await db.prepare(`
+        INSERT INTO realtime_events (id, event_type, payload_json, branch_id, order_id, customer_user_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        extEventId,
+        'OrderStatusChanged',
+        JSON.stringify({ orderId: 'ord-cross-1', status: 'READY', total: 105 }),
+        'branch-alpha',
+        'ord-cross-1',
+        'usr-cust',
+        new Date().toISOString(),
+      ).run();
+
+      const dispatched = await serviceA.pollOnce();
+      assert.strictEqual(dispatched, 1, 'Service A must dispatch the external D1 event on poll');
+      assert.strictEqual(receivedEvents.length, 2);
 
       unsubscribe();
       serviceA.clear();
@@ -492,5 +511,134 @@ describe('Phase 3 — Concurrency, Payment Lifecycle & Ticket Transport Tests', 
       const editAudit = audits.find((a) => a.action === 'ORDER_EDITED');
       assert.strictEqual(editAudit, undefined);
     });
+
+    it('concurrent payment recording race: prevents double-recording and overpayment at DB level', async () => {
+      const { order } = await ordersService.createOrder({
+        actorUserId: 'usr-cust',
+        customerUserId: 'usr-cust',
+        branchId: 'branch-alpha',
+        items: [{ productId: 'prod-1', quantity: 1 }],
+      });
+
+      // Two concurrent requests attempt to record remaining payment of ₹105
+      const results = await Promise.allSettled([
+        ordersService.recordPayment({
+          actorUserId: 'usr-op',
+          orderId: order.id,
+          branchId: 'branch-alpha',
+          amount: 105,
+          method: PaymentMethod.CASH,
+        }),
+        ordersService.recordPayment({
+          actorUserId: 'usr-op',
+          orderId: order.id,
+          branchId: 'branch-alpha',
+          amount: 105,
+          method: PaymentMethod.CASH,
+        }),
+      ]);
+
+      const fulfilled = results.filter((r) => r.status === 'fulfilled');
+      const rejected = results.filter((r) => r.status === 'rejected');
+
+      assert.strictEqual(fulfilled.length, 1, 'Exactly one payment record request must succeed');
+      assert.strictEqual(rejected.length, 1, 'The racing payment record request must be rejected');
+
+      // Verify payments in database
+      const payments = await paymentRepo.listByOrder(order.id);
+      assert.strictEqual(payments.length, 1, 'Strictly 1 payment record exists in the database');
+      assert.strictEqual(payments[0].status, PaymentStatus.RECORDED);
+      assert.strictEqual(payments[0].amount, 105);
+
+      // Verify audit logs have exactly 1 PAYMENT_RECORDED event
+      const paymentAudits = await auditRepo.listByEntity('payment', payments[0].id);
+      assert.strictEqual(paymentAudits.length, 1);
+      assert.strictEqual(paymentAudits[0].action, 'PAYMENT_RECORDED');
+    });
+
+    it('order sequence concurrency: 100 concurrent creations generate 100 collision-free order numbers', async () => {
+      const promises = Array.from({ length: 100 }, () =>
+        orderRepo.generateNextOrderNumber('branch-alpha', 'ALPHA'),
+      );
+
+      const numbers = await Promise.all(promises);
+      const uniqueNumbers = new Set(numbers);
+
+      assert.strictEqual(numbers.length, 100);
+      assert.strictEqual(uniqueNumbers.size, 100, 'All 100 generated order numbers must be strictly unique');
+    });
+
+    it('order expiry semantics: records actor_type SYSTEM, nullable actor_user_id, and sets expired_at', async () => {
+      const pastTime = new Date(Date.now() - 120_000).toISOString();
+      const order = await orderRepo.create({
+        id: 'ord-expiry-test',
+        order_number: 'ALPHA-EXPIRE-999',
+        branch_id: 'branch-alpha',
+        customer_user_id: 'usr-cust',
+        subtotal: 100,
+        total: 105,
+        expires_at: pastTime,
+        items: [{
+          id: 'item-exp-1',
+          product_id: 'prod-1',
+          product_name_snapshot: 'Vanilla',
+          unit_price_snapshot: 100,
+          quantity: 1,
+          line_total: 100,
+        }],
+      });
+
+      const { expiredCount } = await expiryJob.processExpiredOrders();
+      assert.ok(expiredCount >= 1, 'Should expire the overdue order');
+
+      const expiredOrder = await orderRepo.findById(order.id);
+      assert.strictEqual(expiredOrder?.status, OrderStatus.EXPIRED);
+      assert.ok(expiredOrder?.expired_at, 'expired_at must be populated');
+      assert.strictEqual(expiredOrder?.cancelled_at, null, 'cancelled_at must NOT be set for expired orders');
+
+      // Check audit log
+      const audits = await auditRepo.listByEntity('order', order.id);
+      const expiryAudit = audits.find((a) => a.action === 'ORDER_EXPIRED');
+      assert.ok(expiryAudit, 'ORDER_EXPIRED audit log must exist');
+      assert.strictEqual(expiryAudit.actor_type, 'SYSTEM');
+      assert.strictEqual(expiryAudit.actor_user_id, null);
+
+      // Repeat execution must be idempotent and not create duplicate audit
+      const rerun = await expiryJob.processExpiredOrders();
+      assert.strictEqual(rerun.expiredCount, 0, 'Re-run should find 0 orders to expire');
+
+      const auditsAfter = await auditRepo.listByEntity('order', order.id);
+      const expiryAuditsAfter = auditsAfter.filter((a) => a.action === 'ORDER_EXPIRED');
+      assert.strictEqual(expiryAuditsAfter.length, 1, 'Audit log must remain idempotent with exactly 1 entry');
+    });
+
+    it('realtime ticket lifecycle: single-use durable ticket cannot be reused', async () => {
+      // 1. Issue ticket using mock customer request
+      const issueReq = new Request('http://localhost:3000/api/v1/realtime/ticket', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer mock-user:usr-cust:cust@melt.local:Customer',
+        },
+      });
+
+      const issueRes = await handleRealtimeTicketRoute(issueReq, { DB: db });
+      assert.strictEqual(issueRes.status, 201);
+      const { data: { ticket } } = (await issueRes.json()) as { data: { ticket: string } };
+      assert.ok(ticket.startsWith('rt_'));
+
+      // 2. First consumption: connects successfully
+      const consumeReq = new Request(`https://melt.local/api/v1/realtime/events?ticket=${ticket}`);
+      const consumeRes = await handleRealtimeEventsRoute(consumeReq, { DB: db });
+      assert.strictEqual(consumeRes.status, 200);
+
+      // Cancel stream
+      await consumeRes.body?.cancel();
+
+      // 3. Second consumption: ticket must be single-use and rejected with 401
+      const replayReq = new Request(`https://melt.local/api/v1/realtime/events?ticket=${ticket}`);
+      const replayRes = await handleRealtimeEventsRoute(replayReq, { DB: db });
+      assert.strictEqual(replayRes.status, 401);
+    });
   });
 });
+

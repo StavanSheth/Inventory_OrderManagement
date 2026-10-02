@@ -8,7 +8,7 @@ import { OrdersService } from '../../backend/services/orders';
 import { requireBranchAccess, requireApplicationSession } from '../../backend/policies/branch-access.policy';
 import { requireOperatorOrOwner } from '../../backend/policies/role.policy';
 import { validateRequest } from '../validators/request.validator';
-import { recordPaymentSchema, verifyPaymentSchema, editOrderSchema, updateOrderStatusSchema } from '../validators/order.validator';
+import { recordPaymentSchema, verifyPaymentSchema, editOrderSchema, updateOrderStatusSchema, idSchema } from '../validators/order.validator';
 import { successResponse } from '../serializers/response';
 import { handleApiError } from '../middleware/error-handler';
 import { extractRequestContext } from '../middleware/request-context';
@@ -51,6 +51,7 @@ export async function handleBranchOrdersRoute(
   const { responseHeaders } = buildHeaders(request);
 
   try {
+    validateRequest(idSchema, branchId);
     const { db, authMiddleware } = createAuthInfrastructure(env, options);
     const ordersService = buildOrdersService(db);
 
@@ -95,6 +96,8 @@ export async function handleBranchOrderDetailRoute(
   const { responseHeaders } = buildHeaders(request);
 
   try {
+    validateRequest(idSchema, branchId);
+    validateRequest(idSchema, orderId);
     const { db, authMiddleware } = createAuthInfrastructure(env, options);
     const ordersService = buildOrdersService(db);
 
@@ -135,6 +138,8 @@ export async function handleBranchOrderStatusRoute(
   const { responseHeaders } = buildHeaders(request);
 
   try {
+    validateRequest(idSchema, branchId);
+    validateRequest(idSchema, orderId);
     const { db, authMiddleware } = createAuthInfrastructure(env, options);
     const ordersService = buildOrdersService(db);
 
@@ -174,6 +179,8 @@ export async function handleBranchOrderConfirmRoute(
   const { responseHeaders } = buildHeaders(request);
 
   try {
+    validateRequest(idSchema, branchId);
+    validateRequest(idSchema, orderId);
     const { db, authMiddleware } = createAuthInfrastructure(env, options);
     const ordersService = buildOrdersService(db);
 
@@ -209,6 +216,8 @@ export async function handleRecordPaymentRoute(
   const { responseHeaders } = buildHeaders(request);
 
   try {
+    validateRequest(idSchema, branchId);
+    validateRequest(idSchema, orderId);
     const { db, authMiddleware } = createAuthInfrastructure(env, options);
     const ordersService = buildOrdersService(db);
 
@@ -256,6 +265,9 @@ export async function handleVerifyPaymentRoute(
   const { responseHeaders } = buildHeaders(request);
 
   try {
+    validateRequest(idSchema, branchId);
+    validateRequest(idSchema, orderId);
+    validateRequest(idSchema, paymentId);
     const { db, authMiddleware } = createAuthInfrastructure(env, options);
     const ordersService = buildOrdersService(db);
 
@@ -301,6 +313,8 @@ export async function handleBranchOrderEditRoute(
   const { responseHeaders } = buildHeaders(request);
 
   try {
+    validateRequest(idSchema, branchId);
+    validateRequest(idSchema, orderId);
     const { db, authMiddleware } = createAuthInfrastructure(env, options);
     const ordersService = buildOrdersService(db);
 

@@ -48,7 +48,7 @@ export async function handleRealtimeTicketRoute(
   const corsHeaders = getCorsHeaders(request, config.allowedOrigins);
 
   try {
-    const { authMiddleware } = createAuthInfrastructure(env, options);
+    const { db, authMiddleware } = createAuthInfrastructure(env, options);
     const userContext = await authMiddleware.authenticateRequest(request, {
       requireSession: false,
     });
@@ -56,11 +56,31 @@ export async function handleRealtimeTicketRoute(
     pruneExpiredTickets();
 
     const ticket = `rt_${crypto.randomUUID().replace(/-/g, '')}`;
-    ticketStore.set(ticket, {
-      ticket,
-      userContext,
-      expiresAt: Date.now() + 60_000, // 60 seconds TTL
-    });
+    const now = new Date();
+    const expiresAtIso = new Date(now.getTime() + 60_000).toISOString();
+
+    try {
+      await db
+        .prepare(`
+          INSERT INTO realtime_tickets (ticket, user_id, user_context_json, expires_at, created_at)
+          VALUES (?, ?, ?, ?, ?)
+        `)
+        .bind(
+          ticket,
+          userContext.userId,
+          JSON.stringify(userContext),
+          expiresAtIso,
+          now.toISOString(),
+        )
+        .run();
+    } catch {
+      // In-memory fallback if database table not available
+      ticketStore.set(ticket, {
+        ticket,
+        userContext,
+        expiresAt: Date.now() + 60_000,
+      });
+    }
 
     return successResponse({ ticket }, 201, corsHeaders);
   } catch (error) {
@@ -101,14 +121,38 @@ export async function handleRealtimeEventsRoute(
 
     // 1. Resolve authentication either from single-use ticket or headers/token
     if (ticketParam) {
-      pruneExpiredTickets();
-      const stored = ticketStore.get(ticketParam);
-      if (stored && stored.expiresAt > Date.now()) {
-        userContext = stored.userContext;
-        // Invalidate single-use ticket immediately
-        ticketStore.delete(ticketParam);
+      const nowIso = new Date().toISOString();
+      let consumedContextJson: string | null = null;
+
+      try {
+        const row = await db
+          .prepare(`
+            DELETE FROM realtime_tickets
+            WHERE ticket = ? AND expires_at > ?
+            RETURNING user_context_json
+          `)
+          .bind(ticketParam, nowIso)
+          .first<{ user_context_json: string }>();
+
+        if (row?.user_context_json) {
+          consumedContextJson = row.user_context_json;
+        }
+      } catch {
+        // Fallback to in-memory store
+      }
+
+      if (consumedContextJson) {
+        userContext = JSON.parse(consumedContextJson) as AuthenticatedUserContext;
       } else {
-        throw new UnauthorizedError('Realtime connection ticket is invalid or expired');
+        pruneExpiredTickets();
+        const stored = ticketStore.get(ticketParam);
+        if (stored && stored.expiresAt > Date.now()) {
+          userContext = stored.userContext;
+          // Invalidate single-use ticket immediately
+          ticketStore.delete(ticketParam);
+        } else {
+          throw new UnauthorizedError('Realtime connection ticket is invalid or expired');
+        }
       }
     }
 

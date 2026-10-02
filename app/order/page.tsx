@@ -12,7 +12,7 @@ import { Product } from '@/shared/types/entities.types';
 
 export default function CustomerOrderPage() {
   const [branches, setBranches] = useState<Array<{ id: string; name: string; code: string }>>([]);
-  const [selectedBranchId, setSelectedBranchId] = useState<string>('branch-alpha');
+  const [selectedBranchId, setSelectedBranchId] = useState<string>('');
   const [cartItems, setCartItems] = useState<Array<{ product: Product; quantity: number }>>([]);
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'catalog' | 'cart' | 'status' | 'history'>('catalog');

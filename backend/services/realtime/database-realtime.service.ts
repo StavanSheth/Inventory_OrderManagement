@@ -11,14 +11,37 @@ interface SubscriptionRecord {
   listener: (event: RealtimeDomainEvent) => void;
 }
 
-export class DatabaseRealtimeService implements IRealtimeService {
+function matchesFilter(event: RealtimeDomainEvent, filter: RealtimeSubscriptionFilter): boolean {
+  const payload = event.payload;
+
+  if (filter.orderId && 'orderId' in payload && payload.orderId !== filter.orderId) {
+    return false;
+  }
+
+  if (filter.branchId && 'branchId' in payload && payload.branchId !== filter.branchId) {
+    return false;
+  }
+
+  if (filter.customerUserId && 'customerUserId' in payload && payload.customerUserId !== filter.customerUserId) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Centralized Realtime Hub shared across all requests within this Worker isolate or Node runtime.
+ * Eliminates per-client D1 polling loops.
+ * Dispatches published events immediately to all local in-process subscribers,
+ * and maintains at most ONE shared polling loop for cross-worker event delivery when subscribers exist.
+ */
+class CentralRealtimeHub {
   private subscriptions: Map<string, SubscriptionRecord> = new Map();
   private seenEventIds: Set<string> = new Set();
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private lastPolledIso: string = new Date(Date.now() - 5000).toISOString();
   private pollIntervalMs: number = 300;
-
-  constructor(private db?: D1DatabaseLike) {}
+  private db?: D1DatabaseLike;
 
   setDatabase(db: D1DatabaseLike): void {
     this.db = db;
@@ -32,24 +55,17 @@ export class DatabaseRealtimeService implements IRealtimeService {
     }
   }
 
-  async publish(event: RealtimeDomainEvent): Promise<void> {
-    const payload = event.payload as unknown as Record<string, unknown>;
-    const branchId = typeof payload.branchId === 'string' ? payload.branchId : null;
-    const orderId = typeof payload.orderId === 'string' ? payload.orderId : null;
-    const customerUserId = typeof payload.customerUserId === 'string' ? payload.customerUserId : null;
-    const now = typeof payload.timestamp === 'string' ? payload.timestamp : new Date().toISOString();
-    const eventId = `evt-${crypto.randomUUID()}`;
-
-    // Mark event ID as seen locally so this instance does not re-dispatch on poll
-    this.seenEventIds.add(eventId);
-    if (this.seenEventIds.size > 2000) {
-      const oldest = this.seenEventIds.values().next().value;
-      if (oldest) this.seenEventIds.delete(oldest);
+  broadcast(event: RealtimeDomainEvent, originEventId?: string): void {
+    if (originEventId) {
+      this.seenEventIds.add(originEventId);
+      if (this.seenEventIds.size > 2000) {
+        const oldest = this.seenEventIds.values().next().value;
+        if (oldest) this.seenEventIds.delete(oldest);
+      }
     }
 
-    // 1. Notify local in-process subscribers immediately for instant response
     for (const sub of this.subscriptions.values()) {
-      if (this.matchesFilter(event, sub.filter)) {
+      if (matchesFilter(event, sub.filter)) {
         try {
           sub.listener(event);
         } catch {
@@ -57,38 +73,17 @@ export class DatabaseRealtimeService implements IRealtimeService {
         }
       }
     }
-
-    // 2. Persist event to D1 database for cross-instance and client reconnection catchup
-    if (this.db) {
-      try {
-        await this.db
-          .prepare(`
-            INSERT INTO realtime_events (
-              id, event_type, payload_json, branch_id, order_id, customer_user_id, created_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-          `)
-          .bind(
-            eventId,
-            event.type,
-            JSON.stringify(event.payload),
-            branchId,
-            orderId,
-            customerUserId,
-            now,
-          )
-          .run();
-      } catch (err) {
-        // Table may not exist in environments without migrations
-        console.warn('[DatabaseRealtimeService] Could not persist event to D1:', err);
-      }
-    }
   }
 
   subscribe(
     filter: RealtimeSubscriptionFilter,
     listener: (event: RealtimeDomainEvent) => void,
+    db?: D1DatabaseLike,
   ): () => void {
+    if (db && !this.db) {
+      this.db = db;
+    }
+
     const id = `sub-${crypto.randomUUID()}`;
     this.subscriptions.set(id, { id, filter, listener });
 
@@ -104,10 +99,6 @@ export class DatabaseRealtimeService implements IRealtimeService {
     };
   }
 
-  /**
-   * Polls D1 for events inserted by other requests or Worker instances.
-   * Dispatches any unseen events matching active subscriptions.
-   */
   async pollOnce(): Promise<number> {
     if (!this.db || this.subscriptions.size === 0) return 0;
 
@@ -150,7 +141,7 @@ export class DatabaseRealtimeService implements IRealtimeService {
         };
 
         for (const sub of this.subscriptions.values()) {
-          if (this.matchesFilter(event, sub.filter)) {
+          if (matchesFilter(event, sub.filter)) {
             try {
               sub.listener(event);
               dispatched++;
@@ -189,6 +180,93 @@ export class DatabaseRealtimeService implements IRealtimeService {
     }
   }
 
+  clear(): void {
+    this.stopPolling();
+    this.subscriptions.clear();
+    this.seenEventIds.clear();
+    this.lastPolledIso = new Date(Date.now() - 5000).toISOString();
+  }
+
+  getSubscriberCount(): number {
+    return this.subscriptions.size;
+  }
+}
+
+export const centralRealtimeHub = new CentralRealtimeHub();
+
+export class DatabaseRealtimeService implements IRealtimeService {
+  constructor(private db?: D1DatabaseLike) {
+    if (db) {
+      centralRealtimeHub.setDatabase(db);
+    }
+  }
+
+  setDatabase(db: D1DatabaseLike): void {
+    this.db = db;
+    centralRealtimeHub.setDatabase(db);
+  }
+
+  setPollInterval(ms: number): void {
+    centralRealtimeHub.setPollInterval(ms);
+  }
+
+  async publish(event: RealtimeDomainEvent): Promise<void> {
+    const payload = event.payload as unknown as Record<string, unknown>;
+    const branchId = typeof payload.branchId === 'string' ? payload.branchId : null;
+    const orderId = typeof payload.orderId === 'string' ? payload.orderId : null;
+    const customerUserId = typeof payload.customerUserId === 'string' ? payload.customerUserId : null;
+    const now = typeof payload.timestamp === 'string' ? payload.timestamp : new Date().toISOString();
+    const eventId = `evt-${crypto.randomUUID()}`;
+
+    // 1. Broadcast immediately to all active in-process subscribers in the centralized hub
+    centralRealtimeHub.broadcast(event, eventId);
+
+    // 2. Persist event to D1 database for cross-instance and client reconnection catchup
+    if (this.db) {
+      try {
+        await this.db
+          .prepare(`
+            INSERT INTO realtime_events (
+              id, event_type, payload_json, branch_id, order_id, customer_user_id, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `)
+          .bind(
+            eventId,
+            event.type,
+            JSON.stringify(event.payload),
+            branchId,
+            orderId,
+            customerUserId,
+            now,
+          )
+          .run();
+      } catch (err) {
+        // Table may not exist in environments without migrations
+        console.warn('[DatabaseRealtimeService] Could not persist event to D1:', err);
+      }
+    }
+  }
+
+  subscribe(
+    filter: RealtimeSubscriptionFilter,
+    listener: (event: RealtimeDomainEvent) => void,
+  ): () => void {
+    return centralRealtimeHub.subscribe(filter, listener, this.db);
+  }
+
+  async pollOnce(): Promise<number> {
+    return centralRealtimeHub.pollOnce();
+  }
+
+  startPolling(): void {
+    centralRealtimeHub.startPolling();
+  }
+
+  stopPolling(): void {
+    centralRealtimeHub.stopPolling();
+  }
+
   async getRecentEvents(filter: RealtimeSubscriptionFilter, limit: number = 20): Promise<RealtimeDomainEvent[]> {
     if (!this.db) return [];
 
@@ -215,11 +293,6 @@ export class DatabaseRealtimeService implements IRealtimeService {
       const res = await this.db.prepare(query).bind(...params).all<{ id: string; event_type: string; payload_json: string }>();
       const rows = (res.results ?? []) as Array<{ id: string; event_type: string; payload_json: string }>;
 
-      // Mark fetched event IDs as seen so polling does not re-dispatch them
-      for (const row of rows) {
-        this.seenEventIds.add(row.id);
-      }
-
       return rows.map((row) => ({
         type: row.event_type as RealtimeDomainEvent['type'],
         payload: JSON.parse(row.payload_json),
@@ -230,26 +303,6 @@ export class DatabaseRealtimeService implements IRealtimeService {
   }
 
   clear(): void {
-    this.stopPolling();
-    this.subscriptions.clear();
-    this.seenEventIds.clear();
-  }
-
-  private matchesFilter(event: RealtimeDomainEvent, filter: RealtimeSubscriptionFilter): boolean {
-    const payload = event.payload;
-
-    if (filter.orderId && 'orderId' in payload && payload.orderId !== filter.orderId) {
-      return false;
-    }
-
-    if (filter.branchId && 'branchId' in payload && payload.branchId !== filter.branchId) {
-      return false;
-    }
-
-    if (filter.customerUserId && 'customerUserId' in payload && payload.customerUserId !== filter.customerUserId) {
-      return false;
-    }
-
-    return true;
+    centralRealtimeHub.clear();
   }
 }

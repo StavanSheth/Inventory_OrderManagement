@@ -138,6 +138,7 @@ export interface Order {
   confirmed_at?: IsoDateTimeUtc | null;
   completed_at?: IsoDateTimeUtc | null;
   cancelled_at?: IsoDateTimeUtc | null;
+  expired_at?: IsoDateTimeUtc | null;
   last_edited_at?: IsoDateTimeUtc | null;
   created_at: IsoDateTimeUtc;
   updated_at: IsoDateTimeUtc;
@@ -241,7 +242,8 @@ export interface ApplicationSession {
 export interface AuditLog {
   id: Id;
   branch_id?: Id | null;
-  actor_user_id: Id;
+  actor_user_id?: Id | null;
+  actor_type?: 'USER' | 'SYSTEM';
   action: string;
   entity_type: string;
   entity_id: string;

@@ -297,18 +297,14 @@ export class OrderRepository extends BaseRepository {
           .run();
       }
 
-      // Atomic counter increment
-      await this.db
+      // Atomic counter increment with RETURNING
+      const seqRow = await this.db
         .prepare(`
           INSERT INTO order_sequences (branch_id, date_str, last_seq)
           VALUES (?, ?, 1)
-          ON CONFLICT(branch_id, date_str) DO UPDATE SET last_seq = last_seq + 1
+          ON CONFLICT(branch_id, date_str) DO UPDATE SET last_seq = order_sequences.last_seq + 1
+          RETURNING last_seq
         `)
-        .bind(branchId, dateStr)
-        .run();
-
-      const seqRow = await this.db
-        .prepare('SELECT last_seq FROM order_sequences WHERE branch_id = ? AND date_str = ?')
         .bind(branchId, dateStr)
         .first<{ last_seq: number }>();
 
@@ -340,9 +336,20 @@ export class OrderRepository extends BaseRepository {
   /**
    * Concurrency-safe atomic confirmation using conditional SQL update.
    * Succeeds only if order is PENDING, payment is VERIFIED, and order not expired.
+   * When auditLog is provided, order mutation and audit log are committed atomically together.
    */
-  async confirmOrderConditionally(orderId: string, nowIso: string = new Date().toISOString()): Promise<Order> {
-    const res = await this.db
+  async confirmOrderConditionally(
+    orderId: string,
+    nowIso: string = new Date().toISOString(),
+    auditLog?: {
+      id: string;
+      branchId: string | null;
+      actorUserId: string;
+      action: string;
+      metadata: Record<string, unknown>;
+    },
+  ): Promise<Order> {
+    const updateStmt = this.db
       .prepare(`
         UPDATE orders
         SET status = 'CONFIRMED',
@@ -353,12 +360,39 @@ export class OrderRepository extends BaseRepository {
           AND payment_status = 'VERIFIED'
           AND expires_at > ?
       `)
-      .bind(nowIso, nowIso, orderId, nowIso)
-      .run();
+      .bind(nowIso, nowIso, orderId, nowIso);
 
-    const changes = Number((res?.meta as { changes?: number })?.changes ?? (res as { changes?: number })?.changes ?? 0);
-    if (changes === 0) {
-      throw new Error(`Order ${orderId} cannot be confirmed. It may already be confirmed, payment is not VERIFIED, or order has expired.`);
+    if (auditLog) {
+      const metadataJson = JSON.stringify(auditLog.metadata ?? {});
+      const auditStmt = this.db
+        .prepare(`
+          INSERT INTO audit_logs (
+            id, branch_id, actor_user_id, actor_type, action, entity_type, entity_id,
+            metadata_json, created_at
+          )
+          VALUES (?, ?, ?, 'USER', ?, 'order', ?, ?, ?)
+        `)
+        .bind(
+          auditLog.id,
+          auditLog.branchId,
+          auditLog.actorUserId,
+          auditLog.action,
+          orderId,
+          metadataJson,
+          nowIso,
+        );
+
+      const batchRes = await this.db.batch([updateStmt, auditStmt]);
+      const changes = Number((batchRes[0]?.meta as { changes?: number })?.changes ?? (batchRes[0] as { changes?: number })?.changes ?? 0);
+      if (changes === 0) {
+        throw new Error(`Order ${orderId} cannot be confirmed. It may already be confirmed, payment is not VERIFIED, or order has expired.`);
+      }
+    } else {
+      const res = await updateStmt.run();
+      const changes = Number((res?.meta as { changes?: number })?.changes ?? (res as { changes?: number })?.changes ?? 0);
+      if (changes === 0) {
+        throw new Error(`Order ${orderId} cannot be confirmed. It may already be confirmed, payment is not VERIFIED, or order has expired.`);
+      }
     }
 
     const updated = await this.findById(orderId);
@@ -371,13 +405,14 @@ export class OrderRepository extends BaseRepository {
   /**
    * Concurrency-safe atomic expiry using conditional SQL update.
    * Only transitions if status is PENDING and expires_at <= current time.
+   * Records dedicated expired_at timestamp.
    */
   async expireOrderConditionally(orderId: string, nowIso: string = new Date().toISOString()): Promise<boolean> {
     const res = await this.db
       .prepare(`
         UPDATE orders
         SET status = 'EXPIRED',
-            cancelled_at = ?,
+            expired_at = ?,
             updated_at = ?
         WHERE id = ?
           AND status = 'PENDING'

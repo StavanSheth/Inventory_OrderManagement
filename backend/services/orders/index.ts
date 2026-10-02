@@ -403,19 +403,16 @@ export class OrdersService implements IOrdersService {
     const nowIso = now.toISOString();
     let updated: Order;
     try {
-      updated = await this.orderRepo.confirmOrderConditionally(orderId, nowIso);
+      updated = await this.orderRepo.confirmOrderConditionally(orderId, nowIso, {
+        id: `aud-${crypto.randomUUID()}`,
+        branchId: order.branch_id,
+        actorUserId,
+        action: AuditAction.ORDER_CONFIRMED,
+        metadata: { confirmedAt: nowIso, previousStatus: order.status },
+      });
     } catch (err) {
       throw new BadRequestError(err instanceof Error ? err.message : 'Confirmation failed');
     }
-
-    await this.auditRepo?.log({
-      branch_id: order.branch_id,
-      actor_user_id: actorUserId,
-      action: AuditAction.ORDER_CONFIRMED,
-      entity_type: 'order',
-      entity_id: orderId,
-      metadata: { confirmedAt: nowIso, previousStatus: order.status },
-    });
 
     await this.realtime?.publish({
       type: 'OrderStatusChanged',
@@ -480,25 +477,34 @@ export class OrdersService implements IOrdersService {
     }
 
     const paymentId = `pay-${crypto.randomUUID()}`;
-    const { payment } = await this.paymentRepo.recordPaymentAtomically({
-      id: paymentId,
-      order_id: opts.orderId,
-      branch_id: opts.branchId,
-      method: opts.method,
-      amount: roundedPaymentAmount,
-      status: PaymentStatus.RECORDED,
-    });
+    const { payment } = await this.paymentRepo.recordPaymentAtomically(
+      {
+        id: paymentId,
+        order_id: opts.orderId,
+        branch_id: opts.branchId,
+        method: opts.method,
+        amount: roundedPaymentAmount,
+        status: PaymentStatus.RECORDED,
+      },
+      {
+        id: `aud-${crypto.randomUUID()}`,
+        branchId: opts.branchId,
+        actorUserId: opts.actorUserId,
+        action: AuditAction.PAYMENT_RECORDED,
+        metadata: {
+          paymentId,
+          orderId: opts.orderId,
+          amount: roundedPaymentAmount,
+          method: opts.method,
+          previousStatus: PaymentStatus.PENDING,
+          newStatus: PaymentStatus.RECORDED,
+          actor: opts.actorUserId,
+          notes: opts.notes ?? null,
+        },
+      },
+    );
 
     const updatedOrder = (await this.orderRepo.findById(opts.orderId))!;
-
-    await this.auditRepo?.log({
-      branch_id: opts.branchId,
-      actor_user_id: opts.actorUserId,
-      action: AuditAction.PAYMENT_RECORDED,
-      entity_type: 'payment',
-      entity_id: paymentId,
-      metadata: { orderId: opts.orderId, amount: roundedPaymentAmount, method: opts.method, notes: opts.notes ?? null },
-    });
 
     await this.realtime?.publish({
       type: 'PaymentUpdated',
@@ -549,20 +555,28 @@ export class OrdersService implements IOrdersService {
       opts.orderId,
       opts.actorUserId,
       now,
+      opts.branchId,
+      {
+        id: `aud-${crypto.randomUUID()}`,
+        branchId: payment.branch_id,
+        actorUserId: opts.actorUserId,
+        action: AuditAction.PAYMENT_VERIFIED,
+        metadata: {
+          paymentId: opts.paymentId,
+          orderId: opts.orderId,
+          amount: payment.amount,
+          method: payment.method,
+          previousStatus: payment.status,
+          newStatus: PaymentStatus.VERIFIED,
+          actor: opts.actorUserId,
+          notes: opts.notes ?? null,
+        },
+      },
     );
 
     const updatedOrder = (await this.orderRepo.findById(opts.orderId))!;
 
     if (wasUpdated) {
-      await this.auditRepo?.log({
-        branch_id: payment.branch_id,
-        actor_user_id: opts.actorUserId,
-        action: AuditAction.PAYMENT_VERIFIED,
-        entity_type: 'payment',
-        entity_id: opts.paymentId,
-        metadata: { orderId: opts.orderId, amount: payment.amount, notes: opts.notes ?? null },
-      });
-
       await this.realtime?.publish({
         type: 'PaymentUpdated',
         payload: {

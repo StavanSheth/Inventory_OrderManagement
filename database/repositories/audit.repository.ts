@@ -4,7 +4,8 @@ import { AuditLog } from '../../shared/types/entities.types';
 export interface CreateAuditLogInput {
   id?: string;
   branch_id?: string | null;
-  actor_user_id: string;
+  actor_user_id?: string | null;
+  actor_type?: 'USER' | 'SYSTEM';
   action: string;
   entity_type: string;
   entity_id: string;
@@ -16,19 +17,22 @@ export class AuditRepository extends BaseRepository {
     const id = input.id ?? `aud-${crypto.randomUUID()}`;
     const now = new Date().toISOString();
     const metadataJson = JSON.stringify(input.metadata ?? {});
+    const actorType = input.actor_type ?? (input.actor_user_id ? 'USER' : 'SYSTEM');
+    const actorUserId = input.actor_user_id ?? null;
 
     await this.db
       .prepare(`
         INSERT INTO audit_logs (
-          id, branch_id, actor_user_id, action, entity_type, entity_id,
+          id, branch_id, actor_user_id, actor_type, action, entity_type, entity_id,
           metadata_json, created_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       .bind(
         id,
         input.branch_id ?? null,
-        input.actor_user_id,
+        actorUserId,
+        actorType,
         input.action,
         input.entity_type,
         input.entity_id,
@@ -40,7 +44,8 @@ export class AuditRepository extends BaseRepository {
     return {
       id,
       branch_id: input.branch_id ?? null,
-      actor_user_id: input.actor_user_id,
+      actor_user_id: actorUserId,
+      actor_type: actorType,
       action: input.action,
       entity_type: input.entity_type,
       entity_id: input.entity_id,

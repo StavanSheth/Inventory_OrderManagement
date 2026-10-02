@@ -23,7 +23,8 @@ export class OrderExpiryJob implements IOrderExpiryJob {
       if (didExpire) {
         await this.auditRepo?.log({
           branch_id: order.branch_id,
-          actor_user_id: order.customer_user_id,
+          actor_user_id: null,
+          actor_type: 'SYSTEM',
           action: AuditAction.ORDER_EXPIRED,
           entity_type: 'order',
           entity_id: order.id,

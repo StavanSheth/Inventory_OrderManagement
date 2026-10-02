@@ -90,6 +90,13 @@ export class PaymentRepository extends BaseRepository {
 
   async recordPaymentAtomically(
     input: CreatePaymentInput,
+    auditLog?: {
+      id: string;
+      branchId: string | null;
+      actorUserId: string;
+      action: string;
+      metadata: Record<string, unknown>;
+    },
   ): Promise<{ payment: Payment }> {
     const now = new Date().toISOString();
     const status = input.status ?? PaymentStatus.RECORDED;
@@ -122,10 +129,42 @@ export class PaymentRepository extends BaseRepository {
             payment_method = COALESCE(?, payment_method),
             updated_at = ?
         WHERE id = ?
+          AND status NOT IN ('CANCELLED', 'EXPIRED')
       `)
       .bind(status, input.method, now, input.order_id);
 
-    await this.db.batch([paymentStmt, orderStmt]);
+    const statements: any[] = [paymentStmt, orderStmt];
+
+    if (auditLog) {
+      const metadataJson = JSON.stringify(auditLog.metadata ?? {});
+      const auditStmt = this.db
+        .prepare(`
+          INSERT INTO audit_logs (
+            id, branch_id, actor_user_id, actor_type, action, entity_type, entity_id,
+            metadata_json, created_at
+          )
+          VALUES (?, ?, ?, 'USER', ?, 'payment', ?, ?, ?)
+        `)
+        .bind(
+          auditLog.id,
+          auditLog.branchId,
+          auditLog.actorUserId,
+          auditLog.action,
+          input.id,
+          metadataJson,
+          now,
+        );
+      statements.push(auditStmt);
+    }
+
+    const results = await this.db.batch(statements);
+    const orderChanges = Number(
+      (results[1]?.meta as { changes?: number })?.changes ?? (results[1] as { changes?: number })?.changes ?? 0,
+    );
+
+    if (orderChanges === 0) {
+      throw new Error(`Order ${input.order_id} cannot accept payment because it is cancelled, expired, or not found`);
+    }
 
     const created = await this.findById(input.id);
     if (!created) {
@@ -139,6 +178,14 @@ export class PaymentRepository extends BaseRepository {
     orderId: string,
     confirmedByUserId: string,
     nowIso: string = new Date().toISOString(),
+    branchId?: string,
+    auditLog?: {
+      id: string;
+      branchId: string | null;
+      actorUserId: string;
+      action: string;
+      metadata: Record<string, unknown>;
+    },
   ): Promise<{ payment: Payment; wasUpdated: boolean }> {
     const paymentStmt = this.db
       .prepare(`
@@ -150,8 +197,19 @@ export class PaymentRepository extends BaseRepository {
         WHERE id = ?
           AND order_id = ?
           AND status = ?
+          AND (? IS NULL OR branch_id = ?)
       `)
-      .bind(PaymentStatus.VERIFIED, confirmedByUserId, nowIso, nowIso, paymentId, orderId, PaymentStatus.RECORDED);
+      .bind(
+        PaymentStatus.VERIFIED,
+        confirmedByUserId,
+        nowIso,
+        nowIso,
+        paymentId,
+        orderId,
+        PaymentStatus.RECORDED,
+        branchId ?? null,
+        branchId ?? null,
+      );
 
     const orderStmt = this.db
       .prepare(`
@@ -163,8 +221,38 @@ export class PaymentRepository extends BaseRepository {
       `)
       .bind(PaymentStatus.VERIFIED, nowIso, orderId);
 
-    const results = await this.db.batch([paymentStmt, orderStmt]);
-    const changes = Number((results[0]?.meta as { changes?: number })?.changes ?? (results[0] as { changes?: number })?.changes ?? 0);
+    const statements: any[] = [paymentStmt, orderStmt];
+
+    if (auditLog) {
+      const metadataJson = JSON.stringify(auditLog.metadata ?? {});
+      const auditStmt = this.db
+        .prepare(`
+          INSERT INTO audit_logs (
+            id, branch_id, actor_user_id, actor_type, action, entity_type, entity_id,
+            metadata_json, created_at
+          )
+          SELECT ?, ?, ?, 'USER', ?, 'payment', ?, ?, ?
+          WHERE EXISTS (
+            SELECT 1 FROM payments WHERE id = ? AND status = 'RECORDED'
+          )
+        `)
+        .bind(
+          auditLog.id,
+          auditLog.branchId,
+          auditLog.actorUserId,
+          auditLog.action,
+          paymentId,
+          metadataJson,
+          nowIso,
+          paymentId,
+        );
+      statements.push(auditStmt);
+    }
+
+    const results = await this.db.batch(statements);
+    const changes = Number(
+      (results[0]?.meta as { changes?: number })?.changes ?? (results[0] as { changes?: number })?.changes ?? 0,
+    );
 
     const payment = await this.findById(paymentId);
     if (!payment) {

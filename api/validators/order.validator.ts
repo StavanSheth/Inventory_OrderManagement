@@ -1,29 +1,46 @@
 import { z } from 'zod';
 import { PaymentMethod } from '../../shared/enums/order.enum';
 
+export const idSchema = z.string().min(1, 'Identifier is required').max(100, 'Identifier too long');
+
 export const orderItemSchema = z.object({
-  productId: z.string().min(1, 'productId is required'),
-  quantity: z.int().positive('quantity must be a positive integer'),
+  productId: z.string().min(1, 'productId is required').max(100, 'productId too long'),
+  quantity: z
+    .number()
+    .int('quantity must be an integer')
+    .positive('quantity must be a positive integer')
+    .finite('quantity must be finite')
+    .max(10_000, 'quantity cannot exceed 10000'),
 });
 
 export const createOrderSchema = z.object({
-  branchId: z.string().min(1, 'branchId is required'),
-  items: z.array(orderItemSchema).min(1, 'At least one item is required'),
-  couponId: z.string().optional().nullable(),
+  branchId: z.string().min(1, 'branchId is required').max(100, 'branchId too long'),
+  items: z.array(orderItemSchema).min(1, 'At least one item is required').max(100, 'Cannot exceed 100 items per order'),
+  couponId: z.string().max(100).optional().nullable(),
 });
 
 export const editOrderSchema = z.object({
-  items: z.array(orderItemSchema).min(1, 'At least one item is required'),
+  items: z.array(orderItemSchema).min(1, 'At least one item is required').max(100, 'Cannot exceed 100 items per order'),
 });
 
 export const recordPaymentSchema = z.object({
-  amount: z.number().positive('amount must be positive'),
-  method: z.enum([PaymentMethod.CASH, PaymentMethod.UPI, PaymentMethod.CARD, PaymentMethod.ONLINE, PaymentMethod.OTHER]),
-  notes: z.string().optional(),
+  amount: z
+    .number()
+    .positive('amount must be positive')
+    .finite('amount must be finite')
+    .max(1_000_000, 'amount cannot exceed 1000000'),
+  method: z.enum([
+    PaymentMethod.CASH,
+    PaymentMethod.UPI,
+    PaymentMethod.CARD,
+    PaymentMethod.ONLINE,
+    PaymentMethod.OTHER,
+  ]),
+  notes: z.string().max(500, 'notes too long').optional(),
 });
 
 export const verifyPaymentSchema = z.object({
-  notes: z.string().optional(),
+  notes: z.string().max(500, 'notes too long').optional(),
 });
 
 export const updateOrderStatusSchema = z.object({
