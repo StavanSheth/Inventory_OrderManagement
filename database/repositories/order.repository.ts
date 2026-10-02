@@ -1,6 +1,7 @@
 import { BaseRepository } from './base.repository';
 import { Order, OrderItem } from '../../shared/types/entities.types';
 import { OrderStatus, PaymentStatus, PaymentMethod } from '../../shared/enums/order.enum';
+import { D1PreparedStatementLike } from '../types';
 
 export interface CreateOrderItemInput {
   id: string;
@@ -29,6 +30,25 @@ export interface CreateOrderInput {
   placed_at?: string;
   expires_at: string;
   items: CreateOrderItemInput[];
+}
+
+export interface AtomicEditOrderOptions {
+  orderId: string;
+  items: CreateOrderItemInput[];
+  subtotal: number;
+  tax: number;
+  total: number;
+  paymentStatus?: PaymentStatus;
+  lastEditedAt: string;
+  nowIso?: string;
+  editCutoffIso: string;
+  auditLog?: {
+    id: string;
+    branchId: string | null;
+    actorUserId: string;
+    action: string;
+    metadata: Record<string, unknown>;
+  };
 }
 
 export class OrderRepository extends BaseRepository {
@@ -370,21 +390,29 @@ export class OrderRepository extends BaseRepository {
     return changes > 0;
   }
 
-  async updateOrderItemsAndTotals(
-    orderId: string,
-    items: CreateOrderItemInput[],
-    subtotal: number,
-    tax: number,
-    total: number,
-    lastEditedAt: string,
-  ): Promise<Order> {
-    const now = new Date().toISOString();
+  async atomicEditOrder(opts: AtomicEditOrderOptions): Promise<Order> {
+    const now = opts.nowIso ?? new Date().toISOString();
+
+    const current = await this.findById(opts.orderId);
+    if (!current) {
+      throw new Error(`Order ${opts.orderId} not found`);
+    }
+    if (['CANCELLED', 'EXPIRED', 'COMPLETED'].includes(current.status)) {
+      throw new Error(`Order ${opts.orderId} cannot be edited because it is in a terminal status`);
+    }
+    if (current.status === OrderStatus.PENDING && new Date(current.expires_at).getTime() <= new Date(now).getTime()) {
+      throw new Error(`Order ${opts.orderId} cannot be edited because it has expired`);
+    }
+    const orderTime = new Date(current.confirmed_at ?? current.placed_at ?? current.created_at).getTime();
+    if (orderTime < new Date(opts.editCutoffIso).getTime()) {
+      throw new Error(`Order ${opts.orderId} cannot be edited because the edit window has elapsed`);
+    }
 
     // 1. Prepare delete previous items statement
-    const deleteStmt = this.db.prepare('DELETE FROM order_items WHERE order_id = ?').bind(orderId);
+    const deleteStmt = this.db.prepare('DELETE FROM order_items WHERE order_id = ?').bind(opts.orderId);
 
     // 2. Prepare insert new items statements
-    const itemStmts = items.map((item) =>
+    const itemStmts = opts.items.map((item) =>
       this.db
         .prepare(`
           INSERT INTO order_items (
@@ -395,7 +423,7 @@ export class OrderRepository extends BaseRepository {
         `)
         .bind(
           item.id,
-          orderId,
+          opts.orderId,
           item.product_id,
           item.product_name_snapshot,
           item.unit_price_snapshot,
@@ -407,33 +435,90 @@ export class OrderRepository extends BaseRepository {
         ),
     );
 
-    // 3. Prepare update order totals statement (conditional on active/editable status)
+    // 3. Conditional update statement protecting against terminal states, expiry races, and edit window
     const updateOrderStmt = this.db
       .prepare(`
         UPDATE orders
         SET subtotal = ?,
             tax = ?,
             total = ?,
+            payment_status = COALESCE(?, payment_status),
             last_edited_at = ?,
             updated_at = ?
         WHERE id = ?
           AND status NOT IN ('CANCELLED', 'EXPIRED', 'COMPLETED')
+          AND (status != 'PENDING' OR expires_at > ?)
+          AND COALESCE(confirmed_at, placed_at, created_at) >= ?
       `)
-      .bind(subtotal, tax, total, lastEditedAt, now, orderId);
+      .bind(
+        opts.subtotal,
+        opts.tax,
+        opts.total,
+        opts.paymentStatus ?? null,
+        opts.lastEditedAt,
+        now,
+        opts.orderId,
+        now,
+        opts.editCutoffIso,
+      );
 
-    // Atomically execute deletion, item insertions, and order update in a single transaction
-    const results = await this.db.batch([deleteStmt, ...itemStmts, updateOrderStmt]);
-    const updateResult = results[results.length - 1];
+    const stmts: D1PreparedStatementLike[] = [deleteStmt, ...itemStmts, updateOrderStmt];
+
+    // 4. Audit statement if provided (commits in the exact same transaction)
+    if (opts.auditLog) {
+      const auditStmt = this.db
+        .prepare(`
+          INSERT INTO audit_logs (
+            id, branch_id, actor_user_id, action, entity_type, entity_id,
+            metadata_json, created_at
+          )
+          VALUES (?, ?, ?, ?, 'order', ?, ?, ?)
+        `)
+        .bind(
+          opts.auditLog.id,
+          opts.auditLog.branchId,
+          opts.auditLog.actorUserId,
+          opts.auditLog.action,
+          opts.orderId,
+          JSON.stringify(opts.auditLog.metadata),
+          now,
+        );
+      stmts.push(auditStmt);
+    }
+
+    const results = await this.db.batch(stmts);
+    const updateResult = results[itemStmts.length + 1];
     const changes = Number((updateResult?.meta as { changes?: number })?.changes ?? (updateResult as { changes?: number })?.changes ?? 0);
 
     if (changes === 0) {
-      throw new Error(`Order ${orderId} cannot be edited because it is in a terminal status or no longer exists`);
+      throw new Error(`Order ${opts.orderId} cannot be edited: it may have expired, exceeded the edit window, or transitioned to a terminal status`);
     }
 
-    const updated = await this.findById(orderId);
+    const updated = await this.findById(opts.orderId);
     if (!updated) {
-      throw new Error(`Order ${orderId} not found`);
+      throw new Error(`Order ${opts.orderId} not found`);
     }
     return updated;
+  }
+
+  async updateOrderItemsAndTotals(
+    orderId: string,
+    items: CreateOrderItemInput[],
+    subtotal: number,
+    tax: number,
+    total: number,
+    lastEditedAt: string,
+  ): Promise<Order> {
+    const now = new Date();
+    const editCutoffIso = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
+    return this.atomicEditOrder({
+      orderId,
+      items,
+      subtotal,
+      tax,
+      total,
+      lastEditedAt,
+      editCutoffIso,
+    });
   }
 }

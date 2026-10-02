@@ -26,7 +26,19 @@ export const verifyPaymentSchema = z.object({
   notes: z.string().optional(),
 });
 
+export const updateOrderStatusSchema = z.object({
+  status: z.enum([
+    'PREPARING',
+    'READY',
+    'COMPLETED',
+    'CANCELLED',
+  ], {
+    message: 'Status must be one of PREPARING, READY, COMPLETED, CANCELLED. Confirmation must use /confirm.',
+  }),
+});
+
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 export type EditOrderInput = z.infer<typeof editOrderSchema>;
 export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>;
 export type VerifyPaymentInput = z.infer<typeof verifyPaymentSchema>;
+export type UpdateOrderStatusInput = z.infer<typeof updateOrderStatusSchema>;

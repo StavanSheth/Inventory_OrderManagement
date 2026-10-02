@@ -1,5 +1,6 @@
 import { Order, OrderItem, Payment } from '../../../shared/types/entities.types';
 import { OrderStatus, PaymentStatus, PaymentMethod } from '../../../shared/enums/order.enum';
+import { AuditAction } from '../../../shared/enums/audit.enum';
 import { OrderRepository } from '../../../database/repositories/order.repository';
 import { PaymentRepository } from '../../../database/repositories/payment.repository';
 import { ProductRepository } from '../../../database/repositories/product.repository';
@@ -139,7 +140,7 @@ export class OrdersService implements IOrdersService {
     await this.auditRepo?.log({
       branch_id: opts.branchId,
       actor_user_id: opts.actorUserId,
-      action: 'ORDER_CREATED',
+      action: AuditAction.ORDER_CREATED,
       entity_type: 'order',
       entity_id: orderId,
       metadata: { orderNumber, total, itemCount: calcItems.length },
@@ -181,9 +182,10 @@ export class OrdersService implements IOrdersService {
       throw new BadRequestError(`Cannot edit order in terminal status: ${order.status}`);
     }
 
+    const now = new Date();
     const settings = this.branchRepo ? await this.branchRepo.getBranchSettings(order.branch_id) : null;
     const editWindowMinutes = settings?.order_edit_window_minutes ?? 60;
-    if (!isOrderEditable(order, editWindowMinutes)) {
+    if (!isOrderEditable(order, editWindowMinutes, now)) {
       throw new BadRequestError('Order edit window has expired');
     }
 
@@ -193,17 +195,7 @@ export class OrdersService implements IOrdersService {
 
     const { items: newCalcItems, subtotal, tax, total: newTotal } = this.calc.calculateTotals(opts.items, productsMap);
     const previousTotal = order.total;
-    const lastEditedAt = new Date().toISOString();
-
-    let updatedOrder = await this.orderRepo.updateOrderItemsAndTotals(
-      opts.orderId,
-      newCalcItems,
-      subtotal,
-      tax,
-      newTotal,
-      lastEditedAt,
-    );
-    const updatedItems = await this.orderRepo.getOrderItems(opts.orderId);
+    const lastEditedAt = now.toISOString();
 
     // Authoritative calculation of verified payments from database
     const payments = this.paymentRepo ? await this.paymentRepo.listByOrder(opts.orderId) : [];
@@ -213,64 +205,78 @@ export class OrdersService implements IOrdersService {
 
     const editDiff = this.calc.calculateEditDifference(previousTotal, newTotal, verifiedPaidAmount);
 
-    // Financial & payment lifecycle rules for edited order (Sections 7, 8, 9)
+    // Determine target payment status according to financial rules
+    let targetPaymentStatus: PaymentStatus = order.payment_status;
     if (order.status === OrderStatus.CONFIRMED) {
       if (newTotal === verifiedPaidAmount) {
-        // Fully verified match - remains operationally CONFIRMED and VERIFIED
-        if (order.payment_status !== PaymentStatus.VERIFIED) {
-          updatedOrder = await this.orderRepo.updatePaymentStatus(opts.orderId, PaymentStatus.VERIFIED);
-        }
+        targetPaymentStatus = PaymentStatus.VERIFIED;
       } else if (newTotal > verifiedPaidAmount) {
-        // Order remains operationally CONFIRMED with additional payment balance pending
-        if (order.payment_status !== PaymentStatus.PENDING) {
-          updatedOrder = await this.orderRepo.updatePaymentStatus(opts.orderId, PaymentStatus.PENDING);
-        }
+        targetPaymentStatus = PaymentStatus.PENDING;
       } else {
-        // newTotal < verifiedPaidAmount: overpayment/credit due, order remains CONFIRMED and VERIFIED
-        if (order.payment_status !== PaymentStatus.VERIFIED) {
-          updatedOrder = await this.orderRepo.updatePaymentStatus(opts.orderId, PaymentStatus.VERIFIED);
-        }
+        targetPaymentStatus = PaymentStatus.VERIFIED;
       }
     } else {
       if (verifiedPaidAmount >= newTotal && newTotal > 0) {
-        updatedOrder = await this.orderRepo.updatePaymentStatus(opts.orderId, PaymentStatus.VERIFIED);
+        targetPaymentStatus = PaymentStatus.VERIFIED;
       } else if (verifiedPaidAmount > 0) {
-        updatedOrder = await this.orderRepo.updatePaymentStatus(opts.orderId, PaymentStatus.RECORDED);
+        targetPaymentStatus = PaymentStatus.RECORDED;
       }
     }
 
-    await this.auditRepo?.log({
-      branch_id: order.branch_id,
-      actor_user_id: opts.actorUserId,
-      action: 'ORDER_EDITED',
-      entity_type: 'order',
-      entity_id: opts.orderId,
-      metadata: {
-        previousItems: previousItems.map((i) => ({
-          productId: i.product_id,
-          productName: i.product_name_snapshot,
-          quantity: i.quantity,
-          unitPrice: i.unit_price_snapshot,
-          lineTotal: i.line_total,
-        })),
-        newItems: newCalcItems.map((i) => ({
-          productId: i.product_id,
-          productName: i.product_name_snapshot,
-          quantity: i.quantity,
-          unitPrice: i.unit_price_snapshot,
-          lineTotal: i.line_total,
-        })),
-        previousTotal,
-        newTotal,
-        verifiedPaidAmount,
-        paymentDifference: editDiff.paymentDifference,
-        additionalAmountRequired: editDiff.additionalAmountRequired,
-        overpaymentAmount: editDiff.overpaymentAmount,
-        actor: opts.actorUserId,
-        timestamp: lastEditedAt,
-      },
-    });
+    const editCutoffIso = new Date(now.getTime() - editWindowMinutes * 60 * 1000).toISOString();
+    const auditMetadata = {
+      previousItems: previousItems.map((i) => ({
+        productId: i.product_id,
+        productName: i.product_name_snapshot,
+        quantity: i.quantity,
+        unitPrice: i.unit_price_snapshot,
+        lineTotal: i.line_total,
+      })),
+      newItems: newCalcItems.map((i) => ({
+        productId: i.product_id,
+        productName: i.product_name_snapshot,
+        quantity: i.quantity,
+        unitPrice: i.unit_price_snapshot,
+        lineTotal: i.line_total,
+      })),
+      previousTotal,
+      newTotal,
+      verifiedPaidAmount,
+      paymentDifference: editDiff.paymentDifference,
+      additionalAmountRequired: editDiff.additionalAmountRequired,
+      overpaymentAmount: editDiff.overpaymentAmount,
+      actor: opts.actorUserId,
+      timestamp: lastEditedAt,
+    };
 
+    // Atomic database mutation: item replacement, order totals, payment status, and audit record in a single batch
+    let updatedOrder: Order;
+    try {
+      updatedOrder = await this.orderRepo.atomicEditOrder({
+        orderId: opts.orderId,
+        items: newCalcItems,
+        subtotal,
+        tax,
+        total: newTotal,
+        paymentStatus: targetPaymentStatus,
+        lastEditedAt,
+        nowIso: lastEditedAt,
+        editCutoffIso,
+        auditLog: {
+          id: `aud-${crypto.randomUUID()}`,
+          branchId: order.branch_id,
+          actorUserId: opts.actorUserId,
+          action: AuditAction.ORDER_EDITED,
+          metadata: auditMetadata,
+        },
+      });
+    } catch (err) {
+      throw new BadRequestError(err instanceof Error ? err.message : 'Order edit failed');
+    }
+
+    const updatedItems = await this.orderRepo.getOrderItems(opts.orderId);
+
+    // Realtime events emitted strictly AFTER atomic commit
     await this.realtime?.publish({
       type: 'OrderUpdated',
       payload: {
@@ -315,19 +321,28 @@ export class OrdersService implements IOrdersService {
 
     assertValidOrderTransition(order.status, nextStatus);
 
+    if (nextStatus === OrderStatus.CONFIRMED) {
+      throw new BadRequestError(
+        'Order confirmation requires verified payment and must be performed via the confirmation endpoint (POST /confirm).',
+      );
+    }
+
+    if (order.status === OrderStatus.PENDING && nextStatus !== OrderStatus.CANCELLED) {
+      throw new BadRequestError(
+        'Invalid order status transition: pending orders can only be confirmed via /confirm with verified payment or cancelled.',
+      );
+    }
+
     const extra: { confirmed_at?: string; completed_at?: string; cancelled_at?: string } = {};
     const now = new Date().toISOString();
-    if (nextStatus === OrderStatus.CONFIRMED) extra.confirmed_at = now;
     if (nextStatus === OrderStatus.COMPLETED) extra.completed_at = now;
     if (nextStatus === OrderStatus.CANCELLED) extra.cancelled_at = now;
 
     const updated = await this.orderRepo.updateStatus(orderId, nextStatus, extra);
 
     const auditAction = nextStatus === OrderStatus.CANCELLED
-      ? 'ORDER_CANCELLED'
-      : (nextStatus === OrderStatus.CONFIRMED
-        ? 'ORDER_CONFIRMED'
-        : (nextStatus === OrderStatus.COMPLETED ? 'ORDER_COMPLETED' : `ORDER_STATUS_${nextStatus}`));
+      ? AuditAction.ORDER_CANCELLED
+      : (nextStatus === OrderStatus.COMPLETED ? AuditAction.ORDER_COMPLETED : AuditAction.ORDER_STATUS_CHANGED);
 
     await this.auditRepo?.log({
       branch_id: order.branch_id,
@@ -369,6 +384,17 @@ export class OrdersService implements IOrdersService {
       );
     }
 
+    const payments = this.paymentRepo ? await this.paymentRepo.listByOrder(orderId) : [];
+    const verifiedPaid = payments
+      .filter((p) => p.status === PaymentStatus.VERIFIED || p.status === PaymentStatus.COMPLETED)
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    if (verifiedPaid < order.total) {
+      throw new BadRequestError(
+        `Cannot confirm order: verified payment amount (₹${verifiedPaid.toFixed(2)}) is less than order total (₹${order.total.toFixed(2)}).`,
+      );
+    }
+
     const now = new Date();
     if (now >= new Date(order.expires_at)) {
       throw new BadRequestError('Cannot confirm expired order');
@@ -385,7 +411,7 @@ export class OrdersService implements IOrdersService {
     await this.auditRepo?.log({
       branch_id: order.branch_id,
       actor_user_id: actorUserId,
-      action: 'ORDER_CONFIRMED',
+      action: AuditAction.ORDER_CONFIRMED,
       entity_type: 'order',
       entity_id: orderId,
       metadata: { confirmedAt: nowIso, previousStatus: order.status },
@@ -468,7 +494,7 @@ export class OrdersService implements IOrdersService {
     await this.auditRepo?.log({
       branch_id: opts.branchId,
       actor_user_id: opts.actorUserId,
-      action: 'PAYMENT_RECORDED',
+      action: AuditAction.PAYMENT_RECORDED,
       entity_type: 'payment',
       entity_id: paymentId,
       metadata: { orderId: opts.orderId, amount: roundedPaymentAmount, method: opts.method, notes: opts.notes ?? null },
@@ -531,7 +557,7 @@ export class OrdersService implements IOrdersService {
       await this.auditRepo?.log({
         branch_id: payment.branch_id,
         actor_user_id: opts.actorUserId,
-        action: 'PAYMENT_VERIFIED',
+        action: AuditAction.PAYMENT_VERIFIED,
         entity_type: 'payment',
         entity_id: opts.paymentId,
         metadata: { orderId: opts.orderId, amount: payment.amount, notes: opts.notes ?? null },

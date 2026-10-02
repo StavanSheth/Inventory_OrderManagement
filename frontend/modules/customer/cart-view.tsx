@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { orderApiClient } from '../../services/order-api-client';
 import { CartItem } from './catalog-view';
 import { CreateOrderResponseData } from '../../../shared/contracts/order.contract';
+import { DEFAULT_TAX_RATE } from '../../../shared/constants/business.constants';
 
 interface CartViewProps {
   branchId: string;
@@ -27,7 +28,7 @@ export const CartView: React.FC<CartViewProps> = ({
 
   // Display-only totals calculated purely for user preview
   const subtotal = items.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
-  const tax = Math.round(subtotal * 0.05 * 100) / 100;
+  const tax = Math.round(subtotal * DEFAULT_TAX_RATE * 100) / 100;
   const total = Math.round((subtotal + tax) * 100) / 100;
 
   const handleCheckout = async () => {

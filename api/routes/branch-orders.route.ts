@@ -8,7 +8,7 @@ import { OrdersService } from '../../backend/services/orders';
 import { requireBranchAccess, requireApplicationSession } from '../../backend/policies/branch-access.policy';
 import { requireOperatorOrOwner } from '../../backend/policies/role.policy';
 import { validateRequest } from '../validators/request.validator';
-import { recordPaymentSchema, verifyPaymentSchema, editOrderSchema } from '../validators/order.validator';
+import { recordPaymentSchema, verifyPaymentSchema, editOrderSchema, updateOrderStatusSchema } from '../validators/order.validator';
 import { successResponse } from '../serializers/response';
 import { handleApiError } from '../middleware/error-handler';
 import { extractRequestContext } from '../middleware/request-context';
@@ -146,13 +146,11 @@ export async function handleBranchOrderStatusRoute(
     requireApplicationSession(userContext.session, userContext, branchId);
     requireBranchAccess(userContext, branchId);
 
-    const body = await request.json() as { status?: string };
-    const nextStatus = body?.status;
-    if (!nextStatus || !Object.values(OrderStatus).includes(nextStatus as OrderStatus)) {
-      return handleApiError(new Error('Invalid or missing status in body'), responseHeaders);
-    }
+    const body = await request.json();
+    const validated = validateRequest(updateOrderStatusSchema, body);
+    const nextStatus = validated.status as OrderStatus;
 
-    const updated = await ordersService.updateOrderStatus(userContext.userId, orderId, nextStatus as OrderStatus);
+    const updated = await ordersService.updateOrderStatus(userContext.userId, orderId, nextStatus);
     return successResponse(updated, 200, responseHeaders);
   } catch (error) {
     return handleApiError(error, responseHeaders);

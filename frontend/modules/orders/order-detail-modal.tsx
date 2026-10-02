@@ -98,8 +98,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     return null;
   }
 
-  const editWindowValid = isWithinOrderEditWindow(new Date(order.confirmed_at ?? order.placed_at), 60);
-  const canEdit = isOrderEditable(order, 60);
+  const editWindowValid = isWithinOrderEditWindow(new Date(order.confirmed_at ?? order.placed_at));
+  const canEdit = isOrderEditable(order);
 
   const verifiedPaid = payments
     .filter((p) => p.status === PaymentStatus.VERIFIED)

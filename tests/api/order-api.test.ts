@@ -427,6 +427,48 @@ describe('Phase 3 — Order API HTTP Endpoints', () => {
         assert.strictEqual(json.data.status, to);
       }
     });
+
+    it('rejects confirmation attempt through generic status endpoint — 400', async () => {
+      const orderId = await createOrder();
+      const opHeaders = {
+        Authorization: bearerToken('fb-op', 'op@melt.local', 'Operator'),
+        'x-session-token': operatorSessionToken,
+        'Content-Type': 'application/json',
+      };
+
+      const resp = await handleBranchOrderStatusRoute(
+        new Request('http://x/', { method: 'PATCH', headers: opHeaders, body: JSON.stringify({ status: OrderStatus.CONFIRMED }) }),
+        'branch-alpha',
+        orderId,
+        { DB: db },
+      );
+      assert.strictEqual(resp.status, 400);
+    });
+
+    it('rejects confirm when verified payment amount is less than order total — 400', async () => {
+      const orderId = await createOrder();
+      const opHeaders = {
+        Authorization: bearerToken('fb-op', 'op@melt.local', 'Operator'),
+        'x-session-token': operatorSessionToken,
+      };
+
+      // Manually insert an underpaid verified payment into DB
+      const payId = 'pay-underpaid';
+      const now = new Date().toISOString();
+      await db
+        .prepare("INSERT INTO payments (id, order_id, branch_id, method, amount, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'VERIFIED', ?, ?)")
+        .bind(payId, orderId, 'branch-alpha', PaymentMethod.CASH, 50, now, now)
+        .run();
+      await db.prepare("UPDATE orders SET payment_status = 'VERIFIED' WHERE id = ?").bind(orderId).run();
+
+      const resp = await handleBranchOrderConfirmRoute(
+        new Request('http://x/', { method: 'POST', headers: opHeaders }),
+        'branch-alpha',
+        orderId,
+        { DB: db },
+      );
+      assert.strictEqual(resp.status, 400);
+    });
   });
 
   // ─── Branch Operator: Order Editing & Strict Payment Validation ─────────────

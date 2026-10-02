@@ -279,7 +279,7 @@ export const OperatorQueueView: React.FC<OperatorQueueViewProps> = ({ branchId }
           {filteredOrders.map((order) => {
             const badge = getStatusBadge(order.status);
             const isPending = order.status === OrderStatus.PENDING;
-            const canEdit = isOrderEditable(order, 60);
+            const canEdit = isOrderEditable(order);
 
             return (
               <div

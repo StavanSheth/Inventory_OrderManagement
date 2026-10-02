@@ -388,5 +388,109 @@ describe('Phase 3 — Concurrency, Payment Lifecycle & Ticket Transport Tests', 
       assert.strictEqual(recent[0].type, 'OrderStatusChanged');
       assert.strictEqual(recent[0].payload.orderId, 'ord-catchup-1');
     });
+
+    it('cross-request delivery: subscriber connection A receives events published by request context B via shared D1', async () => {
+      // Instance A represents subscriber connection context (e.g. active SSE stream)
+      const serviceA = new DatabaseRealtimeService(db);
+      // Instance B represents a completely separate request context (e.g. confirm/payment route)
+      const serviceB = new DatabaseRealtimeService(db);
+
+      const receivedEvents: unknown[] = [];
+      const unsubscribe = serviceA.subscribe({ orderId: 'ord-cross-1' }, (event) => {
+        receivedEvents.push(event);
+      });
+
+      // Request B publishes event through serviceB
+      const now = new Date().toISOString();
+      await serviceB.publish({
+        type: 'OrderStatusChanged',
+        payload: {
+          orderId: 'ord-cross-1',
+          orderNumber: 'ALPHA-20261002-0002',
+          branchId: 'branch-alpha',
+          customerUserId: 'usr-cust',
+          status: OrderStatus.CONFIRMED,
+          paymentStatus: PaymentStatus.VERIFIED,
+          total: 105,
+          timestamp: now,
+        },
+      });
+
+      // Service A polls D1 (simulating the background interval tick in the SSE stream)
+      const dispatched = await serviceA.pollOnce();
+      assert.strictEqual(dispatched, 1, 'Service A must dispatch the event published by Service B');
+      assert.strictEqual(receivedEvents.length, 1);
+      assert.strictEqual((receivedEvents[0] as { type: string }).type, 'OrderStatusChanged');
+
+      unsubscribe();
+      serviceA.clear();
+      serviceB.clear();
+    });
+
+    it('prevents confirmation bypass: generic updateOrderStatus rejects transition to CONFIRMED', async () => {
+      const { order } = await ordersService.createOrder({
+        actorUserId: 'usr-cust',
+        customerUserId: 'usr-cust',
+        branchId: 'branch-alpha',
+        items: [{ productId: 'prod-1', quantity: 1 }],
+      });
+
+      await assert.rejects(
+        async () => {
+          await ordersService.updateOrderStatus('usr-op', order.id, OrderStatus.CONFIRMED);
+        },
+        /Order confirmation requires verified payment and must be performed via the confirmation endpoint/,
+      );
+    });
+
+    it('atomic order edit rollback: atomicEditOrder rolls back all mutations if constraint fails', async () => {
+      const { order } = await ordersService.createOrder({
+        actorUserId: 'usr-cust',
+        customerUserId: 'usr-cust',
+        branchId: 'branch-alpha',
+        items: [{ productId: 'prod-1', quantity: 1 }],
+      });
+
+      // Attempt atomic edit with impossible cutoff (simulating edit window expired)
+      const pastCutoff = new Date(Date.now() + 1000000).toISOString(); // cutoff is in the future
+      await assert.rejects(
+        async () => {
+          await orderRepo.atomicEditOrder({
+            orderId: order.id,
+            items: [{
+              id: 'item-fake',
+              product_id: 'prod-2',
+              product_name_snapshot: 'Belgian Chocolate',
+              unit_price_snapshot: 150,
+              quantity: 2,
+              line_total: 300,
+            }],
+            subtotal: 300,
+            tax: 15,
+            total: 315,
+            lastEditedAt: new Date().toISOString(),
+            editCutoffIso: pastCutoff,
+            auditLog: {
+              id: 'aud-fake-rollback',
+              branchId: 'branch-alpha',
+              actorUserId: 'usr-op',
+              action: 'ORDER_EDITED',
+              metadata: {},
+            },
+          });
+        },
+        /cannot be edited/,
+      );
+
+      // Verify original order items remain intact (not deleted)
+      const items = await orderRepo.getOrderItems(order.id);
+      assert.strictEqual(items.length, 1);
+      assert.strictEqual(items[0].product_id, 'prod-1');
+
+      // Verify no audit record was inserted
+      const audits = await auditRepo.listByEntity('order', order.id);
+      const editAudit = audits.find((a) => a.action === 'ORDER_EDITED');
+      assert.strictEqual(editAudit, undefined);
+    });
   });
 });

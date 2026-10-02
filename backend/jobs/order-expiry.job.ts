@@ -3,6 +3,7 @@ import { AuditRepository } from '../../database/repositories/audit.repository';
 import { IRealtimeService } from '../services/realtime/realtime.interface';
 import { IOrderExpiryJob } from './order-expiry.job.interface';
 import { OrderStatus, PaymentStatus } from '../../shared/enums/order.enum';
+import { AuditAction } from '../../shared/enums/audit.enum';
 
 export class OrderExpiryJob implements IOrderExpiryJob {
   constructor(
@@ -23,7 +24,7 @@ export class OrderExpiryJob implements IOrderExpiryJob {
         await this.auditRepo?.log({
           branch_id: order.branch_id,
           actor_user_id: order.customer_user_id,
-          action: 'ORDER_EXPIRED',
+          action: AuditAction.ORDER_EXPIRED,
           entity_type: 'order',
           entity_id: order.id,
           metadata: {
