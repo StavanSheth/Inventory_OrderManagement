@@ -649,7 +649,62 @@ export class OrdersService implements IOrdersService {
       }
     }
 
-    // Step 3: Atomic execution in D1 batch: order confirmation + stock deduction + movements + coupon usage + audit
+    // Step 2b: Atomic offer usage increment if order has an offer
+    if (order.offer_id && this.promotionsService) {
+      const offer = await this.promotionsService.getOfferById(order.branch_id, order.offer_id);
+      if (!offer || !offer.active) {
+        throw new BadRequestError('Offer is no longer active');
+      }
+      if (offer.usage_limit != null && offer.usage_count >= offer.usage_limit) {
+        throw new BadRequestError('Offer usage limit reached');
+      }
+
+      const promoRepo = (this.promotionsService as PromotionsService).getPromotionRepo?.();
+      if (promoRepo) {
+        extraStatements.push(promoRepo.prepareOfferIncrementStatement(order.offer_id, nowIso));
+      }
+      if (this.auditRepo) {
+        extraStatements.push(
+          this.auditRepo.prepareLogStatement({
+            branch_id: order.branch_id,
+            actor_user_id: actorUserId,
+            action: AuditAction.OFFER_UPDATED,
+            entity_type: 'offer',
+            entity_id: order.offer_id,
+            metadata: { orderId, action: 'offer_consumed', discountAmount: order.offer_discount_snapshot ?? 0 },
+          }, nowIso),
+        );
+      }
+    }
+
+    // Step 2c: Atomically batch Phase 4 audit records for coupon and inventory inside the confirmation transaction
+    if (order.coupon_id && this.auditRepo) {
+      extraStatements.push(
+        this.auditRepo.prepareLogStatement({
+          branch_id: order.branch_id,
+          actor_user_id: actorUserId,
+          action: AuditAction.COUPON_APPLIED,
+          entity_type: 'coupon',
+          entity_id: order.coupon_id,
+          metadata: { orderId, discountAmount: order.coupon_discount_snapshot ?? order.discount },
+        }, nowIso),
+      );
+    }
+
+    if (this.inventoryService && orderItems.length > 0 && this.auditRepo) {
+      extraStatements.push(
+        this.auditRepo.prepareLogStatement({
+          branch_id: order.branch_id,
+          actor_user_id: actorUserId,
+          action: AuditAction.INVENTORY_CONSUMED,
+          entity_type: 'inventory',
+          entity_id: orderId,
+          metadata: { orderId, itemCount: orderItems.length },
+        }, nowIso),
+      );
+    }
+
+    // Step 3: Atomic execution in D1 batch: order confirmation + stock deduction + movements + coupon usage + offer usage + audits
     let updated: Order;
     try {
       updated = await this.orderRepo.confirmOrderConditionally(
@@ -666,29 +721,6 @@ export class OrdersService implements IOrdersService {
       );
     } catch (err) {
       throw new BadRequestError(err instanceof Error ? err.message : 'Confirmation failed');
-    }
-
-    // Audit logging for Phase 4 coupon application and inventory consumption
-    if (order.coupon_id) {
-      await this.auditRepo?.log({
-        branch_id: order.branch_id,
-        actor_user_id: actorUserId,
-        action: AuditAction.COUPON_APPLIED,
-        entity_type: 'coupon',
-        entity_id: order.coupon_id,
-        metadata: { orderId, discountAmount: order.coupon_discount_snapshot ?? order.discount },
-      });
-    }
-
-    if (this.inventoryService && orderItems.length > 0) {
-      await this.auditRepo?.log({
-        branch_id: order.branch_id,
-        actor_user_id: actorUserId,
-        action: AuditAction.INVENTORY_CONSUMED,
-        entity_type: 'inventory',
-        entity_id: orderId,
-        metadata: { orderId, itemCount: orderItems.length },
-      });
     }
 
     // Step 4: Publish realtime events strictly after authoritative commit
@@ -828,6 +860,47 @@ export class OrdersService implements IOrdersService {
     }
 
     const now = new Date().toISOString();
+
+    // Prepare atomic deferred inventory consumption if this payment verification completes payment for a confirmed order
+    const payments = await this.paymentRepo.listByOrder(opts.orderId);
+    const existingVerifiedPaid = payments
+      .filter((p) => (p.status === PaymentStatus.VERIFIED || p.status === PaymentStatus.COMPLETED) && p.id !== opts.paymentId)
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    const willBeFullyPaid = (existingVerifiedPaid + payment.amount) >= order.total;
+    const extraStatements: D1PreparedStatementLike[] = [];
+
+    if (order.status === OrderStatus.CONFIRMED && willBeFullyPaid && this.inventoryService) {
+      const currentItems = await this.orderRepo.getOrderItems(opts.orderId);
+      const itemsList = currentItems.map((i) => ({ productId: i.product_id, quantity: i.quantity }));
+      const prep = await this.inventoryService.prepareFinalizePendingOrderInventoryStatements({
+        branchId: order.branch_id,
+        orderId: opts.orderId,
+        actorUserId: opts.actorUserId,
+        items: itemsList,
+      });
+      extraStatements.push(...prep.statements);
+      const finalizedPendingDeltas = prep.pendingDeltas;
+
+      if (this.auditRepo && prep.statements.length > 0) {
+        extraStatements.push(
+          this.auditRepo.prepareLogStatement({
+            branch_id: order.branch_id,
+            actor_user_id: opts.actorUserId,
+            action: AuditAction.INVENTORY_CONSUMED,
+            entity_type: 'order_inventory',
+            entity_id: opts.orderId,
+            metadata: {
+              orderId: opts.orderId,
+              finalizedPendingDeltas,
+              paymentId: opts.paymentId,
+              timestamp: now,
+            },
+          }, now),
+        );
+      }
+    }
+
     const { payment: updatedPayment, wasUpdated } = await this.paymentRepo.verifyPaymentAtomically(
       opts.paymentId,
       opts.orderId,
@@ -850,6 +923,7 @@ export class OrdersService implements IOrdersService {
           notes: opts.notes ?? null,
         },
       },
+      extraStatements,
     );
 
     const updatedOrder = (await this.orderRepo.findById(opts.orderId))!;
@@ -867,23 +941,7 @@ export class OrdersService implements IOrdersService {
     }
 
     if (wasUpdated) {
-      // If order is CONFIRMED, check if verified payments now cover the order total.
-      // If so, finalize deferred positive inventory consumption from order edit and ensure payment_status is VERIFIED.
-      const payments = await this.paymentRepo.listByOrder(opts.orderId);
-      const verifiedPaid = payments
-        .filter((p) => p.status === PaymentStatus.VERIFIED || p.status === PaymentStatus.COMPLETED)
-        .reduce((sum, p) => sum + p.amount, 0);
-
-      if (updatedOrder.status === OrderStatus.CONFIRMED && verifiedPaid >= updatedOrder.total) {
-        if (this.inventoryService) {
-          const currentItems = await this.orderRepo.getOrderItems(opts.orderId);
-          await this.inventoryService.finalizePendingOrderInventory({
-            branchId: updatedOrder.branch_id,
-            orderId: opts.orderId,
-            actorUserId: opts.actorUserId,
-            items: currentItems.map((i) => ({ productId: i.product_id, quantity: i.quantity })),
-          });
-        }
+      if (updatedOrder.status === OrderStatus.CONFIRMED && willBeFullyPaid) {
         if (updatedOrder.payment_status !== PaymentStatus.VERIFIED) {
           await this.orderRepo.updatePaymentStatus(opts.orderId, PaymentStatus.VERIFIED);
           updatedOrder.payment_status = PaymentStatus.VERIFIED;

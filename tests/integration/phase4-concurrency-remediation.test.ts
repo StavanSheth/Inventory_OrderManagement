@@ -19,7 +19,7 @@ import { DatabaseRealtimeService, centralRealtimeHub } from '../../backend/servi
 import { OrderStatus, PaymentMethod } from '../../shared/enums/order.enum';
 import { BranchStatus } from '../../shared/enums/branch.enum';
 import { UserRole, MembershipStatus } from '../../shared/enums/roles.enum';
-import { DiscountType } from '../../shared/enums/promotions.enum';
+import { DiscountType, OfferType } from '../../shared/enums/promotions.enum';
 import { D1DatabaseLike } from '../../database/types';
 
 describe('Phase 4 — Concurrency, Inventory Ledger, BOM & Promotion Remediation Tests', () => {
@@ -617,6 +617,147 @@ describe('Phase 4 — Concurrency, Inventory Ledger, BOM & Promotion Remediation
       assert.strictEqual(noEvt, undefined, 'No confirmed event must be emitted when confirmation fails');
 
       sub();
+    });
+  });
+
+  describe('8. Atomic Deferred Inventory with Payment Verification', () => {
+    it('aborts payment verification and rolls back payment status if deferred inventory is unavailable', async () => {
+      // Stock 5 units
+      await inventoryService.refillProductStock(branchId, 'prod-pistachio', 5, operatorId, 'Stocked');
+
+      // Create & confirm order for 2 units
+      const { order } = await ordersService.createOrder({
+        actorUserId: customerId,
+        customerUserId: customerId,
+        branchId,
+        items: [{ productId: 'prod-pistachio', quantity: 2 }],
+      });
+
+      const { payment: p1 } = await ordersService.recordPayment({
+        actorUserId: operatorId,
+        orderId: order.id,
+        branchId,
+        amount: order.total,
+        method: PaymentMethod.CASH,
+      });
+      await ordersService.verifyPayment({ actorUserId: operatorId, orderId: order.id, paymentId: p1.id });
+      await ordersService.confirmOrder(operatorId, order.id);
+
+      // Remaining stock: 5 - 2 = 3
+      let stock = await inventoryRepo.findByProduct(branchId, 'prod-pistachio');
+      assert.strictEqual(stock?.quantity, 3);
+
+      // Edit order: increase from 2 to 5 (needs +3 more units)
+      const editRes = await ordersService.editOrder({
+        actorUserId: operatorId,
+        orderId: order.id,
+        items: [{ productId: 'prod-pistachio', quantity: 5 }],
+      });
+      assert.ok(editRes.additionalAmountRequired > 0);
+
+      // Record additional payment
+      const { payment: addPay } = await ordersService.recordPayment({
+        actorUserId: operatorId,
+        orderId: order.id,
+        branchId,
+        amount: editRes.additionalAmountRequired,
+        method: PaymentMethod.CASH,
+      });
+
+      // Now simulate a concurrent branch stock depletion before payment is verified!
+      // Reduce stock from 3 to 1 so the needed 3 is no longer available:
+      await inventoryService.adjustProductStock(branchId, 'prod-pistachio', -2, operatorId, 'Spoilage loss');
+      stock = await inventoryRepo.findByProduct(branchId, 'prod-pistachio');
+      assert.strictEqual(stock?.quantity, 1);
+
+      // Now verifyPayment must abort because deferred inventory (+3) cannot be fulfilled!
+      await assert.rejects(
+        async () => {
+          await ordersService.verifyPayment({
+            actorUserId: operatorId,
+            orderId: order.id,
+            paymentId: addPay.id,
+          });
+        },
+        (err: any) => err.message.includes('Insufficient inventory') || err.message.includes('stock'),
+      );
+
+      // Crucial Invariant: The payment must NOT be verified, stock must remain unchanged, no partial mutation!
+      const postPayment = await paymentRepo.findById(addPay.id);
+      assert.strictEqual(postPayment?.status, PaymentMethod.CASH ? 'RECORDED' : 'PENDING');
+      stock = await inventoryRepo.findByProduct(branchId, 'prod-pistachio');
+      assert.strictEqual(stock?.quantity, 1);
+    });
+  });
+
+  describe('9. Offer Usage Limit Atomicity at Confirmation Time', () => {
+    it('atomically increments offers.usage_count on order confirmation and enforces usage_limit', async () => {
+      // Create offer with usage_limit = 1
+      const offer = await promotionsService.createOffer(branchId, operatorId, {
+        name: 'Single-Use Blast',
+        offer_type: OfferType.FLAT,
+        description: 'Flat ₹20 off for 1 order only',
+        configuration_json: JSON.stringify({ discount_type: 'FIXED', discount_value: 20 }),
+        usage_limit: 1,
+        active: true,
+        start_at: new Date().toISOString(),
+      });
+
+      // Stock products
+      await inventoryService.refillProductStock(branchId, 'prod-pistachio', 20, operatorId, 'Stocked');
+
+      // Create Order 1 with offer
+      const { order: o1 } = await ordersService.createOrder({
+        actorUserId: customerId,
+        customerUserId: customerId,
+        branchId,
+        items: [{ productId: 'prod-pistachio', quantity: 1 }],
+        offerId: offer.id,
+      });
+
+      // Create Order 2 with offer
+      const { order: o2 } = await ordersService.createOrder({
+        actorUserId: customerId,
+        customerUserId: customerId,
+        branchId,
+        items: [{ productId: 'prod-pistachio', quantity: 1 }],
+        offerId: offer.id,
+      });
+
+      // Pay & verify both
+      const { payment: p1 } = await ordersService.recordPayment({
+        actorUserId: operatorId,
+        orderId: o1.id,
+        branchId,
+        amount: o1.total,
+        method: PaymentMethod.CASH,
+      });
+      await ordersService.verifyPayment({ actorUserId: operatorId, orderId: o1.id, paymentId: p1.id });
+
+      const { payment: p2 } = await ordersService.recordPayment({
+        actorUserId: operatorId,
+        orderId: o2.id,
+        branchId,
+        amount: o2.total,
+        method: PaymentMethod.CASH,
+      });
+      await ordersService.verifyPayment({ actorUserId: operatorId, orderId: o2.id, paymentId: p2.id });
+
+      // Confirm Order 1 succeeds
+      const conf1 = await ordersService.confirmOrder(operatorId, o1.id);
+      assert.strictEqual(conf1.status, OrderStatus.CONFIRMED);
+
+      // Invariant: offer.usage_count is now 1 in the database
+      const updatedOffer = await promotionsService.getOfferById(branchId, offer.id);
+      assert.strictEqual(updatedOffer?.usage_count, 1);
+
+      // Confirm Order 2 must fail because usage_limit = 1 is reached
+      await assert.rejects(
+        async () => {
+          await ordersService.confirmOrder(operatorId, o2.id);
+        },
+        (err: any) => err.message.includes('Offer usage limit reached') || err.message.includes('Confirmation failed'),
+      );
     });
   });
 });

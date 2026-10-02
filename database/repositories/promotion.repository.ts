@@ -10,7 +10,7 @@ export interface CreateOfferInput {
   description?: string | null;
   offer_type: OfferType;
   configuration_json?: string;
-  start_at: string;
+  start_at?: string;
   end_at?: string | null;
   active?: boolean;
   usage_limit?: number | null;
@@ -68,6 +68,8 @@ export class PromotionRepository extends BaseRepository {
     const now = new Date().toISOString();
     const active = input.active !== false ? 1 : 0;
     const configJson = input.configuration_json ?? '{}';
+    const startAt = input.start_at ?? now;
+    const endAt = input.end_at ?? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
 
     await this.db
       .prepare(`
@@ -84,8 +86,8 @@ export class PromotionRepository extends BaseRepository {
         input.description ?? null,
         input.offer_type,
         configJson,
-        input.start_at,
-        input.end_at ?? null,
+        startAt,
+        endAt,
         active,
         input.usage_limit ?? null,
         now,
@@ -346,5 +348,22 @@ export class PromotionRepository extends BaseRepository {
         VALUES (?, ?, ?, ?, ?, ?)
       `)
       .bind(id, couponId, userId, orderId, discountAmount, nowIso);
+  }
+
+  /**
+   * Concurrency-safe atomic increment of offer usage.
+   * Fails cleanly if usage_limit is exceeded.
+   */
+  prepareOfferIncrementStatement(offerId: string, nowIso: string): D1PreparedStatementLike {
+    return this.db
+      .prepare(`
+        UPDATE offers
+        SET usage_count = usage_count + 1,
+            updated_at = ?
+        WHERE id = ?
+          AND active = 1
+          AND (usage_limit IS NULL OR usage_count < usage_limit)
+      `)
+      .bind(nowIso, offerId);
   }
 }

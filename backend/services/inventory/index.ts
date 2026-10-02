@@ -77,6 +77,16 @@ export interface IInventoryService {
     actorUserId: string;
     items: Array<{ productId: string; quantity: number }>;
   }): Promise<void>;
+
+  prepareFinalizePendingOrderInventoryStatements(opts: {
+    branchId: string;
+    orderId: string;
+    actorUserId: string;
+    items: Array<{ productId: string; quantity: number }>;
+  }): Promise<{
+    statements: D1PreparedStatementLike[];
+    pendingDeltas: Array<{ productId: string; quantity: number }>;
+  }>;
 }
 
 export const INVENTORY_SERVICE_TOKEN = 'IInventoryService';
@@ -722,12 +732,15 @@ export class InventoryService implements IInventoryService {
     return stmts;
   }
 
-  async finalizePendingOrderInventory(opts: {
+  async prepareFinalizePendingOrderInventoryStatements(opts: {
     branchId: string;
     orderId: string;
     actorUserId: string;
     items: Array<{ productId: string; quantity: number }>;
-  }): Promise<void> {
+  }): Promise<{
+    statements: D1PreparedStatementLike[];
+    pendingDeltas: Array<{ productId: string; quantity: number }>;
+  }> {
     // 1. Get net consumed quantities per product for this order from movements
     const netConsumption = await this.inventoryRepo.getNetOrderConsumption(opts.orderId);
     const netConsumedMap = new Map<string, number>();
@@ -748,7 +761,7 @@ export class InventoryService implements IInventoryService {
     }
 
     if (pendingDeltas.length === 0) {
-      return;
+      return { statements: [], pendingDeltas: [] };
     }
 
     // 3. Validate stock availability for pending items
@@ -809,8 +822,18 @@ export class InventoryService implements IInventoryService {
       stmts.push(deductStmt, moveStmt);
     }
 
-    if (stmts.length > 0) {
-      await this.inventoryRepo.executeBatch(stmts);
+    return { statements: stmts, pendingDeltas };
+  }
+
+  async finalizePendingOrderInventory(opts: {
+    branchId: string;
+    orderId: string;
+    actorUserId: string;
+    items: Array<{ productId: string; quantity: number }>;
+  }): Promise<void> {
+    const { statements, pendingDeltas } = await this.prepareFinalizePendingOrderInventoryStatements(opts);
+    if (statements.length > 0) {
+      await this.inventoryRepo.executeBatch(statements);
     }
 
     await this.auditRepo?.log({
@@ -822,8 +845,9 @@ export class InventoryService implements IInventoryService {
       metadata: {
         orderId: opts.orderId,
         finalizedPendingDeltas: pendingDeltas,
-        timestamp: now,
+        timestamp: new Date().toISOString(),
       },
     });
   }
 }
+

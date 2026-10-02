@@ -61,4 +61,31 @@ export class AuditRepository extends BaseRepository {
       .all<AuditLog>();
     return res.results;
   }
+
+  prepareLogStatement(input: CreateAuditLogInput, nowIso: string = new Date().toISOString()) {
+    const id = input.id ?? `aud-${crypto.randomUUID()}`;
+    const metadataJson = JSON.stringify(input.metadata ?? {});
+    const actorType = input.actor_type ?? (input.actor_user_id ? 'USER' : 'SYSTEM');
+    const actorUserId = input.actor_user_id ?? null;
+
+    return this.db
+      .prepare(`
+        INSERT INTO audit_logs (
+          id, branch_id, actor_user_id, actor_type, action, entity_type, entity_id,
+          metadata_json, created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      .bind(
+        id,
+        input.branch_id ?? null,
+        actorUserId,
+        actorType,
+        input.action,
+        input.entity_type,
+        input.entity_id,
+        metadataJson,
+        nowIso,
+      );
+  }
 }

@@ -1,6 +1,7 @@
 import { BaseRepository } from './base.repository';
 import { Payment } from '../../shared/types/entities.types';
 import { PaymentMethod, PaymentStatus } from '../../shared/enums/order.enum';
+import { D1PreparedStatementLike } from '../types';
 
 export interface CreatePaymentInput {
   id: string;
@@ -186,6 +187,7 @@ export class PaymentRepository extends BaseRepository {
       action: string;
       metadata: Record<string, unknown>;
     },
+    extraStatements: D1PreparedStatementLike[] = [],
   ): Promise<{ payment: Payment; wasUpdated: boolean }> {
     const paymentStmt = this.db
       .prepare(`
@@ -271,10 +273,27 @@ export class PaymentRepository extends BaseRepository {
       statements.push(auditStmt);
     }
 
+    if (extraStatements && extraStatements.length > 0) {
+      statements.push(...extraStatements);
+    }
+
     const results = await this.db.batch(statements);
     const changes = Number(
       (results[0]?.meta as { changes?: number })?.changes ?? (results[0] as { changes?: number })?.changes ?? 0,
     );
+
+    // If payment was updated, verify that all extraStatements (e.g. conditional inventory deductions) succeeded
+    if (changes > 0 && extraStatements.length > 0) {
+      const extraStartIndex = auditLog ? 3 : 2;
+      for (let i = extraStartIndex; i < results.length; i++) {
+        const stmtChanges = Number(
+          (results[i]?.meta as { changes?: number })?.changes ?? (results[i] as { changes?: number })?.changes ?? 0,
+        );
+        if (stmtChanges === 0) {
+          throw new Error(`Atomic batch verification failed: dependent inventory statement ${i - extraStartIndex} affected 0 rows`);
+        }
+      }
+    }
 
     const payment = await this.findById(paymentId);
     if (!payment) {
