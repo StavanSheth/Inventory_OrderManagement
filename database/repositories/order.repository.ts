@@ -108,6 +108,100 @@ export class OrderRepository extends BaseRepository {
     return res.results;
   }
 
+  async countOrderHistory(options: {
+    branchId?: string;
+    customerUserId?: string;
+    startDate?: string;
+    endDate?: string;
+    status?: OrderStatus;
+  }): Promise<number> {
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    if (options.branchId) {
+      conditions.push('branch_id = ?');
+      params.push(options.branchId);
+    }
+    if (options.customerUserId) {
+      conditions.push('customer_user_id = ?');
+      params.push(options.customerUserId);
+    }
+    if (options.status) {
+      conditions.push('status = ?');
+      params.push(options.status);
+    }
+    if (options.startDate) {
+      conditions.push('placed_at >= ?');
+      params.push(options.startDate);
+    }
+    if (options.endDate) {
+      conditions.push('placed_at <= ?');
+      params.push(options.endDate);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const row = await this.db
+      .prepare(`SELECT COUNT(*) as count FROM orders ${whereClause}`)
+      .bind(...params)
+      .first<{ count: number }>();
+    return row?.count ?? 0;
+  }
+
+  async listOrderHistory(options: {
+    branchId?: string;
+    customerUserId?: string;
+    startDate?: string;
+    endDate?: string;
+    status?: OrderStatus;
+    page?: number;
+    limit?: number;
+    includeItems?: boolean;
+  }): Promise<Array<Order & { items?: OrderItem[] }>> {
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    if (options.branchId) {
+      conditions.push('branch_id = ?');
+      params.push(options.branchId);
+    }
+    if (options.customerUserId) {
+      conditions.push('customer_user_id = ?');
+      params.push(options.customerUserId);
+    }
+    if (options.status) {
+      conditions.push('status = ?');
+      params.push(options.status);
+    }
+    if (options.startDate) {
+      conditions.push('placed_at >= ?');
+      params.push(options.startDate);
+    }
+    if (options.endDate) {
+      conditions.push('placed_at <= ?');
+      params.push(options.endDate);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const page = Math.max(1, options.page ?? 1);
+    const limit = Math.min(100, Math.max(1, options.limit ?? 20));
+    const offset = (page - 1) * limit;
+
+    const res = await this.db
+      .prepare(`SELECT * FROM orders ${whereClause} ORDER BY placed_at DESC LIMIT ? OFFSET ?`)
+      .bind(...params, limit, offset)
+      .all<Order>();
+
+    const orders: Array<Order & { items?: OrderItem[] }> = res.results;
+
+    if (options.includeItems && orders.length > 0) {
+      for (const ord of orders) {
+        ord.items = await this.getOrderItems(ord.id);
+      }
+    }
+
+    return orders;
+  }
+
   async create(input: CreateOrderInput): Promise<Order> {
     const now = new Date().toISOString();
     const status = input.status ?? OrderStatus.PENDING;

@@ -7,3 +7,7 @@ export * from './cron.route';
 export * from './realtime.route';
 export * from './inventory.route';
 export * from './promotions.route';
+export * from './dashboard.route';
+export * from './order-history.route';
+export * from './owner-branches.route';
+export * from './data-management.route';

@@ -71,6 +71,20 @@ export class SessionRepository extends BaseRepository {
       .first<ApplicationSession>();
   }
 
+  async findActiveByUserId(userId: string): Promise<ApplicationSession[]> {
+    const now = new Date().toISOString();
+    const res = await this.db
+      .prepare(`
+        SELECT * FROM application_sessions
+        WHERE user_id = ?
+          AND revoked_at IS NULL
+          AND expires_at > ?
+      `)
+      .bind(userId, now)
+      .all<ApplicationSession>();
+    return res.results;
+  }
+
   async revoke(id: string): Promise<void> {
     const now = new Date().toISOString();
     await this.db
@@ -79,11 +93,12 @@ export class SessionRepository extends BaseRepository {
       .run();
   }
 
-  async revokeAllForUser(userId: string): Promise<void> {
+  async revokeAllForUser(userId: string): Promise<number> {
     const now = new Date().toISOString();
-    await this.db
+    const res = await this.db
       .prepare('UPDATE application_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL')
       .bind(now, userId)
       .run();
+    return Number((res.meta as { changes?: number })?.changes ?? (res as { changes?: number })?.changes ?? 0);
   }
 }

@@ -70,6 +70,14 @@ export class AuditRepository extends BaseRepository {
     return res.results;
   }
 
+  async listRecent(limit: number = 50): Promise<AuditLog[]> {
+    const res = await this.db
+      .prepare('SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT ?')
+      .bind(limit)
+      .all<AuditLog>();
+    return res.results;
+  }
+
   prepareLogStatement(input: CreateAuditLogInput, nowIso: string = new Date().toISOString()) {
     const id = input.id ?? `aud-${crypto.randomUUID()}`;
     const metadataJson = JSON.stringify(input.metadata ?? {});

@@ -28,6 +28,7 @@ const testFiles = [
   'tests/integration/phase4-concurrency-remediation.test.ts',
   'tests/integration/atomicity.test.ts',
   'tests/integration/concurrency.test.ts',
+  'tests/integration/phase5-owner-platform.test.ts',
   'tests/api/health.test.ts',
   'tests/api/auth-endpoints.test.ts',
   'tests/api/order-api.test.ts',

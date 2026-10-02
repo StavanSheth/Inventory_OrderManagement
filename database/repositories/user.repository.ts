@@ -170,4 +170,29 @@ export class UserRepository extends BaseRepository {
     }
     return res;
   }
+
+  async anonymizeUser(userId: string): Promise<User> {
+    const user = await this.findById(userId);
+    if (!user) throw new Error(`User ${userId} not found`);
+
+    const now = new Date().toISOString();
+    const anonymizedEmail = `anonymized-${userId}@deleted.local`;
+    const anonymizedName = 'Anonymized Customer';
+
+    await this.db
+      .prepare(`
+        UPDATE users
+        SET email = ?,
+            display_name = ?,
+            phone = NULL,
+            pin_hash = NULL,
+            status = 'INACTIVE',
+            updated_at = ?
+        WHERE id = ?
+      `)
+      .bind(anonymizedEmail, anonymizedName, now, userId)
+      .run();
+
+    return (await this.findById(userId))!;
+  }
 }

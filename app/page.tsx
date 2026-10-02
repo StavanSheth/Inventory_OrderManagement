@@ -69,6 +69,22 @@ export default function Home() {
         >
           📋 Operator Desk
         </Link>
+        <Link
+          href="/owner"
+          style={{
+            padding: '0.45rem 0.95rem',
+            background: '#fff1f4',
+            border: '1px solid #f4d3dd',
+            color: '#2b1233',
+            borderRadius: '9999px',
+            textDecoration: 'none',
+            fontSize: '0.8125rem',
+            fontWeight: 700,
+            transition: 'all 0.15s ease',
+          }}
+        >
+          👑 Owner Portal
+        </Link>
       </div>
 
       <SitePage />

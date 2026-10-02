@@ -1,6 +1,8 @@
 import { Order, OrderItem, Payment } from '../../../shared/types/entities.types';
 import { OrderStatus, PaymentStatus, PaymentMethod } from '../../../shared/enums/order.enum';
 import { AuditAction } from '../../../shared/enums/audit.enum';
+import { UserRole } from '../../../shared/enums/roles.enum';
+import { PaginatedOrderHistoryResponse } from '../../../shared/contracts/order-history.contract';
 import { OrderRepository } from '../../../database/repositories/order.repository';
 import { PaymentRepository } from '../../../database/repositories/payment.repository';
 import { ProductRepository } from '../../../database/repositories/product.repository';
@@ -978,5 +980,65 @@ export class OrdersService implements IOrdersService {
     }
 
     return { payment: updatedPayment, order: updatedOrder };
+  }
+
+  async listOrderHistory(options: {
+    actorRole: UserRole;
+    actorUserId: string;
+    branchId?: string;
+    customerUserId?: string;
+    startDate?: string;
+    endDate?: string;
+    status?: OrderStatus;
+    page?: number;
+    limit?: number;
+  }): Promise<PaginatedOrderHistoryResponse> {
+    let effectiveBranchId = options.branchId;
+    let effectiveCustomerUserId = options.customerUserId;
+    let effectiveStartDate = options.startDate;
+    const effectiveEndDate = options.endDate;
+
+    if (options.actorRole === UserRole.CUSTOMER) {
+      effectiveCustomerUserId = options.actorUserId;
+      effectiveBranchId = undefined;
+    } else if (options.actorRole === UserRole.BRANCH_OPERATOR) {
+      if (!effectiveBranchId) {
+        throw new BadRequestError('Branch ID is required for operator order history');
+      }
+      if (!effectiveStartDate && !effectiveEndDate) {
+        const todayStart = new Date();
+        todayStart.setUTCHours(0, 0, 0, 0);
+        effectiveStartDate = todayStart.toISOString();
+      }
+    }
+
+    const page = Math.max(1, options.page ?? 1);
+    const limit = Math.min(100, Math.max(1, options.limit ?? 20));
+
+    const filter = {
+      branchId: effectiveBranchId,
+      customerUserId: effectiveCustomerUserId,
+      startDate: effectiveStartDate,
+      endDate: effectiveEndDate,
+      status: options.status,
+    };
+
+    const totalCount = await this.orderRepo.countOrderHistory(filter);
+    const orders = await this.orderRepo.listOrderHistory({
+      ...filter,
+      page,
+      limit,
+      includeItems: true,
+    });
+
+    const totalPages = Math.ceil(totalCount / limit);
+
+    return {
+      orders,
+      totalCount,
+      page,
+      limit,
+      totalPages,
+    };
   }
 }

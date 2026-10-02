@@ -2,3 +2,6 @@
 export interface SettingsModuleState {
   currentTab: 'general' | 'operational' | 'security';
 }
+
+export * from './branch-settings-view';
+export * from './data-management-view';

@@ -2,3 +2,5 @@
 export interface BranchesModuleState {
   selectedBranchId?: string;
 }
+
+export * from './branch-management-view';
