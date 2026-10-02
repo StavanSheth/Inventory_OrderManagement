@@ -27,19 +27,21 @@ export default function MeltHero() {
       ctx = gsap.context(() => {
         // intro, as the loader's circle opens
         const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
-        tl.from([left.current, right.current], { yPercent: 40, opacity: 0, duration: 1.1, stagger: 0.08 }, 0)
-          .from(cone.current, { yPercent: 12, scale: 0.9, opacity: 0, duration: 1.2 }, 0.1)
-          .from(toppings.current!.children, { scale: 0.4, opacity: 0, duration: 0.9, stagger: 0.08 }, 0.4)
-          .from([copy.current, side.current], { y: 30, opacity: 0, duration: 0.9, stagger: 0.1 }, 0.5);
+        if (toppings.current) {
+          tl.from(toppings.current.children, { scale: 0.4, opacity: 0, duration: 0.9, stagger: 0.08 }, 0.4);
+        }
+        tl.from([copy.current, side.current], { y: 30, opacity: 0, duration: 0.9, stagger: 0.1 }, 0.5);
 
         // scroll: the word slides apart, the cone lifts
         const st = { trigger: root.current, start: "top top", end: "bottom top", scrub: true };
         gsap.to(left.current, { xPercent: -18, ease: "none", scrollTrigger: st });
         gsap.to(right.current, { xPercent: 18, ease: "none", scrollTrigger: st });
         gsap.to(cone.current, { yPercent: -10, ease: "none", scrollTrigger: st });
-        (Array.from(toppings.current!.children) as HTMLElement[]).forEach((t) =>
-          gsap.to(t, { yPercent: -120 * Number(t.dataset.depth), ease: "none", scrollTrigger: st }),
-        );
+        if (toppings.current) {
+          (Array.from(toppings.current.children) as HTMLElement[]).forEach((t) =>
+            gsap.to(t, { yPercent: -120 * Number(t.dataset.depth), ease: "none", scrollTrigger: st }),
+          );
+        }
       }, root);
     });
     return () => {

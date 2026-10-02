@@ -22,22 +22,38 @@ export default function FlavourWave() {
 
   useEffect(() => {
     if (prefersReducedMotion()) return;
-    const len = (el: SVGTextPathElement, reps: number) => (el.parentNode as SVGTextElement).getComputedTextLength() / reps;
+    const len = (el: SVGTextPathElement | null, reps: number) => {
+      if (!el || !el.parentNode) return 0;
+      return (el.parentNode as SVGTextElement).getComputedTextLength() / reps;
+    };
     let units = { top: 0, bottom: 0 };
-    const measure = () => (units = { top: len(topText.current!, REPS.top), bottom: len(bottomText.current!, REPS.bottom) });
+    const measure = () => {
+      if (!topText.current || !bottomText.current) return;
+      try {
+        units = {
+          top: len(topText.current, REPS.top) || 1,
+          bottom: len(bottomText.current, REPS.bottom) || 1,
+        };
+      } catch {
+        // SVG element may not yet be attached or styled
+      }
+    };
     measure();
-    document.fonts.ready.then(measure);
+    if (typeof document !== "undefined" && document.fonts?.ready) {
+      document.fonts.ready.then(measure).catch(() => {});
+    }
 
     let a = 0;
     let b = 0;
     let boost = 0;
     const tick = (_t: number, dt: number) => {
+      if (!topText.current || !bottomText.current || !units.top || !units.bottom) return;
       const s = dt / 1000;
       boost += (Math.min(Math.abs(window.__lenis?.velocity ?? 0) * 18, 700) - boost) * 0.08;
       a = (a + (70 + boost) * s) % units.top;
       b = (b + (45 + boost * 0.6) * s) % units.bottom;
-      topText.current!.setAttribute("startOffset", String(units.top - a)); // moves left
-      bottomText.current!.setAttribute("startOffset", String(b)); // moves right
+      topText.current.setAttribute("startOffset", String(units.top - a)); // moves left
+      bottomText.current.setAttribute("startOffset", String(b)); // moves right
     };
     gsap.ticker.add(tick);
     return () => gsap.ticker.remove(tick);

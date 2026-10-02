@@ -12,10 +12,10 @@ export default function TreatBubbles() {
   const list = useRef<HTMLUListElement>(null);
 
   useEffect(() => {
-    if (prefersReducedMotion()) return;
+    if (prefersReducedMotion() || !list.current) return;
     // Pops in when the circles are really on screen (IntersectionObserver), not at a scroll position
     // measured earlier, which could be stale while images/fonts were still loading and fire too late.
-    const bubbles = list.current!.querySelectorAll(".bubble");
+    const bubbles = list.current.querySelectorAll(".bubble");
     let tween: gsap.core.Tween | undefined;
     gsap.set(bubbles, { scale: 0.55, opacity: 0 });
     const io = new IntersectionObserver(
@@ -26,7 +26,7 @@ export default function TreatBubbles() {
       },
       { threshold: 0.25 },
     );
-    io.observe(list.current!);
+    io.observe(list.current);
     return () => {
       io.disconnect();
       tween?.kill();

@@ -8,7 +8,8 @@ export default function Magnetic({ children, strength = 0.35 }: { children: Reac
   const ref = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
-    const el = ref.current!;
+    const el = ref.current;
+    if (!el) return;
     if (!window.matchMedia("(hover: hover)").matches) return;
     const xTo = gsap.quickTo(el, "x", { duration: 0.6, ease: "elastic.out(1, 0.4)" });
     const yTo = gsap.quickTo(el, "y", { duration: 0.6, ease: "elastic.out(1, 0.4)" });

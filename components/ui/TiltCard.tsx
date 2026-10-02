@@ -7,7 +7,8 @@ export default function TiltCard({ children, className = "" }: { children: React
   const ref = useRef<HTMLDivElement>(null);
 
   const onMove = (e: React.PointerEvent) => {
-    const el = ref.current!;
+    const el = ref.current;
+    if (!el) return;
     const r = el.getBoundingClientRect();
     const px = (e.clientX - r.left) / r.width;
     const py = (e.clientY - r.top) / r.height;
@@ -16,7 +17,9 @@ export default function TiltCard({ children, className = "" }: { children: React
     el.style.setProperty("--my", `${py * 100}%`);
   };
   const onLeave = () => {
-    ref.current!.style.transform = "perspective(900px) rotateX(0) rotateY(0)";
+    if (ref.current) {
+      ref.current.style.transform = "perspective(900px) rotateX(0) rotateY(0)";
+    }
   };
 
   return (

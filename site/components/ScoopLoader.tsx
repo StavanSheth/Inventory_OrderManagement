@@ -75,13 +75,15 @@ export default function ScoopLoader({ name, cone, scoop }: { name: string; cone:
       });
     }
 
-    const el = root.current!;
+    const el = root.current;
+    if (!el || !coneEl.current) return;
     const hole = { r: 0 };
     const setHole = () => {
-      const c = coneEl.current!.getBoundingClientRect();
+      if (!coneEl.current || !root.current) return;
+      const c = coneEl.current.getBoundingClientRect();
       const m = `radial-gradient(circle at ${c.left + c.width / 2}px ${c.top + c.height * 0.2}px, transparent ${hole.r}px, #000 ${hole.r + 1}px)`;
-      el.style.maskImage = m;
-      el.style.webkitMaskImage = m;
+      root.current.style.maskImage = m;
+      root.current.style.webkitMaskImage = m;
     };
 
     // context + revert: React dev mode runs this effect twice

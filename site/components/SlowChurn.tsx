@@ -28,8 +28,10 @@ function focusAt(p: number) {
 function usePour(folder: string, canvas: React.RefObject<HTMLCanvasElement | null>) {
   const progress = useRef(0);
   useEffect(() => {
-    const cv = canvas.current!;
-    const ctx = cv.getContext("2d")!;
+    const cv = canvas.current;
+    if (!cv) return;
+    const ctx = cv.getContext("2d");
+    if (!ctx) return;
     let player: ReturnType<typeof loadFrames> | null = null;
     let count = 0;
     let raf = 0;

@@ -19,7 +19,8 @@ export default function Loader({ text, enabled = true }: { text: string; enabled
       loading.markFinished();
       return;
     }
-    const el = root.current!;
+    const el = root.current;
+    if (!el) return;
     const letters = el.querySelectorAll(".ld-letter");
     const intro = gsap.timeline();
     intro.from(letters, { yPercent: 110, duration: 1.1, ease: "power4.out", stagger: 0.06 });
