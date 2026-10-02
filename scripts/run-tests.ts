@@ -16,6 +16,7 @@ const testFiles = [
   'tests/unit/payment-difference.test.ts',
   'tests/unit/promotions.test.ts',
   'tests/unit/inventory-bom.test.ts',
+  'tests/unit/responsive-ui-components.test.ts',
   'tests/integration/schema-migrations.test.ts',
   'tests/integration/seed-data.test.ts',
   'tests/integration/repositories.test.ts',

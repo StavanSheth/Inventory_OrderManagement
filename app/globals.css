@@ -214,3 +214,205 @@ html.has-custom-cursor textarea {
   from { transform: translateX(40%); opacity: 0.5; }
   to { transform: translateX(0); opacity: 0.25; }
 }
+
+/* ==========================================================================
+   Responsive Design System — Inventory & Order Management UI/UX
+   ========================================================================== */
+
+/* 1. Fluid Layout Containers */
+.app-container {
+  width: 100%;
+  max-width: 1360px;
+  margin-inline: auto;
+  padding-inline: clamp(1rem, 3.5vw, 2.5rem);
+}
+
+.app-container-sm {
+  width: 100%;
+  max-width: 860px;
+  margin-inline: auto;
+  padding-inline: clamp(1rem, 3vw, 2rem);
+}
+
+/* 2. Responsive Grids */
+.app-grid-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: clamp(0.85rem, 1.5vw, 1.5rem);
+}
+
+.app-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+  gap: clamp(0.75rem, 1.25vw, 1.25rem);
+}
+
+.app-two-col {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: clamp(1rem, 2vw, 2rem);
+}
+@media (min-width: 900px) {
+  .app-two-col {
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  }
+}
+
+/* 3. Surface & Card Design */
+.app-card {
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--line, #f4d3dd);
+  border-radius: 1.25rem;
+  box-shadow: 0 4px 20px -8px rgba(120, 20, 60, 0.08);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease;
+}
+
+.app-card-interactive {
+  cursor: pointer;
+}
+.app-card-interactive:hover {
+  transform: translateY(-2px);
+  border-color: #eb95b2;
+  box-shadow: 0 12px 30px -10px rgba(120, 20, 60, 0.16);
+}
+.app-card-interactive:active {
+  transform: scale(0.99);
+}
+
+/* 4. Accessible Focus Rings */
+button:focus-visible,
+a:focus-visible,
+select:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent, #d61c5d) !important;
+  outline-offset: 2px !important;
+}
+
+/* 5. Bun-style Expandable Mobile Navigation */
+.bun-trigger {
+  position: fixed;
+  bottom: max(1.25rem, env(safe-area-inset-bottom, 1.25rem));
+  right: 1.25rem;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.65rem 1.25rem;
+  background: linear-gradient(135deg, #d61c5d 0%, #a3134a 100%);
+  color: #ffffff;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  border-radius: 9999px;
+  box-shadow: 0 12px 32px -8px rgba(214, 28, 93, 0.55), 0 4px 12px rgba(0, 0, 0, 0.15);
+  font-family: var(--font-display-family), system-ui, sans-serif;
+  font-weight: 800;
+  font-size: 0.9375rem;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+}
+.bun-trigger:hover {
+  transform: scale(1.05);
+  box-shadow: 0 16px 36px -6px rgba(214, 28, 93, 0.65);
+}
+.bun-trigger:active {
+  transform: scale(0.95);
+}
+
+.bun-panel-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(43, 18, 51, 0.45);
+  backdrop-filter: blur(8px);
+  z-index: 998;
+  animation: bunFadeIn 0.2s ease-out forwards;
+}
+
+.bun-panel {
+  position: fixed;
+  bottom: max(5rem, calc(env(safe-area-inset-bottom, 1.25rem) + 4.25rem));
+  right: 1.25rem;
+  width: min(calc(100vw - 2.5rem), 340px);
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(24px);
+  border: 1px solid #f4d3dd;
+  border-radius: 1.5rem;
+  padding: 1rem;
+  box-shadow: 0 24px 60px -12px rgba(120, 20, 60, 0.35);
+  z-index: 999;
+  animation: bunPopIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transform-origin: bottom right;
+}
+
+@keyframes bunPopIn {
+  from {
+    opacity: 0;
+    transform: scale(0.85) translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes bunFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* 6. Responsive Bottom Sheet & Modal */
+.app-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(43, 18, 51, 0.5);
+  backdrop-filter: blur(6px);
+  z-index: 1000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+@media (min-width: 640px) {
+  .app-sheet-backdrop {
+    align-items: center;
+    padding: 1.5rem;
+  }
+}
+
+.app-sheet-content {
+  width: 100%;
+  max-width: 580px;
+  background: #ffffff;
+  border-top-left-radius: 1.5rem;
+  border-top-right-radius: 1.5rem;
+  max-height: min(90dvh, 720px);
+  overflow-y: auto;
+  box-shadow: 0 -10px 40px rgba(120, 20, 60, 0.2);
+  animation: sheetSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@media (min-width: 640px) {
+  .app-sheet-content {
+    border-radius: 1.5rem;
+    box-shadow: 0 20px 60px -10px rgba(120, 20, 60, 0.25);
+    animation: modalPop 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+}
+
+@keyframes sheetSlideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes modalPop {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* 7. Responsive Table Wrapper */
+.responsive-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 1rem;
+}
+

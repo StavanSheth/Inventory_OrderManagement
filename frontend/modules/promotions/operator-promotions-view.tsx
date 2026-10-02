@@ -282,7 +282,7 @@ export const OperatorPromotionsView: React.FC<OperatorPromotionsViewProps> = ({ 
     <div className="space-y-6">
       {/* Header and Tabs */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#f4d3dd] pb-4">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 flex-nowrap">
           <button
             onClick={() => setActiveTab('coupons')}
             className={`px-4 py-2 text-xs md:text-sm font-bold rounded-full transition ${

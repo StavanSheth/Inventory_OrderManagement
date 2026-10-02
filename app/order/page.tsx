@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   CatalogView,
@@ -9,6 +9,7 @@ import {
   OrderHistoryView,
 } from '@/frontend/modules/customer';
 import { Product } from '@/shared/types/entities.types';
+import { GlobalNavigation, BunMobileNav } from '@/frontend/components/ui';
 
 export default function CustomerOrderPage() {
   const [branches, setBranches] = useState<Array<{ id: string; name: string; code: string }>>([]);
@@ -17,7 +18,7 @@ export default function CustomerOrderPage() {
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'catalog' | 'cart' | 'status' | 'history'>('catalog');
 
-  React.useEffect(() => {
+  useEffect(() => {
     fetch('/api/v1/branches')
       .then((res) => res.json() as Promise<{ success?: boolean; data?: Array<{ id: string; name: string; code: string }> }>)
       .then((json) => {
@@ -63,180 +64,122 @@ export default function CustomerOrderPage() {
   };
 
   const totalCartCount = cartItems.reduce((sum, it) => sum + it.quantity, 0);
+  const selectedBranch = branches.find((b) => b.id === selectedBranchId);
+
+  const tabItems = [
+    { id: 'catalog', label: 'Catalog', icon: '🍦' },
+    { id: 'cart', label: 'Cart', icon: '🛒', count: totalCartCount },
+    ...(activeOrderId ? [{ id: 'status', label: 'Track', icon: '📍' }] : []),
+    { id: 'history', label: 'Orders', icon: '📜' },
+  ];
 
   return (
     <div style={{ minHeight: '100vh', background: '#fff1f4', color: '#2b1233', fontFamily: 'var(--font-body-family), system-ui, sans-serif' }}>
-      {/* Top Application Bar */}
-      <header
+      {/* Global Application Header */}
+      <GlobalNavigation
+        portalTitle="Storefront"
+        portalSubtitle="Fresh Handcrafted Scoops"
+        branches={branches}
+        selectedBranchId={selectedBranchId}
+        onBranchChange={setSelectedBranchId}
+        cartCount={totalCartCount}
+      >
+        <Link
+          href="/operator"
+          className="hidden md:inline-flex"
+          style={{
+            padding: '0.4rem 0.85rem',
+            borderRadius: '9999px',
+            border: '1px solid #f4d3dd',
+            background: '#ffffff',
+            color: '#2b1233',
+            textDecoration: 'none',
+            fontSize: '0.8125rem',
+            fontWeight: 700,
+            boxShadow: '0 2px 8px -4px rgba(120,20,60,0.1)',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          Staff Desk &rarr;
+        </Link>
+      </GlobalNavigation>
+
+      {/* Responsive Secondary View Tabs */}
+      <div
         style={{
           borderBottom: '1px solid #f4d3dd',
-          background: 'rgba(255, 255, 255, 0.95)',
-          backdropFilter: 'blur(16px)',
+          background: 'rgba(255, 255, 255, 0.85)',
+          backdropFilter: 'blur(12px)',
+          padding: '0.65rem 0',
           position: 'sticky',
-          top: 0,
-          zIndex: 100,
-          padding: '0.85rem 1.5rem',
-          boxShadow: '0 10px 25px -12px rgba(120, 20, 60, 0.12)',
+          top: '57px',
+          zIndex: 90,
         }}
       >
-        <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-            <Link href="/" style={{ textDecoration: 'none', color: '#2b1233', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ fontSize: '1.5rem' }}>🍦</span>
-              <span style={{ fontFamily: 'var(--font-display-family)', fontWeight: 700, fontSize: '1.35rem', letterSpacing: '-0.02em', color: '#d61c5d' }}>
-                MELT
-              </span>
-            </Link>
-
-            {/* Branch Selector */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#ffffff', border: '1px solid #f4d3dd', padding: '0.4rem 0.9rem', borderRadius: '9999px', boxShadow: '0 2px 8px -4px rgba(120,20,60,0.1)' }}>
-              <span style={{ fontSize: '0.75rem', color: '#6f5569', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 800 }}>Branch:</span>
-              <select
-                value={selectedBranchId}
-                onChange={(e) => setSelectedBranchId(e.target.value)}
-                style={{
-                  background: 'transparent',
-                  color: '#2b1233',
-                  border: 'none',
-                  fontSize: '0.875rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  outline: 'none',
-                }}
-              >
-                {branches.length > 0 ? (
-                  branches.map((b) => (
-                    <option key={b.id} value={b.id} style={{ background: '#ffffff', color: '#2b1233' }}>
-                      {b.name} ({b.code})
-                    </option>
-                  ))
-                ) : (
-                  <option value={selectedBranchId} style={{ background: '#ffffff', color: '#2b1233' }}>
-                    Select Branch
-                  </option>
-                )}
-              </select>
-            </div>
-          </div>
-
-          {/* Navigation Controls */}
-          <nav style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <button
-              onClick={() => setActiveTab('catalog')}
-              style={{
-                padding: '0.5rem 1rem',
-                borderRadius: '9999px',
-                border: 'none',
-                background: activeTab === 'catalog' ? '#d61c5d' : 'transparent',
-                color: activeTab === 'catalog' ? '#ffffff' : '#6f5569',
-                fontWeight: 800,
-                fontSize: '0.875rem',
-                cursor: 'pointer',
-                boxShadow: activeTab === 'catalog' ? '0 3px 0 #a3134a' : 'none',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              Catalog
-            </button>
-
-            <button
-              onClick={() => setActiveTab('cart')}
-              style={{
-                padding: '0.5rem 1rem',
-                borderRadius: '9999px',
-                border: 'none',
-                background: activeTab === 'cart' ? '#d61c5d' : 'transparent',
-                color: activeTab === 'cart' ? '#ffffff' : '#6f5569',
-                fontWeight: 800,
-                fontSize: '0.875rem',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-                boxShadow: activeTab === 'cart' ? '0 3px 0 #a3134a' : 'none',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              <span>Cart</span>
-              {totalCartCount > 0 && (
-                <span
+        <div
+          className="app-container"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '0.75rem',
+            overflowX: 'auto',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            {tabItems.map((tab) => {
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id as typeof activeTab)}
                   style={{
-                    background: '#ffcf4d',
-                    color: '#2b1233',
-                    fontSize: '0.75rem',
-                    fontWeight: 900,
+                    padding: '0.45rem 1.05rem',
                     borderRadius: '9999px',
-                    padding: '0.1rem 0.45rem',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                    border: 'none',
+                    background: isActive ? '#d61c5d' : 'transparent',
+                    color: isActive ? '#ffffff' : '#6f5569',
+                    fontWeight: 800,
+                    fontSize: '0.875rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    boxShadow: isActive ? '0 3px 0 #a3134a' : 'none',
+                    transition: 'all 0.15s ease',
+                    whiteSpace: 'nowrap',
                   }}
                 >
-                  {totalCartCount}
-                </span>
-              )}
-            </button>
+                  <span>{tab.icon}</span>
+                  <span>{tab.label}</span>
+                  {typeof tab.count === 'number' && tab.count > 0 && (
+                    <span
+                      style={{
+                        background: isActive ? '#ffffff' : '#ffcf4d',
+                        color: '#2b1233',
+                        fontSize: '0.7rem',
+                        fontWeight: 900,
+                        borderRadius: '9999px',
+                        padding: '0.05rem 0.4rem',
+                      }}
+                    >
+                      {tab.count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
 
-            {activeOrderId && (
-              <button
-                onClick={() => setActiveTab('status')}
-                style={{
-                  padding: '0.5rem 1rem',
-                  borderRadius: '9999px',
-                  border: 'none',
-                  background: activeTab === 'status' ? '#d61c5d' : 'transparent',
-                  color: activeTab === 'status' ? '#ffffff' : '#d61c5d',
-                  fontWeight: 800,
-                  fontSize: '0.875rem',
-                  cursor: 'pointer',
-                  boxShadow: activeTab === 'status' ? '0 3px 0 #a3134a' : 'none',
-                  transition: 'all 0.15s ease',
-                }}
-              >
-                Track Order
-              </button>
-            )}
-
-            <button
-              onClick={() => setActiveTab('history')}
-              style={{
-                padding: '0.5rem 1rem',
-                borderRadius: '9999px',
-                border: 'none',
-                background: activeTab === 'history' ? '#d61c5d' : 'transparent',
-                color: activeTab === 'history' ? '#ffffff' : '#6f5569',
-                fontWeight: 800,
-                fontSize: '0.875rem',
-                cursor: 'pointer',
-                boxShadow: activeTab === 'history' ? '0 3px 0 #a3134a' : 'none',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              My Orders
-            </button>
-
-            <Link
-              href="/operator"
-              style={{
-                marginLeft: '0.75rem',
-                padding: '0.45rem 0.95rem',
-                borderRadius: '9999px',
-                border: '1px solid #f4d3dd',
-                background: '#ffffff',
-                color: '#2b1233',
-                textDecoration: 'none',
-                fontSize: '0.8125rem',
-                fontWeight: 700,
-                boxShadow: '0 2px 8px -4px rgba(120,20,60,0.1)',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              Operator Desk &rarr;
-            </Link>
-          </nav>
+          <div className="hidden sm:block" style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#6f5569' }}>
+            {selectedBranch ? `Serving: ${selectedBranch.name}` : ''}
+          </div>
         </div>
-      </header>
+      </div>
 
       {/* Main Content Area */}
-      <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '2rem 1.5rem' }}>
+      <main className="app-container" style={{ paddingTop: '1.75rem', paddingBottom: '5rem' }}>
         {activeTab === 'catalog' && (
           <CatalogView
             branchId={selectedBranchId}
@@ -245,7 +188,7 @@ export default function CustomerOrderPage() {
         )}
 
         {activeTab === 'cart' && (
-          <div style={{ maxWidth: '650px', margin: '0 auto' }}>
+          <div className="app-container-sm">
             <CartView
               branchId={selectedBranchId}
               items={cartItems}
@@ -258,22 +201,35 @@ export default function CustomerOrderPage() {
         )}
 
         {activeTab === 'status' && activeOrderId && (
-          <OrderStatusView
-            orderId={activeOrderId}
-            onBackToCatalog={() => setActiveTab('catalog')}
-          />
+          <div className="app-container-sm">
+            <OrderStatusView
+              orderId={activeOrderId}
+              onBackToCatalog={() => setActiveTab('catalog')}
+            />
+          </div>
         )}
 
         {activeTab === 'history' && (
-          <OrderHistoryView
-            onSelectOrder={(orderId) => {
-              setActiveOrderId(orderId);
-              setActiveTab('status');
-            }}
-            onBackToCatalog={() => setActiveTab('catalog')}
-          />
+          <div className="app-container-sm">
+            <OrderHistoryView
+              onSelectOrder={(orderId) => {
+                setActiveOrderId(orderId);
+                setActiveTab('status');
+              }}
+              onBackToCatalog={() => setActiveTab('catalog')}
+            />
+          </div>
         )}
       </main>
+
+      {/* Bun Mobile Navigation */}
+      <BunMobileNav
+        currentPortal="customer"
+        currentTab={activeTab}
+        onTabChange={(tab) => setActiveTab(tab as typeof activeTab)}
+        tabItems={tabItems}
+        branchName={selectedBranch?.name}
+      />
     </div>
   );
 }

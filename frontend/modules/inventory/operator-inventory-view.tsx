@@ -303,8 +303,8 @@ export const OperatorInventoryView: React.FC<OperatorInventoryViewProps> = ({ br
       )}
 
       {/* Tabs */}
-      <div className="flex items-center justify-between border-b border-[#f4d3dd] pb-3">
-        <div className="flex space-x-2">
+      <div className="flex items-center justify-between border-b border-[#f4d3dd] pb-3 gap-2 overflow-x-auto">
+        <div className="flex space-x-2 overflow-x-auto pb-1 flex-nowrap">
           <button
             onClick={() => setActiveTab('products')}
             className={`px-4 py-2 text-xs font-extrabold rounded-full transition ${

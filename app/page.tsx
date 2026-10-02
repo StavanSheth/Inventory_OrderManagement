@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { AppShell } from '@/frontend/components/ui';
+import { AppShell, BunMobileNav } from '@/frontend/components/ui';
 import SitePage from '@/site/Page';
 import { meta } from '@/site/site';
 
@@ -16,14 +16,14 @@ export default function Home() {
       enableCursor={meta.cursor !== false}
       recordOptions={meta.record}
     >
-      {/* Quick Launch Navigation Banner */}
+      {/* Quick Launch Navigation Banner (Desktop / Tablet) */}
       <div
+        className="hidden sm:flex"
         style={{
           position: 'fixed',
           top: '1rem',
           right: '1.5rem',
           zIndex: 9999,
-          display: 'flex',
           gap: '0.65rem',
           alignItems: 'center',
           background: 'rgba(255, 255, 255, 0.95)',
@@ -88,6 +88,9 @@ export default function Home() {
       </div>
 
       <SitePage />
+
+      {/* Floating Bun Navigation for Mobile */}
+      <BunMobileNav currentPortal="home" />
     </AppShell>
   );
 }

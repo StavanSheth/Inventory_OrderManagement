@@ -194,7 +194,7 @@ export const BranchManagementView: React.FC<BranchManagementViewProps> = ({
       )}
 
       {/* Branches Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: '1.25rem' }}>
         {branches.map((b) => (
           <div
             key={b.id}

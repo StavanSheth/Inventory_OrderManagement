@@ -7,6 +7,7 @@ import { OperatorInventoryView } from '@/frontend/modules/inventory';
 import { OperatorPromotionsView } from '@/frontend/modules/promotions';
 import { useAuth } from '@/frontend/modules/auth/auth-hooks';
 import { UserRole } from '@/shared/enums/roles.enum';
+import { GlobalNavigation, BunMobileNav } from '@/frontend/components/ui';
 
 type TabType = 'orders' | 'inventory' | 'promotions';
 
@@ -48,188 +49,110 @@ export default function OperatorPortalPage() {
       .catch(() => {});
   }, [authContext]);
 
+  const selectedBranch = branches.find((b) => b.id === branchId);
+
+  const tabItems = [
+    { id: 'orders', label: 'Live Orders', icon: '📋' },
+    { id: 'inventory', label: 'Inventory', icon: '📦' },
+    { id: 'promotions', label: 'Promotions', icon: '🏷️' },
+  ];
+
   return (
     <div style={{ minHeight: '100vh', background: '#fff1f4', color: '#2b1233', fontFamily: 'var(--font-body-family), system-ui, sans-serif' }}>
-      {/* Operator Header Bar */}
-      <header
-        style={{
-          borderBottom: '1px solid #f4d3dd',
-          background: 'rgba(255, 255, 255, 0.95)',
-          backdropFilter: 'blur(16px)',
-          position: 'sticky',
-          top: 0,
-          zIndex: 100,
-          padding: '0.85rem 1.5rem',
-          boxShadow: '0 10px 25px -12px rgba(120, 20, 60, 0.12)',
-        }}
+      {/* Global Navigation Header */}
+      <GlobalNavigation
+        portalTitle="Operator Desk"
+        portalSubtitle="Reception & Fulfillment Queue"
+        branches={branches}
+        selectedBranchId={branchId}
+        onBranchChange={setBranchId}
+        branchDisabled={authContext?.user?.role === UserRole.BRANCH_OPERATOR && authContext.memberships.length === 1}
       >
-        <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
-            <Link href="/" style={{ textDecoration: 'none', color: '#2b1233', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ fontSize: '1.5rem' }}>🍦</span>
-              <span style={{ fontFamily: 'var(--font-display-family)', fontWeight: 700, fontSize: '1.25rem', color: '#d61c5d' }}>
-                MELT DESK
-              </span>
-            </Link>
-
-            <span
-              style={{
-                fontSize: '0.75rem',
-                fontWeight: 800,
-                padding: '0.3rem 0.8rem',
-                borderRadius: '9999px',
-                background: '#ffc2d4',
-                color: '#2b1233',
-                textTransform: 'uppercase',
-                letterSpacing: '0.08em',
-              }}
-            >
-              Operator & Reception Desk
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            {/* Branch Switcher */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#ffffff', border: '1px solid #f4d3dd', padding: '0.4rem 0.9rem', borderRadius: '9999px', boxShadow: '0 2px 8px -4px rgba(120,20,60,0.1)' }}>
-              <span style={{ fontSize: '0.75rem', color: '#6f5569', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 800 }}>Branch:</span>
-              <select
-                value={branchId}
-                onChange={(e) => setBranchId(e.target.value)}
-                disabled={authContext?.user?.role === UserRole.BRANCH_OPERATOR && authContext.memberships.length === 1}
-                style={{
-                  background: 'transparent',
-                  color: '#2b1233',
-                  border: 'none',
-                  fontSize: '0.875rem',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  outline: 'none',
-                }}
-              >
-                {branches.length > 0 ? (
-                  branches.map((b) => (
-                    <option key={b.id} value={b.id} style={{ background: '#ffffff', color: '#2b1233' }}>
-                      {b.name} ({b.code})
-                    </option>
-                  ))
-                ) : (
-                  <option value={branchId} style={{ background: '#ffffff', color: '#2b1233' }}>
-                    Select Branch
-                  </option>
-                )}
-              </select>
-            </div>
-
-            <Link
-              href="/order"
-              style={{
-                padding: '0.45rem 1rem',
-                borderRadius: '9999px',
-                border: '1px solid #f4d3dd',
-                background: '#ffffff',
-                color: '#2b1233',
-                textDecoration: 'none',
-                fontSize: '0.8125rem',
-                fontWeight: 700,
-                boxShadow: '0 2px 8px -4px rgba(120,20,60,0.1)',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              Customer Store &rarr;
-            </Link>
-          </div>
-        </div>
-      </header>
+        <Link
+          href="/order"
+          className="hidden md:inline-flex"
+          style={{
+            padding: '0.4rem 0.85rem',
+            borderRadius: '9999px',
+            border: '1px solid #f4d3dd',
+            background: '#ffffff',
+            color: '#2b1233',
+            textDecoration: 'none',
+            fontSize: '0.8125rem',
+            fontWeight: 700,
+            boxShadow: '0 2px 8px -4px rgba(120,20,60,0.1)',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          Customer Store &rarr;
+        </Link>
+      </GlobalNavigation>
 
       {/* Navigation Sub-header / Tab Bar */}
       <nav
         style={{
           borderBottom: '1px solid #f4d3dd',
-          background: '#ffffff',
-          padding: '0.5rem 1.5rem',
+          background: 'rgba(255, 255, 255, 0.85)',
+          backdropFilter: 'blur(12px)',
+          padding: '0.65rem 0',
+          position: 'sticky',
+          top: '57px',
+          zIndex: 90,
         }}
       >
         <div
+          className="app-container"
           style={{
-            maxWidth: '1200px',
-            margin: '0 auto',
             display: 'flex',
-            gap: '0.5rem',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '0.75rem',
+            overflowX: 'auto',
           }}
         >
-          <button
-            type="button"
-            onClick={() => setActiveTab('orders')}
-            style={{
-              padding: '0.55rem 1.15rem',
-              background: activeTab === 'orders' ? '#d61c5d' : 'transparent',
-              border: activeTab === 'orders' ? 'none' : '1px solid transparent',
-              borderRadius: '9999px',
-              color: activeTab === 'orders' ? '#ffffff' : '#6f5569',
-              fontWeight: 800,
-              fontSize: '0.875rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              boxShadow: activeTab === 'orders' ? '0 3px 0 #a3134a' : 'none',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            <span>📋</span>
-            <span>Live Orders</span>
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            {tabItems.map((tab) => {
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id as TabType)}
+                  style={{
+                    padding: '0.45rem 1.15rem',
+                    background: isActive ? '#d61c5d' : 'transparent',
+                    border: 'none',
+                    borderRadius: '9999px',
+                    color: isActive ? '#ffffff' : '#6f5569',
+                    fontWeight: 800,
+                    fontSize: '0.875rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.45rem',
+                    boxShadow: isActive ? '0 3px 0 #a3134a' : 'none',
+                    transition: 'all 0.15s ease',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <span>{tab.icon}</span>
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('inventory')}
-            style={{
-              padding: '0.55rem 1.15rem',
-              background: activeTab === 'inventory' ? '#d61c5d' : 'transparent',
-              border: activeTab === 'inventory' ? 'none' : '1px solid transparent',
-              borderRadius: '9999px',
-              color: activeTab === 'inventory' ? '#ffffff' : '#6f5569',
-              fontWeight: 800,
-              fontSize: '0.875rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              boxShadow: activeTab === 'inventory' ? '0 3px 0 #a3134a' : 'none',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            <span>📦</span>
-            <span>Inventory & Stock</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('promotions')}
-            style={{
-              padding: '0.55rem 1.15rem',
-              background: activeTab === 'promotions' ? '#d61c5d' : 'transparent',
-              border: activeTab === 'promotions' ? 'none' : '1px solid transparent',
-              borderRadius: '9999px',
-              color: activeTab === 'promotions' ? '#ffffff' : '#6f5569',
-              fontWeight: 800,
-              fontSize: '0.875rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              boxShadow: activeTab === 'promotions' ? '0 3px 0 #a3134a' : 'none',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            <span>🏷️</span>
-            <span>Promotions & Coupons</span>
-          </button>
+          <div className="hidden sm:flex items-center gap-2 text-xs font-bold text-gray-500">
+            <span>Branch Station:</span>
+            <span className="text-gray-900 bg-white px-2.5 py-1 rounded-full border border-pink-100 shadow-xs">
+              {selectedBranch?.name ?? 'Loading...'}
+            </span>
+          </div>
         </div>
       </nav>
 
       {/* Main Content Area */}
-      <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '1.5rem' }}>
+      <main className="app-container" style={{ paddingTop: '1.75rem', paddingBottom: '5rem' }}>
         {branchId ? (
           <>
             {activeTab === 'orders' && <OperatorQueueView branchId={branchId} />}
@@ -237,9 +160,21 @@ export default function OperatorPortalPage() {
             {activeTab === 'promotions' && <OperatorPromotionsView branchId={branchId} />}
           </>
         ) : (
-          <div style={{ textAlign: 'center', padding: '3rem', color: '#6f5569', fontWeight: 700 }}>Loading branch context...</div>
+          <div className="app-card" style={{ textAlign: 'center', padding: '3.5rem 1.5rem', color: '#6f5569' }}>
+            <span style={{ fontSize: '2rem', display: 'block', marginBottom: '0.75rem' }}>⏳</span>
+            <span style={{ fontWeight: 800, fontSize: '1.1rem', color: '#2b1233' }}>Loading Branch Operations...</span>
+          </div>
         )}
       </main>
+
+      {/* Bun Mobile Navigation */}
+      <BunMobileNav
+        currentPortal="operator"
+        currentTab={activeTab}
+        onTabChange={(tab) => setActiveTab(tab as TabType)}
+        tabItems={tabItems}
+        branchName={selectedBranch?.name}
+      />
     </div>
   );
 }

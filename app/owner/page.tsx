@@ -7,6 +7,7 @@ import { UnifiedOrderHistoryView } from '@/frontend/modules/orders';
 import { BranchManagementView } from '@/frontend/modules/branches';
 import { BranchSettingsView, DataManagementView } from '@/frontend/modules/settings';
 import { Branch } from '@/shared/types/entities.types';
+import { GlobalNavigation, BunMobileNav } from '@/frontend/components/ui';
 
 type OwnerTab = 'dashboard' | 'orders' | 'branches' | 'settings' | 'data';
 
@@ -39,223 +40,122 @@ export default function OwnerPortalPage() {
     setActiveTab('settings');
   };
 
+  const branchOptions = [
+    { id: 'ALL', name: 'All Branches (Enterprise)', code: 'GLOBAL' },
+    ...branches.map((b) => ({ id: b.id, name: b.name, code: b.code })),
+  ];
+
+  const currentBranchName = selectedBranchId === 'ALL'
+    ? 'All Branches'
+    : (branches.find((b) => b.id === selectedBranchId)?.name ?? 'Branch');
+
+  const tabItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+    { id: 'orders', label: 'History', icon: '📜' },
+    { id: 'branches', label: 'Branches', icon: '🏢' },
+    { id: 'settings', label: 'Settings', icon: '⚙️' },
+    { id: 'data', label: 'Data', icon: '🛡️' },
+  ];
+
   return (
     <div style={{ minHeight: '100vh', background: '#fff1f4', color: '#2b1233', fontFamily: 'var(--font-body-family), system-ui, sans-serif' }}>
-      {/* Header Bar */}
-      <header
-        style={{
-          borderBottom: '1px solid #f4d3dd',
-          background: 'rgba(255, 255, 255, 0.96)',
-          backdropFilter: 'blur(16px)',
-          position: 'sticky',
-          top: 0,
-          zIndex: 100,
-          padding: '0.85rem 1.5rem',
-          boxShadow: '0 10px 25px -12px rgba(120, 20, 60, 0.12)',
-        }}
+      {/* Global Navigation Header */}
+      <GlobalNavigation
+        portalTitle="Owner Portal"
+        portalSubtitle="Enterprise Analytics & Controls"
+        branches={branchOptions}
+        selectedBranchId={selectedBranchId}
+        onBranchChange={setSelectedBranchId}
       >
-        <div style={{ maxWidth: '1280px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
-            <Link href="/" style={{ textDecoration: 'none', color: '#2b1233', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ fontSize: '1.5rem' }}>👑</span>
-              <span style={{ fontFamily: 'var(--font-display-family)', fontWeight: 800, fontSize: '1.25rem', color: '#d61c5d' }}>
-                MELT OWNER
-              </span>
-            </Link>
-
-            <span
-              style={{
-                fontSize: '0.75rem',
-                fontWeight: 800,
-                padding: '0.3rem 0.8rem',
-                borderRadius: '9999px',
-                background: '#ffc2d4',
-                color: '#2b1233',
-                textTransform: 'uppercase',
-                letterSpacing: '0.08em',
-              }}
-            >
-              Enterprise Control & Analytics
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <Link
-              href="/operator"
-              style={{
-                padding: '0.45rem 0.95rem',
-                borderRadius: '9999px',
-                border: '1px solid #f4d3dd',
-                background: '#ffffff',
-                color: '#2b1233',
-                textDecoration: 'none',
-                fontSize: '0.8125rem',
-                fontWeight: 700,
-                boxShadow: '0 2px 8px -4px rgba(120,20,60,0.1)',
-              }}
-            >
-              📋 Operator Desk
-            </Link>
-
-            <Link
-              href="/order"
-              style={{
-                padding: '0.45rem 0.95rem',
-                borderRadius: '9999px',
-                border: '1px solid #f4d3dd',
-                background: '#ffffff',
-                color: '#2b1233',
-                textDecoration: 'none',
-                fontSize: '0.8125rem',
-                fontWeight: 700,
-                boxShadow: '0 2px 8px -4px rgba(120,20,60,0.1)',
-              }}
-            >
-              🍦 Customer Store
-            </Link>
-          </div>
-        </div>
-      </header>
+        <Link
+          href="/operator"
+          className="hidden md:inline-flex"
+          style={{
+            padding: '0.4rem 0.85rem',
+            borderRadius: '9999px',
+            border: '1px solid #f4d3dd',
+            background: '#ffffff',
+            color: '#2b1233',
+            textDecoration: 'none',
+            fontSize: '0.8125rem',
+            fontWeight: 700,
+            boxShadow: '0 2px 8px -4px rgba(120,20,60,0.1)',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          Staff Desk &rarr;
+        </Link>
+      </GlobalNavigation>
 
       {/* Navigation Sub-header / Tab Bar */}
       <nav
         style={{
           borderBottom: '1px solid #f4d3dd',
-          background: '#ffffff',
-          padding: '0.5rem 1.5rem',
+          background: 'rgba(255, 255, 255, 0.85)',
+          backdropFilter: 'blur(12px)',
+          padding: '0.65rem 0',
+          position: 'sticky',
+          top: '57px',
+          zIndex: 90,
         }}
       >
         <div
+          className="app-container"
           style={{
-            maxWidth: '1280px',
-            margin: '0 auto',
             display: 'flex',
-            gap: '0.5rem',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '0.75rem',
             overflowX: 'auto',
           }}
         >
-          <button
-            type="button"
-            onClick={() => setActiveTab('dashboard')}
-            style={{
-              padding: '0.55rem 1.15rem',
-              background: activeTab === 'dashboard' ? '#d61c5d' : 'transparent',
-              border: activeTab === 'dashboard' ? 'none' : '1px solid transparent',
-              borderRadius: '9999px',
-              color: activeTab === 'dashboard' ? '#ffffff' : '#6f5569',
-              fontWeight: 800,
-              fontSize: '0.875rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              boxShadow: activeTab === 'dashboard' ? '0 3px 0 #a3134a' : 'none',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            <span>📊</span>
-            <span>Dashboard</span>
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            {tabItems.map((tab) => {
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id as OwnerTab)}
+                  style={{
+                    padding: '0.45rem 1.15rem',
+                    background: isActive ? '#d61c5d' : 'transparent',
+                    border: 'none',
+                    borderRadius: '9999px',
+                    color: isActive ? '#ffffff' : '#6f5569',
+                    fontWeight: 800,
+                    fontSize: '0.875rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.45rem',
+                    boxShadow: isActive ? '0 3px 0 #a3134a' : 'none',
+                    transition: 'all 0.15s ease',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <span>{tab.icon}</span>
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('orders')}
-            style={{
-              padding: '0.55rem 1.15rem',
-              background: activeTab === 'orders' ? '#d61c5d' : 'transparent',
-              border: activeTab === 'orders' ? 'none' : '1px solid transparent',
-              borderRadius: '9999px',
-              color: activeTab === 'orders' ? '#ffffff' : '#6f5569',
-              fontWeight: 800,
-              fontSize: '0.875rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              boxShadow: activeTab === 'orders' ? '0 3px 0 #a3134a' : 'none',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            <span>📜</span>
-            <span>Order History</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('branches')}
-            style={{
-              padding: '0.55rem 1.15rem',
-              background: activeTab === 'branches' ? '#d61c5d' : 'transparent',
-              border: activeTab === 'branches' ? 'none' : '1px solid transparent',
-              borderRadius: '9999px',
-              color: activeTab === 'branches' ? '#ffffff' : '#6f5569',
-              fontWeight: 800,
-              fontSize: '0.875rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              boxShadow: activeTab === 'branches' ? '0 3px 0 #a3134a' : 'none',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            <span>🏢</span>
-            <span>Branch Management</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('settings')}
-            style={{
-              padding: '0.55rem 1.15rem',
-              background: activeTab === 'settings' ? '#d61c5d' : 'transparent',
-              border: activeTab === 'settings' ? 'none' : '1px solid transparent',
-              borderRadius: '9999px',
-              color: activeTab === 'settings' ? '#ffffff' : '#6f5569',
-              fontWeight: 800,
-              fontSize: '0.875rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              boxShadow: activeTab === 'settings' ? '0 3px 0 #a3134a' : 'none',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            <span>⚙️</span>
-            <span>Branch Settings</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('data')}
-            style={{
-              padding: '0.55rem 1.15rem',
-              background: activeTab === 'data' ? '#d61c5d' : 'transparent',
-              border: activeTab === 'data' ? 'none' : '1px solid transparent',
-              borderRadius: '9999px',
-              color: activeTab === 'data' ? '#ffffff' : '#6f5569',
-              fontWeight: 800,
-              fontSize: '0.875rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              boxShadow: activeTab === 'data' ? '0 3px 0 #a3134a' : 'none',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            <span>🛡️</span>
-            <span>Data & Privacy</span>
-          </button>
+          <div className="hidden sm:flex items-center gap-2 text-xs font-bold text-gray-500">
+            <span>Scope:</span>
+            <span className="text-gray-900 bg-white px-2.5 py-1 rounded-full border border-pink-100 shadow-xs">
+              {currentBranchName}
+            </span>
+          </div>
         </div>
       </nav>
 
       {/* Main Content Area */}
-      <main style={{ maxWidth: '1280px', margin: '0 auto', padding: '1.75rem 1.5rem' }}>
+      <main className="app-container" style={{ paddingTop: '1.75rem', paddingBottom: '5rem' }}>
         {loadingBranches ? (
-          <div style={{ textAlign: 'center', padding: '3rem', color: '#6f5569', fontWeight: 700 }}>
-            Loading enterprise context...
+          <div className="app-card" style={{ textAlign: 'center', padding: '3.5rem 1.5rem', color: '#6f5569' }}>
+            <span style={{ fontSize: '2rem', display: 'block', marginBottom: '0.75rem' }}>👑</span>
+            <span style={{ fontWeight: 800, fontSize: '1.1rem', color: '#2b1233' }}>Loading Enterprise Workspace...</span>
           </div>
         ) : (
           <>
@@ -296,6 +196,15 @@ export default function OwnerPortalPage() {
           </>
         )}
       </main>
+
+      {/* Bun Mobile Navigation */}
+      <BunMobileNav
+        currentPortal="owner"
+        currentTab={activeTab}
+        onTabChange={(tab) => setActiveTab(tab as OwnerTab)}
+        tabItems={tabItems}
+        branchName={currentBranchName}
+      />
     </div>
   );
 }
