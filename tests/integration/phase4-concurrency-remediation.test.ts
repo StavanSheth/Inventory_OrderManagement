@@ -20,6 +20,7 @@ import { OrderStatus, PaymentMethod } from '../../shared/enums/order.enum';
 import { BranchStatus } from '../../shared/enums/branch.enum';
 import { UserRole, MembershipStatus } from '../../shared/enums/roles.enum';
 import { DiscountType, OfferType } from '../../shared/enums/promotions.enum';
+import { AuditAction } from '../../shared/enums/audit.enum';
 import { D1DatabaseLike } from '../../database/types';
 
 describe('Phase 4 — Concurrency, Inventory Ledger, BOM & Promotion Remediation Tests', () => {
@@ -758,6 +759,131 @@ describe('Phase 4 — Concurrency, Inventory Ledger, BOM & Promotion Remediation
         },
         (err: any) => err.message.includes('Offer usage limit reached') || err.message.includes('Confirmation failed'),
       );
+    });
+  });
+
+  describe('10. Initial Raw Material Quantity Movement', () => {
+    it('creates a REFILL movement record when raw material is created with initial quantity > 0', async () => {
+      const mat = await inventoryService.createRawMaterial(branchId, operatorId, {
+        name: 'Cocoa Powder',
+        unit: 'kg',
+        current_quantity: 15,
+        reorder_threshold: 5,
+      });
+
+      assert.strictEqual(mat.current_quantity, 15);
+
+      const movements = await inventoryRepo.listMovements(branchId);
+      const initialMov = movements.find((m) => m.raw_material_id === mat.id);
+
+      assert.ok(initialMov, 'Expected movement record for initial raw material quantity');
+      assert.strictEqual(initialMov.movement_type, 'REFILL');
+      assert.strictEqual(initialMov.quantity_delta, 15);
+      assert.strictEqual(initialMov.reference_type, 'INITIAL');
+      assert.strictEqual(initialMov.inventory_item_type, 'RAW_MATERIAL');
+    });
+
+    it('does not create a movement record when raw material is created with quantity 0', async () => {
+      const mat = await inventoryService.createRawMaterial(branchId, operatorId, {
+        name: 'Empty Container Powder',
+        unit: 'kg',
+        current_quantity: 0,
+      });
+
+      const movements = await inventoryRepo.listMovements(branchId);
+      const initialMov = movements.find((m) => m.raw_material_id === mat.id);
+      assert.strictEqual(initialMov, undefined, 'No movement expected for 0 initial stock');
+    });
+  });
+
+  describe('11. Payment/Order-Total Invariant During Confirmed-Order Reduction', () => {
+    it('accurately calculates and audits refund/credit amount when order total is edited below verified paid', async () => {
+      // Stock 10 units
+      await inventoryService.refillProductStock(branchId, 'prod-pistachio', 10, operatorId, 'Stocked');
+
+      // Create order with 5 units (total = 5 * 105 = 525)
+      const { order } = await ordersService.createOrder({
+        actorUserId: customerId,
+        customerUserId: customerId,
+        branchId,
+        items: [{ productId: 'prod-pistachio', quantity: 5 }],
+      });
+
+      const { payment } = await ordersService.recordPayment({
+        actorUserId: operatorId,
+        orderId: order.id,
+        branchId,
+        amount: order.total,
+        method: PaymentMethod.CASH,
+      });
+      await ordersService.verifyPayment({ actorUserId: operatorId, orderId: order.id, paymentId: payment.id });
+      await ordersService.confirmOrder(operatorId, order.id);
+
+      // Edit order down to 2 units (total = 2 * 105 = 210)
+      const editRes = await ordersService.editOrder({
+        actorUserId: operatorId,
+        orderId: order.id,
+        items: [{ productId: 'prod-pistachio', quantity: 2 }],
+      });
+
+      assert.strictEqual(editRes.order.status, OrderStatus.CONFIRMED);
+      assert.strictEqual(editRes.newTotal, 210);
+      assert.strictEqual(editRes.verifiedPaidAmount, 525);
+      assert.strictEqual(editRes.overpaymentAmount, 315);
+      assert.strictEqual(editRes.refundCreditAmount, 315);
+      assert.strictEqual(editRes.additionalAmountRequired, 0);
+
+      // Verify payments are preserved and not silently lost
+      const payments = await paymentRepo.listByOrder(order.id);
+      assert.strictEqual(payments.length, 1);
+      assert.strictEqual(payments[0].amount, 525);
+
+      // Verify audit log has explicit financialState capturing refund/credit due
+      const audits = await auditRepo.listByBranch(branchId);
+      const editAudit = audits.find((a) => a.action === AuditAction.ORDER_EDITED && a.entity_id === order.id);
+      assert.ok(editAudit, 'Expected ORDER_EDITED audit entry');
+      const editMeta = JSON.parse(editAudit.metadata_json ?? '{}');
+      assert.strictEqual(editMeta?.refundCreditAmount, 315);
+      assert.strictEqual(editMeta?.financialState?.rule, 'REFUND_OR_CREDIT_DUE');
+      assert.strictEqual(editMeta?.financialState?.refundCreditAmount, 315);
+    });
+  });
+
+  describe('12. Offer Usage Audit Naming (OFFER_APPLIED)', () => {
+    it('audits offer consumption with dedicated OFFER_APPLIED action', async () => {
+      const offer = await promotionsService.createOffer(branchId, operatorId, {
+        name: 'Audit Trail Promo',
+        offer_type: OfferType.FLAT,
+        configuration_json: JSON.stringify({ discount_type: 'FIXED', discount_value: 10 }),
+        start_at: new Date().toISOString(),
+      });
+
+      await inventoryService.refillProductStock(branchId, 'prod-pistachio', 5, operatorId, 'Stocked');
+
+      const { order } = await ordersService.createOrder({
+        actorUserId: customerId,
+        customerUserId: customerId,
+        branchId,
+        items: [{ productId: 'prod-pistachio', quantity: 1 }],
+        offerId: offer.id,
+      });
+
+      const { payment } = await ordersService.recordPayment({
+        actorUserId: operatorId,
+        orderId: order.id,
+        branchId,
+        amount: order.total,
+        method: PaymentMethod.CASH,
+      });
+      await ordersService.verifyPayment({ actorUserId: operatorId, orderId: order.id, paymentId: payment.id });
+      await ordersService.confirmOrder(operatorId, order.id);
+
+      const audits = await auditRepo.listByBranch(branchId);
+      const offerAudit = audits.find((a) => a.action === AuditAction.OFFER_APPLIED && a.entity_id === offer.id);
+      assert.ok(offerAudit, 'Expected OFFER_APPLIED audit record on order confirmation');
+      const offerMeta = JSON.parse(offerAudit.metadata_json ?? '{}');
+      assert.strictEqual(offerMeta?.orderId, order.id);
+      assert.strictEqual(offerMeta?.action, 'offer_consumed');
     });
   });
 });

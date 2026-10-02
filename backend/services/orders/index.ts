@@ -241,6 +241,7 @@ export class OrdersService implements IOrdersService {
     verifiedPaidAmount: number;
     additionalAmountRequired: number;
     overpaymentAmount: number;
+    refundCreditAmount: number;
   }> {
     if (!this.productRepo) throw new BadRequestError('ProductRepository is required to edit orders');
 
@@ -387,6 +388,7 @@ export class OrdersService implements IOrdersService {
 
     const editCutoffIso = new Date(now.getTime() - editWindowMinutes * 60 * 1000).toISOString();
     const auditMetadata = {
+      orderId: opts.orderId,
       previousItems: previousItems.map((i) => ({
         productId: i.product_id,
         productName: i.product_name_snapshot,
@@ -412,6 +414,19 @@ export class OrdersService implements IOrdersService {
       paymentDifference: editDiff.paymentDifference,
       additionalAmountRequired: editDiff.additionalAmountRequired,
       overpaymentAmount: editDiff.overpaymentAmount,
+      refundCreditAmount: editDiff.refundCreditAmount,
+      financialState: editDiff.isOverpaid
+        ? {
+            rule: 'REFUND_OR_CREDIT_DUE',
+            refundCreditAmount: editDiff.refundCreditAmount,
+            excessPaid: verifiedPaidAmount - newTotal,
+          }
+        : editDiff.isUnderpaid
+        ? {
+            rule: 'ADDITIONAL_PAYMENT_REQUIRED',
+            additionalAmountRequired: editDiff.additionalAmountRequired,
+          }
+        : { rule: 'SETTLED' },
       actor: opts.actorUserId,
       timestamp: lastEditedAt,
     };
@@ -503,6 +518,7 @@ export class OrdersService implements IOrdersService {
       verifiedPaidAmount,
       additionalAmountRequired: editDiff.additionalAmountRequired,
       overpaymentAmount: editDiff.overpaymentAmount,
+      refundCreditAmount: editDiff.refundCreditAmount,
     };
   }
 
@@ -668,7 +684,7 @@ export class OrdersService implements IOrdersService {
           this.auditRepo.prepareLogStatement({
             branch_id: order.branch_id,
             actor_user_id: actorUserId,
-            action: AuditAction.OFFER_UPDATED,
+            action: AuditAction.OFFER_APPLIED,
             entity_type: 'offer',
             entity_id: order.offer_id,
             metadata: { orderId, action: 'offer_consumed', discountAmount: order.offer_discount_snapshot ?? 0 },

@@ -18,6 +18,7 @@ export interface EditDifferenceResult {
   isOverpaid: boolean;
   additionalAmountRequired: number;
   overpaymentAmount: number;
+  refundCreditAmount: number;
 }
 
 export function roundCurrency(amount: number): number {
@@ -136,12 +137,15 @@ export class OrderCalculationService {
     const diffPaise = toPaise(newRounded) - toPaise(paidRounded);
     const diff = fromPaise(diffPaise);
 
+    const overpaid = diff < 0 ? Math.abs(diff) : 0;
+
     return {
       paymentDifference: diff,
       isUnderpaid: diff > 0,
       isOverpaid: diff < 0,
       additionalAmountRequired: diff > 0 ? diff : 0,
-      overpaymentAmount: diff < 0 ? Math.abs(diff) : 0,
+      overpaymentAmount: overpaid,
+      refundCreditAmount: overpaid,
     };
   }
 }

@@ -135,6 +135,7 @@ export interface EditDifferenceResult {
   isOverpaid: boolean;
   additionalAmountRequired: number;
   overpaymentAmount: number;
+  refundCreditAmount: number;
 }
 
 export function calculateEditDifference(
@@ -147,13 +148,15 @@ export function calculateEditDifference(
 
   const diffPaise = newPaise - paidPaise;
   const diff = diffPaise / 100;
+  const overpaid = diff < 0 ? Math.abs(diff) : 0;
 
   return {
     paymentDifference: diff,
     isUnderpaid: diff > 0,
     isOverpaid: diff < 0,
     additionalAmountRequired: diff > 0 ? diff : 0,
-    overpaymentAmount: diff < 0 ? Math.abs(diff) : 0,
+    overpaymentAmount: overpaid,
+    refundCreditAmount: overpaid,
   };
 }
 

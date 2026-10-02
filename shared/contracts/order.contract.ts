@@ -58,6 +58,7 @@ export interface PaymentDifference {
   verifiedPaidAmount: number;
   additionalAmountRequired: number;
   overpaymentAmount: number;
+  refundCreditAmount?: number;
 }
 
 export interface EditOrderResponseData {
@@ -69,6 +70,7 @@ export interface EditOrderResponseData {
   verifiedPaidAmount?: number;
   additionalAmountRequired?: number;
   overpaymentAmount?: number;
+  refundCreditAmount?: number;
 }
 
 export interface OrderStatusEvent {

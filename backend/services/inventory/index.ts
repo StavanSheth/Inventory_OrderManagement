@@ -211,12 +211,13 @@ export class InventoryService implements IInventoryService {
       unit: input.unit,
       current_quantity: input.current_quantity ?? 0,
       reorder_threshold: input.reorder_threshold ?? 0,
+      actor_user_id: actorUserId,
     });
 
     await this.auditRepo?.log({
       branch_id: branchId,
       actor_user_id: actorUserId,
-      action: AuditAction.INVENTORY_ADJUSTED,
+      action: (created.current_quantity > 0) ? AuditAction.INVENTORY_REFILLED : AuditAction.INVENTORY_ADJUSTED,
       entity_type: 'raw_material',
       entity_id: created.id,
       metadata: { name: created.name, unit: created.unit, initialQuantity: created.current_quantity },

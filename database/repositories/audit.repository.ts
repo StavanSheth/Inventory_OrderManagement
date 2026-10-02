@@ -62,6 +62,14 @@ export class AuditRepository extends BaseRepository {
     return res.results;
   }
 
+  async listByBranch(branchId: string): Promise<AuditLog[]> {
+    const res = await this.db
+      .prepare('SELECT * FROM audit_logs WHERE branch_id = ? ORDER BY created_at DESC')
+      .bind(branchId)
+      .all<AuditLog>();
+    return res.results;
+  }
+
   prepareLogStatement(input: CreateAuditLogInput, nowIso: string = new Date().toISOString()) {
     const id = input.id ?? `aud-${crypto.randomUUID()}`;
     const metadataJson = JSON.stringify(input.metadata ?? {});

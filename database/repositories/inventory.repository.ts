@@ -267,17 +267,41 @@ export class InventoryRepository extends BaseRepository {
     unit: string;
     current_quantity: number;
     reorder_threshold?: number;
+    actor_user_id?: string | null;
   }): Promise<RawMaterial> {
     const now = new Date().toISOString();
     const threshold = input.reorder_threshold ?? 0;
 
-    await this.db
+    const createStmt = this.db
       .prepare(`
         INSERT INTO raw_materials (id, branch_id, name, unit, current_quantity, reorder_threshold, active, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
       `)
-      .bind(input.id, input.branch_id, input.name, input.unit, input.current_quantity, threshold, now, now)
-      .run();
+      .bind(input.id, input.branch_id, input.name, input.unit, input.current_quantity, threshold, now, now);
+
+    if (input.current_quantity > 0) {
+      const movId = `mov_${crypto.randomUUID().replace(/-/g, '')}`;
+      const movStmt = this.db
+        .prepare(`
+          INSERT INTO inventory_movements (
+            id, branch_id, inventory_item_type, product_id, raw_material_id,
+            quantity_delta, movement_type, reason, reference_type, reference_id,
+            actor_user_id, created_at
+          )
+          VALUES (?, ?, 'RAW_MATERIAL', NULL, ?, ?, 'REFILL', 'Initial raw material stock', 'INITIAL', NULL, ?, ?)
+        `)
+        .bind(
+          movId,
+          input.branch_id,
+          input.id,
+          input.current_quantity,
+          input.actor_user_id ?? null,
+          now,
+        );
+      await this.db.batch([createStmt, movStmt]);
+    } else {
+      await createStmt.run();
+    }
 
     const created = await this.findRawMaterial(input.branch_id, input.id);
     if (!created) {
