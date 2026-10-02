@@ -184,6 +184,135 @@ export function exportToExcel({
 }
 
 /**
+ * Exports all database tables into a single multi-sheet Excel (.xls) workbook.
+ * Each database table is placed on its own named sheet with formatted headers.
+ */
+export function exportAllTablesToExcel(
+  tables: Record<string, Array<Record<string, any>>>,
+  filenamePrefix = 'melt_database_all_tables_backup'
+): void {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const cleanFilename = `${filenamePrefix}_${timestamp}.xls`;
+
+  const commonStylesXml = `
+  <Styles>
+   <Style ss:ID="Default" ss:Name="Normal">
+    <Alignment ss:Vertical="Center"/>
+    <Borders/>
+    <Font ss:FontName="Calibri" x:Family="Swiss" ss:Size="11" ss:Color="#000000"/>
+   </Style>
+   <Style ss:ID="Title">
+    <Font ss:FontName="Calibri" ss:Size="15" ss:Bold="1" ss:Color="#2b1233"/>
+    <Alignment ss:Vertical="Center"/>
+   </Style>
+   <Style ss:ID="Subtitle">
+    <Font ss:FontName="Calibri" ss:Size="10" ss:Italic="1" ss:Color="#6f5569"/>
+   </Style>
+   <Style ss:ID="Header">
+    <Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1" ss:Color="#FFFFFF"/>
+    <Interior ss:Color="#2b1233" ss:Pattern="Solid"/>
+    <Alignment ss:Vertical="Center" ss:Horizontal="Center"/>
+    <Borders>
+     <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#d61c5d"/>
+    </Borders>
+   </Style>
+   <Style ss:ID="RowEven">
+    <Interior ss:Color="#FFFFFF" ss:Pattern="Solid"/>
+    <Borders>
+     <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#EEEEEE"/>
+    </Borders>
+   </Style>
+   <Style ss:ID="RowOdd">
+    <Interior ss:Color="#FFF7F9" ss:Pattern="Solid"/>
+    <Borders>
+     <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#EEEEEE"/>
+    </Borders>
+   </Style>
+   <Style ss:ID="RowEvenNumber">
+    <Alignment ss:Horizontal="Right"/>
+    <NumberFormat ss:Format="#,##0.##"/>
+    <Interior ss:Color="#FFFFFF" ss:Pattern="Solid"/>
+    <Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#EEEEEE"/></Borders>
+   </Style>
+   <Style ss:ID="RowOddNumber">
+    <Alignment ss:Horizontal="Right"/>
+    <NumberFormat ss:Format="#,##0.##"/>
+    <Interior ss:Color="#FFF7F9" ss:Pattern="Solid"/>
+    <Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#EEEEEE"/></Borders>
+   </Style>
+  </Styles>
+  `;
+
+  // Worksheets for each table
+  const worksheetsXml = Object.entries(tables).map(([tableName, rows]) => {
+    const sheetName = tableName.slice(0, 31).replace(/[:\\/?*\[\]]/g, '_');
+    const headers = rows && rows.length > 0 ? Object.keys(rows[0]) : ['status', 'note'];
+    const headerCells = headers
+      .map((h) => `<Cell ss:StyleID="Header"><Data ss:Type="String">${escapeXml(h)}</Data></Cell>`)
+      .join('');
+
+    let dataRowsXml = '';
+    if (!rows || rows.length === 0) {
+      dataRowsXml = `<Row><Cell ss:StyleID="RowEven"><Data ss:Type="String">No records</Data></Cell><Cell ss:StyleID="RowEven"><Data ss:Type="String">Table is currently empty</Data></Cell></Row>`;
+    } else {
+      dataRowsXml = rows
+        .map((row, idx) => {
+          const rowStyle = idx % 2 === 0 ? 'RowEven' : 'RowOdd';
+          const cells = headers
+            .map((h) => {
+              const val = row[h];
+              if (val === undefined || val === null) {
+                return `<Cell ss:StyleID="${rowStyle}"><Data ss:Type="String">-</Data></Cell>`;
+              }
+              if (typeof val === 'number') {
+                return `<Cell ss:StyleID="${rowStyle}Number"><Data ss:Type="Number">${val}</Data></Cell>`;
+              }
+              if (typeof val === 'boolean') {
+                return `<Cell ss:StyleID="${rowStyle}"><Data ss:Type="String">${val ? 'TRUE' : 'FALSE'}</Data></Cell>`;
+              }
+              if (typeof val === 'object') {
+                return `<Cell ss:StyleID="${rowStyle}"><Data ss:Type="String">${escapeXml(JSON.stringify(val))}</Data></Cell>`;
+              }
+              return `<Cell ss:StyleID="${rowStyle}"><Data ss:Type="String">${escapeXml(String(val))}</Data></Cell>`;
+            })
+            .join('');
+          return `<Row>${cells}</Row>`;
+        })
+        .join('');
+    }
+
+    return `
+  <Worksheet ss:Name="${escapeXml(sheetName)}">
+   <Table>
+    <Row>
+     <Cell ss:StyleID="Title"><Data ss:Type="String">Melt Database Backup: ${escapeXml(tableName)}</Data></Cell>
+    </Row>
+    <Row>
+     <Cell ss:StyleID="Subtitle"><Data ss:Type="String">Total Rows: ${rows ? rows.length : 0} • Backup Timestamp: ${new Date().toLocaleString()}</Data></Cell>
+    </Row>
+    <Row></Row>
+    <Row>${headerCells}</Row>
+    ${dataRowsXml}
+   </Table>
+  </Worksheet>`;
+  }).join('\n');
+
+  const xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:html="http://www.w3.org/TR/REC-html40">
+  ${commonStylesXml}
+  ${worksheetsXml}
+</Workbook>`;
+
+  const blob = new Blob([xmlContent], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+  triggerDownload(blob, cleanFilename);
+}
+
+/**
  * Generates and triggers the native browser print/PDF dialog with a styled report document.
  * Universal across all browsers without heavy external bundle dependencies.
  */

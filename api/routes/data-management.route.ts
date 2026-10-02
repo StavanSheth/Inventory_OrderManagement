@@ -163,11 +163,57 @@ export async function handleGetTablesDataRoute(
       rows = (queryRes.results as Record<string, unknown>[]) || [];
     }
 
+    // Storage statistics: default 5 GB upper max
+    const DEFAULT_MAX_STORAGE_BYTES = 5 * 1024 * 1024 * 1024; // 5 GB = 5,368,709,120 bytes
+    let usedBytes = 0;
+    try {
+      const pageCountRes = await db.prepare('PRAGMA page_count;').first<{ page_count?: number }>();
+      const pageSizeRes = await db.prepare('PRAGMA page_size;').first<{ page_size?: number }>();
+      const pageCount = Number(pageCountRes?.page_count ?? (pageCountRes as any)?.[0] ?? 0);
+      const pageSize = Number(pageSizeRes?.page_size ?? (pageSizeRes as any)?.[0] ?? 4096);
+      usedBytes = pageCount * pageSize;
+    } catch {
+      usedBytes = 0;
+    }
+
+    // Total rows across all tables
+    const totalRecords = Object.values(tableCounts).reduce((acc, count) => acc + count, 0);
+
+    if (!usedBytes || usedBytes <= 0) {
+      // Robust fallback: 2 KB per record + 1 MB base SQLite overhead
+      usedBytes = (totalRecords * 2048) + (1024 * 1024);
+    }
+
+    const remainingBytes = Math.max(0, DEFAULT_MAX_STORAGE_BYTES - usedBytes);
+    const usedPercentage = Number(((usedBytes / DEFAULT_MAX_STORAGE_BYTES) * 100).toFixed(4));
+
+    // Optional complete dump of all tables (e.g. for automatic Excel backup)
+    let allTablesData: Record<string, Record<string, unknown>[]> | undefined = undefined;
+    if (url.searchParams.get('all') === 'true' || targetTable === 'all') {
+      allTablesData = {};
+      for (const t of ALLOWED_DATA_TABLES) {
+        try {
+          const allRes = await db.prepare(`SELECT * FROM ${t} ORDER BY rowid DESC`).all();
+          allTablesData[t] = (allRes.results as Record<string, unknown>[]) || [];
+        } catch {
+          allTablesData[t] = [];
+        }
+      }
+    }
+
     return successResponse(
       {
         tables: tableCounts,
         currentTable: selectedTable,
         rows,
+        allTables: allTablesData,
+        storage: {
+          maxBytes: DEFAULT_MAX_STORAGE_BYTES,
+          usedBytes,
+          remainingBytes,
+          usedPercentage,
+          totalRecords,
+        },
       },
       200,
       corsHeaders,
