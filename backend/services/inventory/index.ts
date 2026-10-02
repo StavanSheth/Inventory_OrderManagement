@@ -68,7 +68,15 @@ export interface IInventoryService {
     actorUserId: string;
     oldItems: Array<{ productId: string; quantity: number }>;
     newItems: Array<{ productId: string; quantity: number }>;
+    allowPositiveConsumption?: boolean;
   }): Promise<D1PreparedStatementLike[]>;
+
+  finalizePendingOrderInventory(opts: {
+    branchId: string;
+    orderId: string;
+    actorUserId: string;
+    items: Array<{ productId: string; quantity: number }>;
+  }): Promise<void>;
 }
 
 export const INVENTORY_SERVICE_TOKEN = 'IInventoryService';
@@ -572,9 +580,11 @@ export class InventoryService implements IInventoryService {
     actorUserId: string;
     oldItems: Array<{ productId: string; quantity: number }>;
     newItems: Array<{ productId: string; quantity: number }>;
+    allowPositiveConsumption?: boolean;
   }): Promise<D1PreparedStatementLike[]> {
     const now = new Date().toISOString();
     const stmts: D1PreparedStatementLike[] = [];
+    const allowPositive = opts.allowPositiveConsumption !== false;
 
     // Map quantities by productId
     const oldQtyMap = new Map<string, number>();
@@ -603,28 +613,30 @@ export class InventoryService implements IInventoryService {
       const inv = await this.inventoryRepo.findByProduct(opts.branchId, productId);
       if (inv !== null) {
         if (delta > 0) {
-          // Additional consumption
-          const deductStmt = this.inventoryRepo.prepareDeductProductStockStatement(
-            opts.branchId,
-            productId,
-            delta,
-            now,
-          );
-          const moveStmt = this.inventoryRepo.prepareCreateMovementStatement({
-            branch_id: opts.branchId,
-            product_id: productId,
-            raw_material_id: null,
-            movement_type: InventoryMovementType.ORDER_CONSUMPTION,
-            quantity_delta: -delta,
-            reason: `Order edit: increased quantity by ${delta}`,
-            reference_type: 'ORDER',
-            reference_id: opts.orderId,
-            actor_user_id: opts.actorUserId,
-            created_at: now,
-          });
-          stmts.push(deductStmt, moveStmt);
+          // Additional consumption only if allowed (e.g. payment verified or not required)
+          if (allowPositive) {
+            const deductStmt = this.inventoryRepo.prepareDeductProductStockStatement(
+              opts.branchId,
+              productId,
+              delta,
+              now,
+            );
+            const moveStmt = this.inventoryRepo.prepareCreateMovementStatement({
+              branch_id: opts.branchId,
+              product_id: productId,
+              raw_material_id: null,
+              movement_type: InventoryMovementType.ORDER_CONSUMPTION,
+              quantity_delta: -delta,
+              reason: `Order edit: increased quantity by ${delta}`,
+              reference_type: 'ORDER',
+              reference_id: opts.orderId,
+              actor_user_id: opts.actorUserId,
+              created_at: now,
+            });
+            stmts.push(deductStmt, moveStmt);
+          }
         } else {
-          // Reversal of stock
+          // Reversal of stock is always applied immediately
           const reverseQty = Math.abs(delta);
           const addStmt = this.inventoryRepo.prepareAddProductStockStatement(
             opts.branchId,
@@ -670,23 +682,25 @@ export class InventoryService implements IInventoryService {
 
     for (const [matId, matDelta] of materialDeltas.entries()) {
       if (matDelta > 0) {
-        // Additional raw material consumed
-        const deductStmt = this.inventoryRepo.prepareDeductRawMaterialStockStatement(matId, matDelta, now);
-        const moveStmt = this.inventoryRepo.prepareCreateMovementStatement({
-          branch_id: opts.branchId,
-          product_id: null,
-          raw_material_id: matId,
-          movement_type: InventoryMovementType.ORDER_CONSUMPTION,
-          quantity_delta: -matDelta,
-          reason: `Order edit BOM consumption (+${matDelta})`,
-          reference_type: 'ORDER',
-          reference_id: opts.orderId,
-          actor_user_id: opts.actorUserId,
-          created_at: now,
-        });
-        stmts.push(deductStmt, moveStmt);
+        // Additional raw material consumed only if allowed
+        if (allowPositive) {
+          const deductStmt = this.inventoryRepo.prepareDeductRawMaterialStockStatement(matId, matDelta, now);
+          const moveStmt = this.inventoryRepo.prepareCreateMovementStatement({
+            branch_id: opts.branchId,
+            product_id: null,
+            raw_material_id: matId,
+            movement_type: InventoryMovementType.ORDER_CONSUMPTION,
+            quantity_delta: -matDelta,
+            reason: `Order edit BOM consumption (+${matDelta})`,
+            reference_type: 'ORDER',
+            reference_id: opts.orderId,
+            actor_user_id: opts.actorUserId,
+            created_at: now,
+          });
+          stmts.push(deductStmt, moveStmt);
+        }
       } else if (matDelta < 0) {
-        // Raw material reversed
+        // Raw material reversed is always applied immediately
         const revQty = Math.abs(matDelta);
         const addStmt = this.inventoryRepo.prepareAddRawMaterialStockStatement(matId, revQty, now);
         const moveStmt = this.inventoryRepo.prepareCreateMovementStatement({
@@ -706,5 +720,110 @@ export class InventoryService implements IInventoryService {
     }
 
     return stmts;
+  }
+
+  async finalizePendingOrderInventory(opts: {
+    branchId: string;
+    orderId: string;
+    actorUserId: string;
+    items: Array<{ productId: string; quantity: number }>;
+  }): Promise<void> {
+    // 1. Get net consumed quantities per product for this order from movements
+    const netConsumption = await this.inventoryRepo.getNetOrderConsumption(opts.orderId);
+    const netConsumedMap = new Map<string, number>();
+    for (const c of netConsumption) {
+      if (c.product_id) {
+        netConsumedMap.set(c.product_id, (netConsumedMap.get(c.product_id) ?? 0) + c.net_consumed);
+      }
+    }
+
+    // 2. Identify products that have not yet had their positive deltas consumed
+    const pendingDeltas: Array<{ productId: string; quantity: number }> = [];
+    for (const item of opts.items) {
+      const alreadyConsumed = netConsumedMap.get(item.productId) ?? 0;
+      const pendingQty = item.quantity - alreadyConsumed;
+      if (pendingQty > 0) {
+        pendingDeltas.push({ productId: item.productId, quantity: pendingQty });
+      }
+    }
+
+    if (pendingDeltas.length === 0) {
+      return;
+    }
+
+    // 3. Validate stock availability for pending items
+    const stockVal = await this.validateStockAvailability(opts.branchId, pendingDeltas);
+    if (!stockVal.isAvailable) {
+      throw new BadRequestError(`Cannot finalize pending inventory: ${stockVal.errorMessage}`);
+    }
+
+    const now = new Date().toISOString();
+    const stmts: D1PreparedStatementLike[] = [];
+
+    // 4. Finished product deductions & movements
+    for (const pending of pendingDeltas) {
+      const inv = await this.inventoryRepo.findByProduct(opts.branchId, pending.productId);
+      if (inv !== null) {
+        const deductStmt = this.inventoryRepo.prepareDeductProductStockStatement(
+          opts.branchId,
+          pending.productId,
+          pending.quantity,
+          now,
+        );
+        const moveStmt = this.inventoryRepo.prepareCreateMovementStatement({
+          branch_id: opts.branchId,
+          product_id: pending.productId,
+          raw_material_id: null,
+          movement_type: InventoryMovementType.ORDER_CONSUMPTION,
+          quantity_delta: -pending.quantity,
+          reason: `Deferred order edit consumption (+${pending.quantity}) finalized upon payment verification`,
+          reference_type: 'ORDER',
+          reference_id: opts.orderId,
+          actor_user_id: opts.actorUserId,
+          created_at: now,
+        });
+        stmts.push(deductStmt, moveStmt);
+      }
+    }
+
+    // 5. BOM raw material deductions & movements
+    const bomReqs = await this.calculateBOMRequirements(opts.branchId, pendingDeltas);
+    for (const req of bomReqs) {
+      const deductStmt = this.inventoryRepo.prepareDeductRawMaterialStockStatement(
+        req.rawMaterialId,
+        req.totalQuantityRequired,
+        now,
+      );
+      const moveStmt = this.inventoryRepo.prepareCreateMovementStatement({
+        branch_id: opts.branchId,
+        product_id: null,
+        raw_material_id: req.rawMaterialId,
+        movement_type: InventoryMovementType.ORDER_CONSUMPTION,
+        quantity_delta: -req.totalQuantityRequired,
+        reason: `Deferred order edit BOM consumption for ${req.rawMaterialName} (+${req.totalQuantityRequired}) finalized upon payment verification`,
+        reference_type: 'ORDER',
+        reference_id: opts.orderId,
+        actor_user_id: opts.actorUserId,
+        created_at: now,
+      });
+      stmts.push(deductStmt, moveStmt);
+    }
+
+    if (stmts.length > 0) {
+      await this.inventoryRepo.executeBatch(stmts);
+    }
+
+    await this.auditRepo?.log({
+      branch_id: opts.branchId,
+      actor_user_id: opts.actorUserId,
+      action: AuditAction.INVENTORY_CONSUMED,
+      entity_type: 'order_inventory',
+      entity_id: opts.orderId,
+      metadata: {
+        orderId: opts.orderId,
+        finalizedPendingDeltas: pendingDeltas,
+        timestamp: now,
+      },
+    });
   }
 }

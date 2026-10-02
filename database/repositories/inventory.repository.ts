@@ -690,4 +690,30 @@ export class InventoryRepository extends BaseRepository {
         input.created_at,
       );
   }
+
+  async getNetOrderConsumption(
+    orderId: string,
+  ): Promise<Array<{ product_id: string | null; raw_material_id: string | null; net_consumed: number }>> {
+    const res = await this.db
+      .prepare(`
+        SELECT product_id, raw_material_id, -SUM(quantity_delta) as net_consumed
+        FROM inventory_movements
+        WHERE reference_type = 'ORDER' AND reference_id = ?
+        GROUP BY product_id, raw_material_id
+      `)
+      .bind(orderId)
+      .all<{ product_id: string | null; raw_material_id: string | null; net_consumed: number }>();
+    return res.results;
+  }
+
+  async executeBatch(stmts: D1PreparedStatementLike[]): Promise<void> {
+    if (stmts.length === 0) return;
+    const batchRes = await this.db.batch(stmts);
+    for (let i = 0; i < batchRes.length; i++) {
+      const changes = Number((batchRes[i]?.meta as { changes?: number })?.changes ?? (batchRes[i] as { changes?: number })?.changes ?? 0);
+      if (changes === 0) {
+        throw new Error(`Batch inventory statement ${i} affected 0 rows`);
+      }
+    }
+  }
 }

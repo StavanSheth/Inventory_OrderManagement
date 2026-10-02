@@ -354,17 +354,33 @@ describe('Phase 4 — Concurrency, Inventory Ledger, BOM & Promotion Remediation
       let stock = await inventoryRepo.findByProduct(branchId, 'prod-pistachio');
       assert.strictEqual(stock?.quantity, 18);
 
-      // Edit order: increase from 2 to 5 (delta = +3 units, inventory should decrease by 3)
-      await ordersService.editOrder({
+      // Edit order: increase from 2 to 5 (delta = +3 units)
+      const editRes = await ordersService.editOrder({
         actorUserId: operatorId,
         orderId: order.id,
         items: [{ productId: 'prod-pistachio', quantity: 5 }],
       });
 
+      // Stock should NOT decrease yet because additional payment is required!
       stock = await inventoryRepo.findByProduct(branchId, 'prod-pistachio');
-      assert.strictEqual(stock?.quantity, 15, 'Stock should be 18 - 3 = 15');
+      assert.strictEqual(stock?.quantity, 18, 'Stock remains 18 while additional payment is pending');
+      assert.ok(editRes.additionalAmountRequired > 0);
 
-      // Edit order: decrease from 5 to 1 (delta = -4 units, inventory should increase by 4 reversal)
+      // Record and verify the additional payment
+      const { payment: addPay } = await ordersService.recordPayment({
+        actorUserId: operatorId,
+        orderId: order.id,
+        branchId,
+        amount: editRes.additionalAmountRequired,
+        method: PaymentMethod.CASH,
+      });
+      await ordersService.verifyPayment({ actorUserId: operatorId, orderId: order.id, paymentId: addPay.id });
+
+      // Stock should now be deducted by 3 (18 - 3 = 15)
+      stock = await inventoryRepo.findByProduct(branchId, 'prod-pistachio');
+      assert.strictEqual(stock?.quantity, 15, 'Stock should be 18 - 3 = 15 after additional payment is verified');
+
+      // Edit order: decrease from 5 to 1 (delta = -4 units, inventory should immediately increase by 4 reversal)
       await ordersService.editOrder({
         actorUserId: operatorId,
         orderId: order.id,

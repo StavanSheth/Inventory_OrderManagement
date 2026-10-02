@@ -336,17 +336,34 @@ describe('Phase 4 — Inventory & Promotions Integration Tests', () => {
     assert.strictEqual(rawInv?.current_quantity, 4500);
 
     // 2. Customer edits confirmed order: INCREASE quantity from 2 to 4 (Delta = +2)
-    await ordersService.editOrder({
+    const editRes = await ordersService.editOrder({
       actorUserId: customerId,
       orderId: order.id,
       items: [{ productId, quantity: 4 }],
     });
 
-    // Stock should have deducted +2 finished products, +500ml raw milk
+    // Stock should NOT be deducted while additional payment remains pending
     prodInv = await inventoryRepo.findByProduct(branchId, productId);
     rawInv = await inventoryRepo.findRawMaterialById(rawMaterialId);
-    assert.strictEqual(prodInv?.quantity, 16, 'Finished product stock should be 16 after +2 increase');
-    assert.strictEqual(rawInv?.current_quantity, 4000, 'Raw material stock should be 4000 after +500ml increase');
+    assert.strictEqual(prodInv?.quantity, 18, 'Finished product stock remains 18 while additional payment is pending');
+    assert.strictEqual(rawInv?.current_quantity, 4500, 'Raw material stock remains 4500 while additional payment is pending');
+    assert.ok(editRes.additionalAmountRequired > 0, 'Additional payment must be required');
+
+    // Record and verify the additional payment
+    const { payment: addPay } = await ordersService.recordPayment({
+      actorUserId: operatorId,
+      orderId: order.id,
+      branchId,
+      amount: editRes.additionalAmountRequired,
+      method: PaymentMethod.CASH,
+    });
+    await ordersService.verifyPayment({ actorUserId: operatorId, orderId: order.id, paymentId: addPay.id });
+
+    // Stock is now finalized: deducted +2 finished products, +500ml raw milk
+    prodInv = await inventoryRepo.findByProduct(branchId, productId);
+    rawInv = await inventoryRepo.findRawMaterialById(rawMaterialId);
+    assert.strictEqual(prodInv?.quantity, 16, 'Finished product stock should be 16 after payment verified');
+    assert.strictEqual(rawInv?.current_quantity, 4000, 'Raw material stock should be 4000 after payment verified');
 
     // 3. Customer edits confirmed order: DECREASE quantity from 4 to 1 (Delta = -3)
     await ordersService.editOrder({
@@ -355,7 +372,7 @@ describe('Phase 4 — Inventory & Promotions Integration Tests', () => {
       items: [{ productId, quantity: 1 }],
     });
 
-    // Stock should have returned +3 finished products, +750ml raw milk
+    // Stock should have immediately returned +3 finished products, +750ml raw milk (ORDER_REVERSAL)
     prodInv = await inventoryRepo.findByProduct(branchId, productId);
     rawInv = await inventoryRepo.findRawMaterialById(rawMaterialId);
     assert.strictEqual(prodInv?.quantity, 19, 'Finished product stock should be 19 after returning 3');

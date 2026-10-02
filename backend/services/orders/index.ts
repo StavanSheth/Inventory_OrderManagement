@@ -380,6 +380,7 @@ export class OrdersService implements IOrdersService {
         actorUserId: opts.actorUserId,
         oldItems: oldItemsList,
         newItems: newItemsList,
+        allowPositiveConsumption: editDiff.additionalAmountRequired === 0,
       });
       extraStatements.push(...deltaInvStmts);
     }
@@ -866,6 +867,29 @@ export class OrdersService implements IOrdersService {
     }
 
     if (wasUpdated) {
+      // If order is CONFIRMED, check if verified payments now cover the order total.
+      // If so, finalize deferred positive inventory consumption from order edit and ensure payment_status is VERIFIED.
+      const payments = await this.paymentRepo.listByOrder(opts.orderId);
+      const verifiedPaid = payments
+        .filter((p) => p.status === PaymentStatus.VERIFIED || p.status === PaymentStatus.COMPLETED)
+        .reduce((sum, p) => sum + p.amount, 0);
+
+      if (updatedOrder.status === OrderStatus.CONFIRMED && verifiedPaid >= updatedOrder.total) {
+        if (this.inventoryService) {
+          const currentItems = await this.orderRepo.getOrderItems(opts.orderId);
+          await this.inventoryService.finalizePendingOrderInventory({
+            branchId: updatedOrder.branch_id,
+            orderId: opts.orderId,
+            actorUserId: opts.actorUserId,
+            items: currentItems.map((i) => ({ productId: i.product_id, quantity: i.quantity })),
+          });
+        }
+        if (updatedOrder.payment_status !== PaymentStatus.VERIFIED) {
+          await this.orderRepo.updatePaymentStatus(opts.orderId, PaymentStatus.VERIFIED);
+          updatedOrder.payment_status = PaymentStatus.VERIFIED;
+        }
+      }
+
       await this.realtime?.publish({
         type: 'PaymentUpdated',
         payload: {
