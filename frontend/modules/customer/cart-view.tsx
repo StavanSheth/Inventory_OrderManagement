@@ -236,8 +236,18 @@ export const CartView: React.FC<CartViewProps> = ({
           </div>
         )}
         <div className="flex justify-between text-sm text-[#6f5569] font-medium">
-          <span>Estimated Tax (5%)</span>
+          <span>Estimated GST (5%)</span>
           <span className="text-[#2b1233] font-bold">₹{tax.toFixed(2)}</span>
+        </div>
+        <div className="text-xs text-[#6f5569]/80 pl-2 space-y-0.5">
+          <div className="flex justify-between">
+            <span>&bull; SGST (2.5%):</span>
+            <span>₹{(tax / 2).toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>&bull; CGST (2.5%):</span>
+            <span>₹{(tax / 2).toFixed(2)}</span>
+          </div>
         </div>
         <div className="flex justify-between text-base font-black text-[#2b1233] pt-3 border-t border-[#f4d3dd]">
           <span className="font-display text-lg">Estimated Total</span>

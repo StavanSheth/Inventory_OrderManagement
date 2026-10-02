@@ -7,10 +7,11 @@ import { UnifiedOrderHistoryView } from '@/frontend/modules/orders';
 import { BranchManagementView } from '@/frontend/modules/branches';
 import { BranchSettingsView, DataManagementView } from '@/frontend/modules/settings';
 import { UnifiedLedgerView } from '@/frontend/modules/ledger';
+import { OperatorInventoryView } from '@/frontend/modules/inventory';
 import { Branch } from '@/shared/types/entities.types';
 import { GlobalNavigation, BunMobileNav } from '@/frontend/components/ui';
 
-type OwnerTab = 'dashboard' | 'orders' | 'branches' | 'ledger' | 'settings' | 'data';
+type OwnerTab = 'dashboard' | 'orders' | 'inventory' | 'branches' | 'ledger' | 'settings' | 'data';
 
 export default function OwnerPortalPage() {
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -53,6 +54,7 @@ export default function OwnerPortalPage() {
   const tabItems = [
     { id: 'dashboard', label: 'Dashboard', icon: '📊' },
     { id: 'orders', label: 'History', icon: '📜' },
+    { id: 'inventory', label: 'Inventory', icon: '📦' },
     { id: 'branches', label: 'Branches', icon: '🏢' },
     { id: 'ledger', label: 'Ledger', icon: '📑' },
     { id: 'settings', label: 'Settings', icon: '⚙️' },
@@ -173,6 +175,11 @@ export default function OwnerPortalPage() {
                 branches={branches}
                 defaultBranchId={selectedBranchId}
                 isOwner={true}
+              />
+            )}
+            {activeTab === 'inventory' && (
+              <OperatorInventoryView
+                branchId={selectedBranchId === 'ALL' && branches[0] ? branches[0].id : selectedBranchId}
               />
             )}
             {activeTab === 'branches' && (

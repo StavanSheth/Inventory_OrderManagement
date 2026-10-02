@@ -1,14 +1,5 @@
-import { handleGetInventoryRoute, handleUpdateInventoryPricingRoute } from '@/api/routes/inventory.route';
+import { handleUpdateInventoryPricingRoute } from '@/api/routes/inventory.route';
 import { CloudflareEnv } from '@/database/types';
-
-export async function GET(
-  request: Request,
-  props: { params: Promise<{ id: string }> },
-) {
-  const { id } = await props.params;
-  const env = (globalThis as unknown as { env?: CloudflareEnv }).env;
-  return handleGetInventoryRoute(request, id, env);
-}
 
 export async function PATCH(
   request: Request,
@@ -29,6 +20,5 @@ export async function PUT(
 }
 
 export async function OPTIONS(request: Request) {
-  return handleGetInventoryRoute(request, '');
+  return handleUpdateInventoryPricingRoute(request, '');
 }
-

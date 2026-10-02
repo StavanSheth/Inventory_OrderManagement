@@ -31,6 +31,18 @@ export interface IInventoryService {
   listBranchStock(branchId: string): Promise<Inventory[]>;
   refillProductStock(branchId: string, productId: string, quantity: number, actorUserId: string, reason?: string): Promise<Inventory>;
   adjustProductStock(branchId: string, productId: string, delta: number, actorUserId: string, reason: string): Promise<Inventory>;
+  updatePricingAndTaxes(
+    branchId: string,
+    productId: string,
+    pricing: {
+      selling_price?: number;
+      tax_rate?: number;
+      cgst_rate?: number;
+      sgst_rate?: number;
+      igst_rate?: number;
+    },
+    actorUserId?: string,
+  ): Promise<Inventory>;
 
   // Raw materials
   listRawMaterials(branchId: string, onlyActive?: boolean): Promise<RawMaterial[]>;
@@ -107,6 +119,37 @@ export class InventoryService implements IInventoryService {
 
   async listBranchStock(branchId: string): Promise<Inventory[]> {
     return this.inventoryRepo.listByBranch(branchId);
+  }
+
+  async updatePricingAndTaxes(
+    branchId: string,
+    productId: string,
+    pricing: {
+      selling_price?: number;
+      tax_rate?: number;
+      cgst_rate?: number;
+      sgst_rate?: number;
+      igst_rate?: number;
+    },
+    actorUserId?: string,
+  ): Promise<Inventory> {
+    const updated = await this.inventoryRepo.updatePricingAndTaxes(branchId, productId, pricing);
+    if (this.auditRepo && actorUserId) {
+      await this.auditRepo
+        .log({
+          actor_user_id: actorUserId,
+          action: AuditAction.INVENTORY_ADJUSTED,
+          entity_type: 'inventory',
+          entity_id: updated.id,
+          branch_id: branchId,
+          metadata: {
+            productId,
+            pricing,
+          },
+        })
+        .catch(() => {});
+    }
+    return updated;
   }
 
   async refillProductStock(

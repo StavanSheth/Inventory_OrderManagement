@@ -86,18 +86,114 @@ export class InventoryRepository extends BaseRepository {
       .first<Inventory>();
   }
 
-  async listByBranch(branchId: string): Promise<Array<Inventory & { product_name?: string }>> {
+  async listByBranch(branchId: string): Promise<Array<Inventory & { product_name?: string; selling_price?: number; tax_rate?: number; cgst_rate?: number; sgst_rate?: number; igst_rate?: number }>> {
     const res = await this.db
       .prepare(`
-        SELECT i.*, p.name as product_name
+        SELECT 
+          i.*, 
+          p.name as product_name,
+          COALESCE(i.selling_price, p.price, 0) as selling_price,
+          COALESCE(i.tax_rate, p.tax_rate, 5) as tax_rate,
+          COALESCE(i.cgst_rate, p.cgst_rate, 2.5) as cgst_rate,
+          COALESCE(i.sgst_rate, p.sgst_rate, 2.5) as sgst_rate,
+          COALESCE(i.igst_rate, p.igst_rate, 0) as igst_rate
         FROM inventory i
         LEFT JOIN products p ON p.id = i.product_id
         WHERE i.branch_id = ?
         ORDER BY i.quantity ASC
       `)
       .bind(branchId)
-      .all<Inventory & { product_name?: string }>();
+      .all<Inventory & { product_name?: string; selling_price?: number; tax_rate?: number; cgst_rate?: number; sgst_rate?: number; igst_rate?: number }>();
     return res.results;
+  }
+
+  async updatePricingAndTaxes(
+    branchId: string,
+    productId: string,
+    pricing: {
+      selling_price?: number;
+      tax_rate?: number;
+      cgst_rate?: number;
+      sgst_rate?: number;
+      igst_rate?: number;
+    },
+  ): Promise<Inventory> {
+    const now = new Date().toISOString();
+    const existing = await this.findByProduct(branchId, productId);
+    if (!existing) {
+      const invId = `inv_${crypto.randomUUID().replace(/-/g, '')}`;
+      await this.db
+        .prepare(`
+          INSERT INTO inventory (id, branch_id, product_id, quantity, reorder_threshold, selling_price, tax_rate, cgst_rate, sgst_rate, igst_rate, updated_at)
+          VALUES (?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?)
+        `)
+        .bind(
+          invId,
+          branchId,
+          productId,
+          pricing.selling_price !== undefined ? pricing.selling_price : null,
+          pricing.tax_rate !== undefined ? pricing.tax_rate : 5,
+          pricing.cgst_rate !== undefined ? pricing.cgst_rate : 2.5,
+          pricing.sgst_rate !== undefined ? pricing.sgst_rate : 2.5,
+          pricing.igst_rate !== undefined ? pricing.igst_rate : 0,
+          now,
+        )
+        .run();
+    } else {
+      await this.db
+        .prepare(`
+          UPDATE inventory
+          SET selling_price = COALESCE(?, selling_price),
+              tax_rate = COALESCE(?, tax_rate),
+              cgst_rate = COALESCE(?, cgst_rate),
+              sgst_rate = COALESCE(?, sgst_rate),
+              igst_rate = COALESCE(?, igst_rate),
+              updated_at = ?
+          WHERE branch_id = ? AND product_id = ?
+        `)
+        .bind(
+          pricing.selling_price !== undefined ? pricing.selling_price : null,
+          pricing.tax_rate !== undefined ? pricing.tax_rate : null,
+          pricing.cgst_rate !== undefined ? pricing.cgst_rate : null,
+          pricing.sgst_rate !== undefined ? pricing.sgst_rate : null,
+          pricing.igst_rate !== undefined ? pricing.igst_rate : null,
+          now,
+          branchId,
+          productId,
+        )
+        .run();
+    }
+
+    // Keep product catalog in sync with updated pricing and tax breakdown
+    if (pricing.selling_price !== undefined || pricing.tax_rate !== undefined) {
+      await this.db
+        .prepare(`
+          UPDATE products
+          SET price = COALESCE(?, price),
+              selling_price = COALESCE(?, selling_price),
+              tax_rate = COALESCE(?, tax_rate),
+              cgst_rate = COALESCE(?, cgst_rate),
+              sgst_rate = COALESCE(?, sgst_rate),
+              igst_rate = COALESCE(?, igst_rate),
+              updated_at = ?
+          WHERE id = ? AND branch_id = ?
+        `)
+        .bind(
+          pricing.selling_price !== undefined ? pricing.selling_price : null,
+          pricing.selling_price !== undefined ? pricing.selling_price : null,
+          pricing.tax_rate !== undefined ? pricing.tax_rate : null,
+          pricing.cgst_rate !== undefined ? pricing.cgst_rate : null,
+          pricing.sgst_rate !== undefined ? pricing.sgst_rate : null,
+          pricing.igst_rate !== undefined ? pricing.igst_rate : null,
+          now,
+          productId,
+          branchId,
+        )
+        .run();
+    }
+
+    const updated = await this.findByProduct(branchId, productId);
+    return updated!;
   }
 
   async upsertStock(input: SetInventoryInput): Promise<Inventory> {

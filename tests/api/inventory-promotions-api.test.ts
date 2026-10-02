@@ -16,6 +16,7 @@ import {
   handleAdjustInventoryRoute,
   handleGetMovementsRoute,
   handleProductBOMRoute,
+  handleUpdateInventoryPricingRoute,
 } from '../../api/routes/inventory.route';
 import {
   handleBranchOffersRoute,
@@ -341,6 +342,56 @@ describe('Phase 4 — Inventory & Promotions API HTTP Endpoints', () => {
       assert.strictEqual(json.success, true);
       assert.strictEqual(json.data.length, 1);
       assert.strictEqual(json.data[0].quantity_required, 75);
+    });
+
+    it('allows operator to update product selling price, tax rate, and sub-tax rates', async () => {
+      const resp = await handleUpdateInventoryPricingRoute(
+        new Request(`http://x/api/v1/branches/${branchAlpha}/inventory/pricing`, {
+          method: 'PATCH',
+          headers: {
+            Authorization: bearerToken('fb-op', 'op@melt.local', 'Operator'),
+            'x-session-token': operatorSessionToken,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            productId,
+            selling_price: 220,
+            tax_rate: 18,
+            cgst_rate: 9,
+            sgst_rate: 9,
+            igst_rate: 0,
+          }),
+        }),
+        branchAlpha,
+        { DB: db },
+      );
+
+      assert.strictEqual(resp.status, 200);
+      const json = (await resp.json()) as { success: boolean; data: { inventory: any } };
+      assert.strictEqual(json.success, true);
+      assert.strictEqual(json.data.inventory.selling_price, 220);
+      assert.strictEqual(json.data.inventory.tax_rate, 18);
+      assert.strictEqual(json.data.inventory.cgst_rate, 9);
+      assert.strictEqual(json.data.inventory.sgst_rate, 9);
+      assert.strictEqual(json.data.inventory.igst_rate, 0);
+
+      // Verify get inventory reflects the updated selling price and sub-taxes
+      const getResp = await handleGetInventoryRoute(
+        new Request(`http://x/api/v1/branches/${branchAlpha}/inventory`, {
+          headers: {
+            Authorization: bearerToken('fb-op', 'op@melt.local', 'Operator'),
+            'x-session-token': operatorSessionToken,
+          },
+        }),
+        branchAlpha,
+        { DB: db },
+      );
+      assert.strictEqual(getResp.status, 200);
+      const getJson = (await getResp.json()) as { success: boolean; data: { products: any[] } };
+      assert.strictEqual(getJson.data.products[0].selling_price, 220);
+      assert.strictEqual(getJson.data.products[0].tax_rate, 18);
+      assert.strictEqual(getJson.data.products[0].cgst_rate, 9);
+      assert.strictEqual(getJson.data.products[0].sgst_rate, 9);
     });
   });
 

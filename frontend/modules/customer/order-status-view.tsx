@@ -309,8 +309,18 @@ export const OrderStatusView: React.FC<OrderStatusViewProps> = ({ orderId, onBac
           <span className="text-[#2b1233] font-bold">₹{order.subtotal.toFixed(2)}</span>
         </div>
         <div className="flex justify-between text-[#6f5569] font-medium">
-          <span>Tax</span>
+          <span>Tax (GST)</span>
           <span className="text-[#2b1233] font-bold">₹{order.tax.toFixed(2)}</span>
+        </div>
+        <div className="text-xs text-[#6f5569]/80 pl-2 space-y-0.5">
+          <div className="flex justify-between">
+            <span>&bull; SGST (2.5%):</span>
+            <span>₹{(order.tax / 2).toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>&bull; CGST (2.5%):</span>
+            <span>₹{(order.tax / 2).toFixed(2)}</span>
+          </div>
         </div>
         <div className="flex justify-between text-[#6f5569] font-medium">
           <span>Payment Status</span>

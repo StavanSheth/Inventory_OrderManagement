@@ -69,6 +69,11 @@ export interface Product {
   description?: string | null;
   category_id: Id;
   price: number; // in cents/paise or numeric unit
+  selling_price?: number;
+  tax_rate?: number;
+  cgst_rate?: number;
+  sgst_rate?: number;
+  igst_rate?: number;
   active: boolean;
   image_url?: string | null;
   created_at: IsoDateTimeUtc;
@@ -101,6 +106,11 @@ export interface Inventory {
   product_id: Id;
   quantity: number;
   reorder_threshold: number;
+  selling_price?: number;
+  tax_rate?: number;
+  cgst_rate?: number;
+  sgst_rate?: number;
+  igst_rate?: number;
   updated_at: IsoDateTimeUtc;
 }
 

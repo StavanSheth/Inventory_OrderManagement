@@ -49,6 +49,15 @@ const setBOMSchema = z.object({
   ),
 });
 
+const updatePricingSchema = z.object({
+  productId: z.string().min(1, 'Product ID is required'),
+  selling_price: z.number().nonnegative().optional(),
+  tax_rate: z.number().min(0).max(100).optional(),
+  cgst_rate: z.number().min(0).max(100).optional(),
+  sgst_rate: z.number().min(0).max(100).optional(),
+  igst_rate: z.number().min(0).max(100).optional(),
+});
+
 function buildHeaders(request: Request): { corsHeaders: Record<string, string>; responseHeaders: Record<string, string> } {
   const corsHeaders = getCorsHeaders(request, config.allowedOrigins);
   const context = extractRequestContext(request);
@@ -340,3 +349,61 @@ export async function handleProductBOMRoute(
     return handleApiError(error, responseHeaders);
   }
 }
+
+/**
+ * PATCH / PUT /api/v1/branches/:branchId/inventory/pricing
+ * Update selling price, tax rate, and sub-tax rates (SGST, CGST, IGST) for a product.
+ */
+export async function handleUpdateInventoryPricingRoute(
+  request: Request,
+  branchId: string,
+  env?: { DB?: D1DatabaseLike },
+  options: AuthFactoryOptions = {},
+): Promise<Response> {
+  const preflight = handleCorsPreflight(request, config.allowedOrigins);
+  if (preflight) return preflight;
+
+  const { responseHeaders } = buildHeaders(request);
+
+  try {
+    validateRequest(idSchema, branchId);
+    const { db, authMiddleware } = createAuthInfrastructure(env, options);
+    const inventoryService = buildInventoryService(db);
+
+    const userContext = await authMiddleware.authenticateRequest(request, {
+      requireSession: true,
+      targetBranchId: branchId,
+    });
+    requireOperatorOrOwner(userContext);
+    requireApplicationSession(userContext.session, userContext, branchId);
+    requireBranchAccess(userContext, branchId);
+
+    const rawBody = await request.json();
+    const body = validateRequest(updatePricingSchema, rawBody);
+
+    const updated = await inventoryService.updatePricingAndTaxes(
+      branchId,
+      body.productId,
+      {
+        selling_price: body.selling_price,
+        tax_rate: body.tax_rate,
+        cgst_rate: body.cgst_rate,
+        sgst_rate: body.sgst_rate,
+        igst_rate: body.igst_rate,
+      },
+      userContext.userId,
+    );
+
+    return successResponse(
+      {
+        message: 'Pricing and tax breakdown updated successfully',
+        inventory: updated,
+      },
+      200,
+      responseHeaders,
+    );
+  } catch (error) {
+    return handleApiError(error, responseHeaders);
+  }
+}
+

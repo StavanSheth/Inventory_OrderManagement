@@ -13,7 +13,7 @@ export const OperatorInventoryView: React.FC<OperatorInventoryViewProps> = ({ br
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [products, setProducts] = useState<Array<Inventory & { product_name?: string }>>([]);
+  const [products, setProducts] = useState<Array<Inventory & { product_name?: string; selling_price?: number; tax_rate?: number; cgst_rate?: number; sgst_rate?: number; igst_rate?: number }>>([]);
   const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
   const [lowStock, setLowStock] = useState<{ products: Inventory[]; rawMaterials: RawMaterial[] }>({
     products: [],
@@ -34,6 +34,24 @@ export const OperatorInventoryView: React.FC<OperatorInventoryViewProps> = ({ br
   const [modalSubmitting, setModalSubmitting] = useState<boolean>(false);
   const [modalError, setModalError] = useState<string | null>(null);
 
+  // Pricing & Taxes Modal states
+  const [pricingProduct, setPricingProduct] = useState<{
+    id: string;
+    name: string;
+    selling_price: number;
+    tax_rate: number;
+    cgst_rate: number;
+    sgst_rate: number;
+    igst_rate: number;
+  } | null>(null);
+  const [editSellingPrice, setEditSellingPrice] = useState<string>('0');
+  const [editTaxRate, setEditTaxRate] = useState<string>('5');
+  const [editCgstRate, setEditCgstRate] = useState<string>('2.5');
+  const [editSgstRate, setEditSgstRate] = useState<string>('2.5');
+  const [editIgstRate, setEditIgstRate] = useState<string>('0');
+  const [pricingSubmitting, setPricingSubmitting] = useState<boolean>(false);
+  const [pricingError, setPricingError] = useState<string | null>(null);
+
   // Recipe / BOM Modal states
   const [recipeProduct, setRecipeProduct] = useState<{ id: string; name: string } | null>(null);
   const [recipeComponents, setRecipeComponents] = useState<Array<{ rawMaterialId: string; quantityRequired: number }>>([]);
@@ -50,12 +68,91 @@ export const OperatorInventoryView: React.FC<OperatorInventoryViewProps> = ({ br
   const [matSubmitting, setMatSubmitting] = useState<boolean>(false);
   const [matError, setMatError] = useState<string | null>(null);
 
+  const handleOpenPricing = (item: Inventory & { product_name?: string; selling_price?: number; tax_rate?: number; cgst_rate?: number; sgst_rate?: number; igst_rate?: number }) => {
+    const sp = item.selling_price ?? 0;
+    const tr = item.tax_rate ?? 5;
+    const cgst = item.cgst_rate ?? tr / 2;
+    const sgst = item.sgst_rate ?? tr / 2;
+    const igst = item.igst_rate ?? 0;
+    setPricingProduct({
+      id: item.product_id,
+      name: item.product_name ?? item.product_id,
+      selling_price: sp,
+      tax_rate: tr,
+      cgst_rate: cgst,
+      sgst_rate: sgst,
+      igst_rate: igst,
+    });
+    setEditSellingPrice(sp.toString());
+    setEditTaxRate(tr.toString());
+    setEditCgstRate(cgst.toString());
+    setEditSgstRate(sgst.toString());
+    setEditIgstRate(igst.toString());
+    setPricingError(null);
+  };
+
+  const handleApplyTaxPreset = (rate: number) => {
+    setEditTaxRate(rate.toString());
+    setEditCgstRate((rate / 2).toString());
+    setEditSgstRate((rate / 2).toString());
+    setEditIgstRate('0');
+  };
+
+  const handleSavePricing = async () => {
+    if (!pricingProduct) return;
+    setPricingSubmitting(true);
+    setPricingError(null);
+    try {
+      const sp = parseFloat(editSellingPrice);
+      const tr = parseFloat(editTaxRate);
+      const cgst = parseFloat(editCgstRate);
+      const sgst = parseFloat(editSgstRate);
+      const igst = parseFloat(editIgstRate);
+
+      if (isNaN(sp) || sp < 0) {
+        setPricingError('Please enter a valid selling price');
+        setPricingSubmitting(false);
+        return;
+      }
+      if (isNaN(tr) || tr < 0) {
+        setPricingError('Please enter a valid tax rate');
+        setPricingSubmitting(false);
+        return;
+      }
+
+      const res = await apiClient.request(`/api/v1/branches/${branchId}/inventory/pricing`, {
+        method: 'PATCH',
+        authenticated: true,
+        requireSession: true,
+        body: JSON.stringify({
+          productId: pricingProduct.id,
+          selling_price: sp,
+          tax_rate: tr,
+          cgst_rate: isNaN(cgst) ? tr / 2 : cgst,
+          sgst_rate: isNaN(sgst) ? tr / 2 : sgst,
+          igst_rate: isNaN(igst) ? 0 : igst,
+        }),
+      });
+
+      if (res.success) {
+        setPricingProduct(null);
+        await fetchInventory();
+      } else {
+        setPricingError(res.error?.message || 'Failed to update pricing & tax');
+      }
+    } catch (err) {
+      setPricingError(err instanceof Error ? err.message : 'Error updating pricing & tax');
+    } finally {
+      setPricingSubmitting(false);
+    }
+  };
+
   const fetchInventory = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const res = await apiClient.request<{
-        products: Array<Inventory & { product_name?: string }>;
+        products: Array<Inventory & { product_name?: string; selling_price?: number; tax_rate?: number; cgst_rate?: number; sgst_rate?: number; igst_rate?: number }>;
         rawMaterials: RawMaterial[];
         lowStock: { products: Inventory[]; rawMaterials: RawMaterial[] };
       }>(`/api/v1/branches/${branchId}/inventory`, {
@@ -361,37 +458,71 @@ export const OperatorInventoryView: React.FC<OperatorInventoryViewProps> = ({ br
           <table className="w-full text-left text-sm text-[#2b1233]">
             <thead className="bg-[#fff1f4] text-xs uppercase text-[#6f5569] font-extrabold border-b border-[#f4d3dd]">
               <tr>
-                <th className="px-6 py-3.5">Product Name</th>
-                <th className="px-6 py-3.5">Current Stock</th>
-                <th className="px-6 py-3.5">Threshold</th>
-                <th className="px-6 py-3.5">Status</th>
-                <th className="px-6 py-3.5 text-right">Actions</th>
+                <th className="px-5 py-3.5">Product Name</th>
+                <th className="px-4 py-3.5">Selling Price</th>
+                <th className="px-5 py-3.5">Tax & Sub-Taxes (GST)</th>
+                <th className="px-4 py-3.5">Current Stock</th>
+                <th className="px-4 py-3.5">Threshold</th>
+                <th className="px-4 py-3.5">Status</th>
+                <th className="px-5 py-3.5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#f4d3dd]/60">
               {products.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-[#6f5569] font-medium">
+                  <td colSpan={7} className="px-6 py-8 text-center text-[#6f5569] font-medium">
                     No products found for this branch.
                   </td>
                 </tr>
               ) : (
                 products.map((item) => {
                   const isLow = item.quantity <= item.reorder_threshold;
+                  const price = item.selling_price ?? 0;
+                  const taxRate = item.tax_rate ?? 5;
+                  const cgstRate = item.cgst_rate ?? taxRate / 2;
+                  const sgstRate = item.sgst_rate ?? taxRate / 2;
+                  const igstRate = item.igst_rate ?? 0;
+                  const taxAmount = (price * taxRate) / 100;
+                  const cgstAmount = (price * cgstRate) / 100;
+                  const sgstAmount = (price * sgstRate) / 100;
+
                   return (
                     <tr key={item.id} className="hover:bg-[#fff1f4]/40 transition">
-                      <td className="px-6 py-4 font-bold text-[#2b1233]">
+                      <td className="px-5 py-4 font-bold text-[#2b1233]">
                         {item.product_name ?? item.product_id}
                       </td>
-                      <td className="px-6 py-4 font-mono font-extrabold">
+                      <td className="px-4 py-4 font-mono font-extrabold text-[#d61c5d]">
+                        ₹{price.toFixed(2)}
+                      </td>
+                      <td className="px-5 py-4">
+                        <div className="flex flex-col gap-1">
+                          <span className="font-extrabold text-[#2b1233] text-xs">
+                            {taxRate}% GST (+₹{taxAmount.toFixed(2)})
+                          </span>
+                          <div className="flex flex-wrap gap-1 text-[10px] font-bold">
+                            <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                              SGST {sgstRate}% (₹{sgstAmount.toFixed(2)})
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200">
+                              CGST {cgstRate}% (₹{cgstAmount.toFixed(2)})
+                            </span>
+                            {igstRate > 0 && (
+                              <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
+                                IGST {igstRate}%
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 font-mono font-extrabold">
                         <span className={isLow ? 'text-[#d61c5d]' : 'text-[#2b1233]'}>
                           {item.quantity} units
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-[#6f5569] font-semibold">
+                      <td className="px-4 py-4 text-[#6f5569] font-semibold">
                         {item.reorder_threshold} units
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-4 py-4">
                         {isLow ? (
                           <span className="px-3 py-1 text-xs font-black rounded-full bg-[#ffc2d4] text-[#2b1233]">
                             LOW STOCK
@@ -402,22 +533,29 @@ export const OperatorInventoryView: React.FC<OperatorInventoryViewProps> = ({ br
                           </span>
                         )}
                       </td>
-                      <td className="px-6 py-4 text-right space-x-2">
+                      <td className="px-5 py-4 text-right space-x-1.5 whitespace-nowrap">
+                        <button
+                          onClick={() => handleOpenPricing(item)}
+                          className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-xs font-extrabold rounded-full transition shadow-sm"
+                          title="Configure Selling Price & GST Tax Rates"
+                        >
+                          ₹ Price & Tax
+                        </button>
                         <button
                           onClick={() => handleOpenRecipe(item.product_id, item.product_name ?? item.product_id)}
-                          className="px-3 py-1 bg-white hover:bg-[#fff1f4] border border-[#f4d3dd] text-[#2b1233] text-xs font-extrabold rounded-full transition shadow-sm"
+                          className="px-2.5 py-1 bg-white hover:bg-[#fff1f4] border border-[#f4d3dd] text-[#2b1233] text-xs font-extrabold rounded-full transition shadow-sm"
                         >
-                          Recipe / BOM
+                          BOM
                         </button>
                         <button
                           onClick={() => handleOpenRefill('product', item.product_id, item.product_name ?? item.product_id)}
-                          className="px-3 py-1 bg-[#bfe3a6] hover:bg-[#a9d98d] text-[#2b1233] text-xs font-extrabold rounded-full transition shadow-sm"
+                          className="px-2.5 py-1 bg-[#bfe3a6] hover:bg-[#a9d98d] text-[#2b1233] text-xs font-extrabold rounded-full transition shadow-sm"
                         >
                           + Refill
                         </button>
                         <button
                           onClick={() => handleOpenAdjust('product', item.product_id, item.product_name ?? item.product_id)}
-                          className="px-3 py-1 bg-[#fff1f4] hover:bg-white border border-[#f4d3dd] text-[#2b1233] text-xs font-extrabold rounded-full transition shadow-sm"
+                          className="px-2.5 py-1 bg-[#fff1f4] hover:bg-white border border-[#f4d3dd] text-[#2b1233] text-xs font-extrabold rounded-full transition shadow-sm"
                         >
                           ± Adjust
                         </button>
@@ -843,6 +981,214 @@ export const OperatorInventoryView: React.FC<OperatorInventoryViewProps> = ({ br
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 4: Configure Selling Price & GST Tax Rates */}
+      {pricingProduct && (
+        <div className="fixed inset-0 z-50 bg-[#2b1233]/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white border border-[#f4d3dd] rounded-3xl p-6 md:p-8 max-w-lg w-full shadow-2xl space-y-4 text-[#2b1233] max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-start">
+              <div>
+                <h3 className="font-display text-xl font-bold text-[#2b1233]">
+                  Configure Selling Price & Taxes
+                </h3>
+                <p className="text-xs text-[#6f5569] font-medium mt-0.5">
+                  {pricingProduct.name} &bull; <span className="font-mono">{pricingProduct.id}</span>
+                </p>
+              </div>
+              <button
+                onClick={() => setPricingProduct(null)}
+                className="text-[#6f5569] hover:text-[#2b1233] text-lg font-bold"
+              >
+                &times;
+              </button>
+            </div>
+
+            {pricingError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-600 font-bold">
+                {pricingError}
+              </div>
+            )}
+
+            {/* Base Selling Price */}
+            <div>
+              <label className="block text-xs font-bold text-[#6f5569] mb-1">
+                Base Selling Price (₹) *
+              </label>
+              <div className="relative">
+                <span className="absolute left-4 top-2.5 text-[#6f5569] font-bold text-sm">₹</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  required
+                  placeholder="0.00"
+                  value={editSellingPrice}
+                  onChange={(e) => setEditSellingPrice(e.target.value)}
+                  className="w-full pl-8 pr-4 py-2.5 bg-[#fff1f4] border border-[#f4d3dd] rounded-full text-[#2b1233] text-sm focus:outline-none focus:border-[#d61c5d] font-semibold font-mono"
+                />
+              </div>
+            </div>
+
+            {/* GST Tax Slabs Presets */}
+            <div>
+              <label className="block text-xs font-bold text-[#6f5569] mb-1.5">
+                Quick GST Tax Slabs
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {[
+                  { label: '0% Exempt', rate: 0 },
+                  { label: '5% Food/IceCream', rate: 5 },
+                  { label: '12% Standard', rate: 12 },
+                  { label: '18% Premium', rate: 18 },
+                ].map((preset) => (
+                  <button
+                    key={preset.rate}
+                    type="button"
+                    onClick={() => handleApplyTaxPreset(preset.rate)}
+                    className={`py-1.5 px-2 text-xs font-bold rounded-xl border transition text-center ${
+                      parseFloat(editTaxRate) === preset.rate
+                        ? 'bg-[#d61c5d] text-white border-[#d61c5d] shadow-sm'
+                        : 'bg-white text-[#2b1233] border-[#f4d3dd] hover:bg-[#fff1f4]'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Total GST & Sub-Taxes Rates */}
+            <div className="bg-[#fff1f4]/60 border border-[#f4d3dd] rounded-2xl p-4 space-y-3">
+              <span className="text-xs font-black uppercase text-[#6f5569] tracking-wider block">
+                GST Tax & Sub-Tax Details
+              </span>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div>
+                  <label className="block text-[11px] font-bold text-[#6f5569] mb-1">Total GST %</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    value={editTaxRate}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setEditTaxRate(v);
+                      const num = parseFloat(v);
+                      if (!isNaN(num)) {
+                        setEditCgstRate((num / 2).toString());
+                        setEditSgstRate((num / 2).toString());
+                      }
+                    }}
+                    className="w-full px-3 py-1.5 bg-white border border-[#f4d3dd] rounded-lg text-xs font-mono font-bold text-[#2b1233]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-blue-700 mb-1">SGST % (State)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    value={editSgstRate}
+                    onChange={(e) => setEditSgstRate(e.target.value)}
+                    className="w-full px-3 py-1.5 bg-white border border-blue-200 rounded-lg text-xs font-mono font-bold text-blue-900"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-purple-700 mb-1">CGST % (Central)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    value={editCgstRate}
+                    onChange={(e) => setEditCgstRate(e.target.value)}
+                    className="w-full px-3 py-1.5 bg-white border border-purple-200 rounded-lg text-xs font-mono font-bold text-purple-900"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-amber-700 mb-1">IGST % (Interstate)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    value={editIgstRate}
+                    onChange={(e) => setEditIgstRate(e.target.value)}
+                    className="w-full px-3 py-1.5 bg-white border border-amber-200 rounded-lg text-xs font-mono font-bold text-amber-900"
+                  />
+                </div>
+              </div>
+
+              {/* Dynamic Calculation Live Breakdown */}
+              {(() => {
+                const sp = parseFloat(editSellingPrice) || 0;
+                const tr = parseFloat(editTaxRate) || 0;
+                const sgst = parseFloat(editSgstRate) || 0;
+                const cgst = parseFloat(editCgstRate) || 0;
+                const igst = parseFloat(editIgstRate) || 0;
+                const sgstVal = (sp * sgst) / 100;
+                const cgstVal = (sp * cgst) / 100;
+                const igstVal = (sp * igst) / 100;
+                const totalTaxVal = (sp * tr) / 100;
+                const finalAmount = sp + totalTaxVal;
+
+                return (
+                  <div className="pt-2 border-t border-[#f4d3dd] text-xs space-y-1">
+                    <div className="flex justify-between text-[#6f5569]">
+                      <span>Base Selling Price:</span>
+                      <span className="font-mono font-bold text-[#2b1233]">₹{sp.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-blue-700">
+                      <span>&bull; SGST ({sgst}%):</span>
+                      <span className="font-mono font-bold">+₹{sgstVal.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-purple-700">
+                      <span>&bull; CGST ({cgst}%):</span>
+                      <span className="font-mono font-bold">+₹{cgstVal.toFixed(2)}</span>
+                    </div>
+                    {igst > 0 && (
+                      <div className="flex justify-between text-amber-700">
+                        <span>&bull; IGST ({igst}%):</span>
+                        <span className="font-mono font-bold">+₹{igstVal.toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-[#2b1233] font-bold pt-1 border-t border-[#f4d3dd]/60">
+                      <span>Total Tax Amount:</span>
+                      <span className="font-mono">+₹{totalTaxVal.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm font-extrabold text-[#d61c5d] pt-1">
+                      <span>Final Price (incl. GST):</span>
+                      <span className="font-mono text-base">₹{finalAmount.toFixed(2)}</span>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="flex justify-end space-x-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setPricingProduct(null)}
+                disabled={pricingSubmitting}
+                className="px-5 py-2.5 bg-[#fff1f4] hover:bg-white border border-[#f4d3dd] text-[#2b1233] text-xs font-extrabold rounded-full transition shadow-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSavePricing}
+                disabled={pricingSubmitting}
+                className="px-5 py-2.5 bg-[#d61c5d] hover:bg-[#c21853] disabled:opacity-50 text-white text-xs font-extrabold rounded-full transition shadow-[0_3px_0_#a3134a]"
+              >
+                {pricingSubmitting ? 'Saving...' : 'Save Price & Taxes'}
+              </button>
+            </div>
           </div>
         </div>
       )}

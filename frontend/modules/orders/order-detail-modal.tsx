@@ -306,7 +306,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
         >
           <div>
             <div style={{ color: '#6f5569', fontSize: '0.8125rem', fontWeight: 600 }}>
-              Subtotal: ₹{order.subtotal.toFixed(2)} &bull; Tax: ₹{order.tax.toFixed(2)}
+              Subtotal: ₹{order.subtotal.toFixed(2)} &bull; GST (5%): ₹{order.tax.toFixed(2)} (SGST: ₹{(order.tax / 2).toFixed(2)} + CGST: ₹{(order.tax / 2).toFixed(2)})
             </div>
             <div style={{ color: '#2b1233', fontSize: '0.8125rem', fontWeight: 800, marginTop: '0.2rem' }}>
               Verified Paid at Reception: ₹{verifiedPaid.toFixed(2)}

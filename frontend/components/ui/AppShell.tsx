@@ -27,7 +27,7 @@ export default function AppShell({
   children,
   title = 'Melt Ice Cream',
   enableLoader = true,
-  enableCursor = true,
+  enableCursor = false,
   recordOptions,
 }: AppShellProps) {
   return (
